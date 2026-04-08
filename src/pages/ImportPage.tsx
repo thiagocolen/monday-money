@@ -1,12 +1,13 @@
-import { useState, useEffect, useCallback } from "react"
-import { fetchOwners, importFile, fetchImportHistory } from "../lib/api"
+import { useState, useEffect, useCallback, useMemo } from "react"
+import { fetchOwners, importFile, fetchImportHistory, deleteImport } from "../lib/api"
 import type { ImportHistory } from "../lib/api"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Upload, FileText, CheckCircle2, AlertCircle, Loader2 } from "lucide-react"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Upload, FileText, CheckCircle2, AlertCircle, Loader2, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 import { format, parseISO } from "date-fns"
 
@@ -18,6 +19,10 @@ export function ImportPage() {
   const [newOwnerName, setNewOwnerName] = useState("")
   const [selectedFiles, setSelectedFiles] = useState<FileList | null>(null)
   const [isImporting, setIsImporting] = useState(false)
+  const [deletingFile, setDeletingFile] = useState<ImportHistory | null>(null)
+  const [isDeleteDialogOpen, setIsDeleteOpen] = useState(false)
+  const [isLogsModalOpen, setIsLogsModalOpen] = useState(false)
+  const [reprocessingLogs, setReprocessingLogs] = useState("")
   const [isLoading, setIsLoading] = useState(true)
 
   const loadData = useCallback(async () => {
@@ -40,9 +45,48 @@ export function ImportPage() {
     loadData()
   }, [loadData])
 
+  const totals = useMemo(() => {
+    return history.reduce((acc, curr) => ({
+      total: acc.total + curr.totalTransactions,
+      imported: acc.imported + curr.importedTransactions,
+      skipped: acc.skipped + curr.notImportedTransactions
+    }), { total: 0, imported: 0, skipped: 0 })
+  }, [history])
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
       setSelectedFiles(e.target.files)
+    }
+  }
+
+  const handleDeleteClick = (item: ImportHistory) => {
+    setDeletingFile(item)
+    setIsDeleteOpen(true)
+  }
+
+  const handleConfirmDelete = async () => {
+    if (!deletingFile) return
+
+    const { owner, fileName } = deletingFile
+    setIsDeleteOpen(false)
+    setReprocessingLogs("Initiating reprocessing...\n")
+    setIsLogsModalOpen(true)
+    
+    try {
+      const result = await deleteImport(owner, fileName)
+      if (result.success) {
+        setReprocessingLogs(prev => prev + (result.logs || "Done."))
+        toast.success(`Successfully removed ${fileName} and refreshed data.`)
+        loadData()
+      } else {
+        setReprocessingLogs(prev => prev + `\nERROR: ${result.error}`)
+        toast.error(`Failed to delete file: ${result.error}`)
+      }
+    } catch (error) {
+      setReprocessingLogs(prev => prev + `\nFATAL ERROR: ${String(error)}`)
+      toast.error("An error occurred during deletion.")
+    } finally {
+      setDeletingFile(null)
     }
   }
 
@@ -226,9 +270,25 @@ export function ImportPage() {
       </div>
 
       <Card>
-        <CardHeader>
-          <CardTitle className="text-sm font-bold uppercase tracking-wider text-indigo-600">Import History</CardTitle>
-          <CardDescription>Recently processed statement files</CardDescription>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <div>
+            <CardTitle className="text-sm font-bold uppercase tracking-wider text-indigo-600">Import History</CardTitle>
+            <CardDescription>Recently processed statement files</CardDescription>
+          </div>
+          <div className="flex gap-4">
+            <div className="text-right">
+              <p className="text-[10px] font-bold text-muted-foreground uppercase leading-none">Total Rows</p>
+              <p className="text-lg font-mono font-bold">{totals.total}</p>
+            </div>
+            <div className="text-right border-l pl-4">
+              <p className="text-[10px] font-bold text-emerald-600 uppercase leading-none">Imported</p>
+              <p className="text-lg font-mono font-bold text-emerald-600">{totals.imported}</p>
+            </div>
+            <div className="text-right border-l pl-4">
+              <p className="text-[10px] font-bold text-amber-600 uppercase leading-none">Skipped</p>
+              <p className="text-lg font-mono font-bold text-amber-600">{totals.skipped}</p>
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
           {isLoading ? (
@@ -249,6 +309,7 @@ export function ImportPage() {
                   <TableHead className="text-[10px] font-bold uppercase text-right">Total Rows</TableHead>
                   <TableHead className="text-[10px] font-bold uppercase text-right">Imported</TableHead>
                   <TableHead className="text-[10px] font-bold uppercase text-right">Skipped</TableHead>
+                  <TableHead className="w-[50px]"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -272,6 +333,21 @@ export function ImportPage() {
                     <TableCell className="text-[10px] font-mono text-right text-amber-600 font-bold">
                       {item.notImportedTransactions}
                     </TableCell>
+                    <TableCell>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                        onClick={() => handleDeleteClick(item)}
+                        disabled={!!deletingFile}
+                      >
+                        {deletingFile?.fileName === item.fileName ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Trash2 className="h-3.5 w-3.5" />
+                        )}
+                      </Button>
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -279,6 +355,43 @@ export function ImportPage() {
           )}
         </CardContent>
       </Card>
+
+      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Remove Statement File</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to remove <span className="font-bold text-foreground">{deletingFile?.fileName}</span>? 
+              This action will trigger a full data reset and re-process all remaining files to maintain ledger integrity.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsDeleteOpen(false)}>Cancel</Button>
+            <Button variant="destructive" onClick={handleConfirmDelete}>Remove and Reprocess</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={isLogsModalOpen} onOpenChange={setIsLogsModalOpen}>
+        <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle>Reprocessing Ledger</DialogTitle>
+            <DialogDescription>
+              Processing all statement files to ensure data consistency and integrity.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="mt-4 flex-1 overflow-auto bg-slate-950 rounded-md p-4">
+            <pre className="text-[10px] font-mono text-slate-300 whitespace-pre-wrap">
+              {reprocessingLogs}
+              {!reprocessingLogs.includes("Done.") && !reprocessingLogs.includes("ERROR:") && (
+                <span className="animate-pulse">...</span>
+              )}
+            </pre>
+          </div>
+          <DialogFooter className="mt-4">
+            <Button variant="secondary" onClick={() => setIsLogsModalOpen(false)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

@@ -115,7 +115,7 @@ export default defineConfig({
                 // Run scripts
                 const scriptsDir = path.resolve(coreDir, "scripts")
                 const commands = [
-                  `powershell -ExecutionPolicy Bypass -File "${path.join(scriptsDir, "reset-csv-files.ps1")}"`,
+                  `powershell -ExecutionPolicy Bypass -File "${path.join(scriptsDir, "clear-ledger.ps1")}"`,
                   `powershell -ExecutionPolicy Bypass -File "${path.join(scriptsDir, "create-seed-transaction.ps1")}"`,
                   `powershell -ExecutionPolicy Bypass -File "${path.join(scriptsDir, "data-import-registration.ps1")}"`,
                   `powershell -ExecutionPolicy Bypass -File "${path.join(scriptsDir, "integrity-check.ps1")}"`
@@ -137,39 +137,87 @@ export default defineConfig({
             return
           }
 
+          if (req.url === "/api/delete-import" && req.method === "POST") {
+            let body = ""
+            req.on("data", (chunk) => { body += chunk.toString() })
+            req.on("end", () => {
+              try {
+                const { owner, fileName } = JSON.parse(body)
+                if (!owner || !fileName) {
+                  res.statusCode = 400
+                  res.end(JSON.stringify({ success: false, error: "Missing required fields" }))
+                  return
+                }
+
+                const filePath = path.resolve(protectedDir, "raw-statement-files", owner, fileName)
+                if (fs.existsSync(filePath)) {
+                  fs.unlinkSync(filePath)
+                  
+                  // Run scripts to reprocess remaining files
+                  const scriptsDir = path.resolve(coreDir, "scripts")
+                  const commands = [
+                    `powershell -ExecutionPolicy Bypass -File "${path.join(scriptsDir, "clear-ledger.ps1")}"`,
+                    `powershell -ExecutionPolicy Bypass -File "${path.join(scriptsDir, "create-seed-transaction.ps1")}"`,
+                    `powershell -ExecutionPolicy Bypass -File "${path.join(scriptsDir, "data-import-registration.ps1")}"`,
+                    `powershell -ExecutionPolicy Bypass -File "${path.join(scriptsDir, "integrity-check.ps1")}"`
+                  ]
+
+                  let allLogs = ""
+                  for (const cmd of commands) {
+                    allLogs += `\n> ${cmd}\n`
+                    try {
+                      const output = execSync(cmd, { encoding: 'utf-8' })
+                      allLogs += output
+                    } catch (err: any) {
+                      allLogs += `ERROR: ${err.message}\n`
+                      if (err.stdout) allLogs += err.stdout
+                      if (err.stderr) allLogs += err.stderr
+                      throw new Error(`Reprocessing failed at: ${cmd}\n\nLogs:\n${allLogs}`)
+                    }
+                  }
+
+                  res.statusCode = 200
+                  res.end(JSON.stringify({ success: true, logs: allLogs }))
+                } else {
+                  res.statusCode = 404
+                  res.end(JSON.stringify({ success: false, error: "File not found" }))
+                }
+              } catch (e) {
+                console.error(e)
+                res.statusCode = 500
+                res.end(JSON.stringify({ success: false, error: String(e) }))
+              }
+            })
+            return
+          }
+
           if (req.url === "/api/import-history" && req.method === "GET") {
-            const sourcePath = path.resolve(dataDir, "source-statement-files")
+            const sourcePath = path.resolve(protectedDir, "raw-statement-files")
             const history = []
 
             if (fs.existsSync(sourcePath)) {
               const owners = fs.readdirSync(sourcePath).filter(f => fs.statSync(path.join(sourcePath, f)).isDirectory())
               
               for (const owner of owners) {
-                const processedPath = path.resolve(sourcePath, owner, "processed")
-                if (fs.existsSync(processedPath)) {
-                  const files = fs.readdirSync(processedPath).filter(f => f.startsWith("processed-"))
-                  for (const file of files) {
-                    const filePath = path.join(processedPath, file)
-                    const stats = fs.statSync(filePath)
-                    const content = fs.readFileSync(filePath, "utf-8")
-                    const lines = content.split("\n").filter(l => l.trim())
-                    
-                    // Simple heuristic: count rows minus header
-                    // This varies by file type, but we'll do a best effort
-                    const totalRows = lines.length > 0 ? lines.length - 1 : 0
-                    
-                    // To get imported vs not imported, we'd need to parse the ledger.
-                    // For now, let's assume all valid rows were imported if the script ran.
-                    // Actually, let's just return what we can easily get.
-                    history.push({
-                      fileName: file.replace(/^processed-[a-f0-9]{6}-/, ""),
-                      owner,
-                      processedDate: stats.mtime.toISOString(),
-                      totalTransactions: totalRows,
-                      importedTransactions: totalRows, // placeholder
-                      notImportedTransactions: 0 // placeholder
-                    })
-                  }
+                const ownerPath = path.resolve(sourcePath, owner)
+                const files = fs.readdirSync(ownerPath).filter(f => f.endsWith(".csv"))
+                for (const file of files) {
+                  const filePath = path.join(ownerPath, file)
+                  const stats = fs.statSync(filePath)
+                  const content = fs.readFileSync(filePath, "utf-8")
+                  const lines = content.split("\n").filter(l => l.trim())
+                  
+                  // Simple heuristic: count rows minus header
+                  const totalRows = lines.length > 0 ? lines.length - 1 : 0
+                  
+                  history.push({
+                    fileName: file,
+                    owner,
+                    processedDate: stats.mtime.toISOString(),
+                    totalTransactions: totalRows,
+                    importedTransactions: totalRows, // placeholder: assume imported if in protected
+                    notImportedTransactions: 0
+                  })
                 }
               }
             }

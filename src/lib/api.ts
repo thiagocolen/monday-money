@@ -275,3 +275,17 @@ export async function fetchImportHistory(): Promise<ImportHistory[]> {
     return [];
   }
 }
+
+export async function deleteImport(owner: string, fileName: string): Promise<{ success: boolean; error?: string; logs?: string }> {
+  try {
+    const response = await fetch('/api/delete-import', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ owner, fileName }),
+    });
+    return await response.json();
+  } catch (error) {
+    console.error('Error deleting import:', error);
+    return { success: false, error: String(error) };
+  }
+}
