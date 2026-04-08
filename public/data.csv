@@ -1,0 +1,495 @@
+date,description,amount,category,owner
+2026-01-01,"4b1476c7e8e11556d6befa3a4304da88bc86bcb1f8d248b52af106fd09f9ccea",0,chain-transaction,seed-transaction
+2026-01-08,"Transferência recebida pelo Pix - THIAGO ALBERTO DE SOUZA COLEN - •••.581.718-•• - BCO SANTANDER (BRASIL) S.A. (0033) Agência: 1 Conta: 2027075-8",1900.00,,thiago-nubank-account
+2026-01-08,"Pagamento de fatura",-1900.91,,thiago-nubank-account
+2026-01-08,"61603664c883bc489d3d962ea42066091e32b7fe9b922d7492d790ecbc809701",0,chain-transaction,thiago-nubank-account
+2026-01-08,"20592bdeedeb1469cabc89cb203f44147bbf2312ea5c3d5b5d337e37e7e8e0c5",0,chain-transaction,thiago-nubank-account
+2026-02-01,"Pagamento com QR Pix PIZZARIA CAPITOLIO LTDA",-87.00,,thiago-mercadopago-account
+2026-02-02,"Rendimentos ",0.05,,thiago-mercadopago-account
+2026-02-02,"Dinheiro retirado Emergências",600.00,,thiago-mercadopago-account
+2026-02-02,"Pagamento com QR Pix JAIDER MICHEL DE SOUZA 09021561603",-260.00,,thiago-mercadopago-account
+2026-02-02,"Pagamento com QR Pix 52 161 139 JOAO BATISTA DE SOUZA NETO",-20.00,,thiago-mercadopago-account
+2026-02-02,"Pagamento com QR Pix 52 161 139 JOAO BATISTA DE SOUZA NETO",-20.00,,thiago-mercadopago-account
+2026-02-02,"Pagamento com QR Pix ROSANA PAULA DA SILVA PEREIRA SOUZA",-30.00,,thiago-mercadopago-account
+2026-02-02,"Pagamento com QR Pix LUIZA DE FARIA VILELA",-30.00,,thiago-mercadopago-account
+2026-02-02,"Transferência Pix enviada Elisabete da Silva Bolotti",-35.00,,thiago-mercadopago-account
+2026-02-02,"Pagamento com QR Pix LAGOS GESTAO E CONSULTORIA LTDA",-40.00,,thiago-mercadopago-account
+2026-02-02,"Pagamento com QR Pix GMF EMPREENDIMENTOS E COMERCIO DE ALIMENTOS LTDA",-116.80,,thiago-mercadopago-account
+2026-02-02,"Dinheiro retirado Emergências",500.00,,thiago-mercadopago-account
+2026-02-02,"Pagamento com QR Pix SUPERMERCADOS BH COMERCIO DE ALIMENTOS SA",-90.43,,thiago-mercadopago-account
+2026-02-03,"Pagamento com QR Pix PIZZARIA CAPITOLIO LTDA",-9.00,,thiago-mercadopago-account
+2026-02-03,"Pagamento com QR Pix ANTONIO MARCOS ROSA",-214.50,,thiago-mercadopago-account
+2026-02-03,"Pagamento com QR Pix Leonel Ramos Empreendimentos Turisticos Ltda",-140.00,,thiago-mercadopago-account
+2026-02-03,"Dinheiro retirado Emergências",400.00,,thiago-mercadopago-account
+2026-02-03,"Pagamento com QR Pix TOURVO EXPERIENCIAS TURISMO LTDA",-21.00,,thiago-mercadopago-account
+2026-02-03,"Pagamento com QR Pix CANYONS DE MINAS EMPREENDIMENTOS DE TURISMO LTDA",-398.00,,thiago-mercadopago-account
+2026-02-03,"Rendimentos ",0.26,,thiago-mercadopago-account
+2026-02-04,"Rendimentos ",0.09,,thiago-mercadopago-account
+2026-02-04,"Pagamento de conta Itaú Unibanco  S.A.",-51.87,,thiago-mercadopago-account
+2026-02-04,"Dinheiro retirado Emergências",200.00,,thiago-mercadopago-account
+2026-02-04,"Transferência Pix enviada ",-148.70,,thiago-mercadopago-account
+2026-02-04,"Dinheiro retirado Emergências",100.00,,thiago-mercadopago-account
+2026-02-04,"Pagamento com QR Pix SUPERMERCADOS BH COMERCIO DE ALIMENTOS SA",-61.78,,thiago-mercadopago-account
+2026-02-05,"Rendimentos ",0.11,,thiago-mercadopago-account
+2026-02-05,"Pagamento com QR Pix POSTO BEIRA RIO I LTDA",-119.13,,thiago-mercadopago-account
+2026-02-05,"Dinheiro retirado Emergências",200.00,,thiago-mercadopago-account
+2026-02-05,"Pagamento com QR Pix LANCHONETE CHARME DA PERDIZES LTDA",-143.66,,thiago-mercadopago-account
+2026-02-06,"Pagamento com QR Pix REDE INTEGRADA DE LOJAS DE CONVENIENCIA E PROXIMIDADE S.A.",-54.09,,thiago-mercadopago-account
+2026-02-06,"Pagamento com QR Pix REDE INTEGRADA DE LOJAS DE CONVENIENCIA E PROXIMIDADE S.A.",-59.56,,thiago-mercadopago-account
+2026-02-06,"Pagamento com QR Pix COMPANHIA BRASILEIRA DE DISTRIBUICAO",-2.69,,thiago-mercadopago-account
+2026-02-06,"Dinheiro reservado Emergências",-400.00,,thiago-mercadopago-account
+2026-02-06,"Pix recebido THIAGO ALBERTO DE SOUZA COLEN",500.00,,thiago-mercadopago-account
+2026-02-06,"Rendimentos ",0.08,,thiago-mercadopago-account
+2026-02-07,"Pagamento com QR Pix A.J.M.M. PERDIZES PAES LTDA",-67.00,,thiago-mercadopago-account
+2026-02-07,"Dinheiro retirado Emergências",100.00,,thiago-mercadopago-account
+2026-02-07,"Dinheiro retirado Emergências",100.00,,thiago-mercadopago-account
+2026-02-07,"Pagamento com QR Pix COMPANHIA BRASILEIRA DE DISTRIBUICAO",-89.94,,thiago-mercadopago-account
+2026-02-07,"Pagamento com QR Pix ELETROPAULO METROPOLITANA ELETRICIDADE DE SAO PAULO S.A.",-42.47,,thiago-mercadopago-account
+2026-02-07,"Pix recebido JESSICA DA SILVA LEITE",200.00,,thiago-mercadopago-account
+2026-02-07,"Pix recebido THIAGO ALBERTO DE SOUZA COLEN",5000.00,,thiago-mercadopago-account
+2026-02-07,"Pagamento de conta Banco Bradesco S.A.",-2836.39,,thiago-mercadopago-account
+2026-02-07,"Pagamento de conta Banco Bradesco S.A.",-117.38,,thiago-mercadopago-account
+2026-02-07,"Pagamento de conta Itaú Unibanco  S.A.",-57.76,,thiago-mercadopago-account
+2026-02-07,"Pagamento com QR Pix TELEFONICA BRASIL S.A.",-225.99,,thiago-mercadopago-account
+2026-02-08,"Pagamento com QR Pix ALLPARK EMPREENDIMENTOS, PARTICIPACOES E SERVICOS S.A.",-22.00,,thiago-mercadopago-account
+2026-02-08,"Pagamento com QR Pix NAREIA BUTANTA LTDA",-285.01,,thiago-mercadopago-account
+2026-02-08,"Pagamento com QR Pix BROWNIE DA MINHA MAE DOCERIA LTDA",-37.00,,thiago-mercadopago-account
+2026-02-08,"Pagamento com QR Pix CENTRO AUTOMOTIVO PORTAL DAS PERDIZES LT",-159.83,,thiago-mercadopago-account
+2026-02-09,"Rendimentos ",0.29,,thiago-mercadopago-account
+2026-02-09,"Pagamento com QR Pix COMPANHIA BRASILEIRA DE DISTRIBUICAO",-27.99,,thiago-mercadopago-account
+2026-02-09,"Pix enviado Renata Kaline Carneiro Freire",-620.00,,thiago-mercadopago-account
+2026-02-09,"Pagamento com QR Pix VALLPARKING GESTAO DE ESTACIONAMENTOS E SERVICOS PARA CONDOMI...",-80.00,,thiago-mercadopago-account
+2026-02-09,"Pix recebido THIAGO ALBERTO DE SOUZA COLEN",3500.00,,thiago-mercadopago-account
+2026-02-09,"Pagamento com QR Pix P J M E - APART-RESIDENCE LTDA",-2423.52,,thiago-mercadopago-account
+2026-02-09,"Pagamento com QR Pix ALMEIDA FOODDRINKS STEAKHOUSE LTDA",-281.38,,thiago-mercadopago-account
+2026-02-09,"Pagamento com QR Pix SHIBATA COMERCIO E ATACADO DE PRODUTOS EM GERAL LTDA",-71.31,,thiago-mercadopago-account
+2026-02-10,"Pagamento com QR Pix LOJAS RIACHUELO SA",-69.99,,thiago-mercadopago-account
+2026-02-10,"Pagamento com QR Pix PAGAR.ME S.A.",-169.70,,thiago-mercadopago-account
+2026-02-10,"Pagamento de conta Itaú Unibanco  S.A.",-3410.01,,thiago-mercadopago-account
+2026-02-10,"Pix recebido THIAGO ALBERTO DE SOUZA COLEN",3500.00,,thiago-mercadopago-account
+2026-02-10,"Pagamento com QR Pix YORG PARTICIPACOES DO BRASIL LTDA",-12.00,,thiago-mercadopago-account
+2026-02-10,"Pagamento com QR Pix LOJAS RIACHUELO SA",-209.98,,thiago-mercadopago-account
+2026-02-10,"Pagamento com QR Pix VALLPARKING GESTAO DE ESTACIONAMENTOS E SERVICOS PARA CONDOMI...",-6.00,,thiago-mercadopago-account
+2026-02-10,"Pagamento com QR Pix DRIGOBIO SUL RESTAURANTE LTDA ",-143.40,,thiago-mercadopago-account
+2026-02-10,"Pagamento de assinatura Meli+",-19.90,,thiago-mercadopago-account
+2026-02-10,"Pix enviado Rian Fernando Lima Silva",-20.00,,thiago-mercadopago-account
+2026-02-10,"Pagamento com QR Pix ASSB COMERCIO VAREJISTA DE DOCES LTDA.",-47.30,,thiago-mercadopago-account
+2026-02-10,"Pagamento com QR Pix EMPORIO FLOR DE YPE PAES E DOCES LTDA",-104.96,,thiago-mercadopago-account
+2026-02-10,"Rendimentos ",0.83,,thiago-mercadopago-account
+2026-02-11,"Rendimentos ",0.41,,thiago-mercadopago-account
+2026-02-11,"Pagamento com QR Pix ASSOC CULTURAL RECR E ESPORT VALE DO PARAIBA ACREVALE",-20.00,,thiago-mercadopago-account
+2026-02-11,"Pagamento com QR Pix MARCIA CRISTINA S. GONZALEZ SAMMARCO",-56.00,,thiago-mercadopago-account
+2026-02-11,"Pagamento com QR Pix MARCIA CRISTINA S. GONZALEZ SAMMARCO",-16.00,,thiago-mercadopago-account
+2026-02-11,"Pagamento com QR Pix IFOOD.COM AGENCIA DE RESTAURANTES ONLINE S.A.",-85.79,,thiago-mercadopago-account
+2026-02-12,"Pagamento com QR Pix MURUROA IMOBILIARIA LTDA ",-20.00,,thiago-mercadopago-account
+2026-02-12,"Pagamento com QR Pix CB SAO JOSE DOS CAMPOS COMERCIO DE ALIMENTOS LTDA",-426.03,,thiago-mercadopago-account
+2026-02-12,"Rendimentos ",0.32,,thiago-mercadopago-account
+2026-02-12,"Pagamento com QR Pix EMPORIO PRESTIGIO LTDA",-62.40,,thiago-mercadopago-account
+2026-02-13,"Rendimentos ",0.12,,thiago-mercadopago-account
+2026-02-13,"Pagamento com QR Pix MARIA HELENA MENDONCA LTDA",-26.00,,thiago-mercadopago-account
+2026-02-13,"Dinheiro retirado Emergências",509.30,,thiago-mercadopago-account
+2026-02-13,"Pagamento com QR Pix Ff Tech E Participacoes Ltda",-277.60,,thiago-mercadopago-account
+2026-02-14,"Pix recebido THIAGO ALBERTO DE SOUZA COLEN",1900.00,,thiago-mercadopago-account
+2026-02-14,"Pagamento com QR Pix RAIA DROGASIL SA",-83.62,,thiago-mercadopago-account
+2026-02-14,"Pagamento com QR Pix BAR E LANCHES AIMBERE LTDA",-79.00,,thiago-mercadopago-account
+2026-02-14,"Pagamento com QR Pix COMPANHIA BRASILEIRA DE DISTRIBUICAO",-35.68,,thiago-mercadopago-account
+2026-02-14,"Pagamento com QR Pix RAIA DROGASIL SA",-147.58,,thiago-mercadopago-account
+2026-02-15,"Pagamento com QR Pix COMPANHIA BRASILEIRA DE DISTRIBUICAO",-76.96,,thiago-mercadopago-account
+2026-02-16,"Pagamento com QR Pix COMPANHIA BRASILEIRA DE DISTRIBUICAO",-71.48,,thiago-mercadopago-account
+2026-02-17,"Pagamento de assinatura ",-19.53,,thiago-mercadopago-account
+2026-02-18,"Pagamento com QR Pix COMPANHIA BRASILEIRA DE DISTRIBUICAO",-69.71,,thiago-mercadopago-account
+2026-02-18,"Rendimentos ",0.17,,thiago-mercadopago-account
+2026-02-19,"Rendimentos ",0.76,,thiago-mercadopago-account
+2026-02-19,"Dinheiro reservado Emergências",-1000.00,,thiago-mercadopago-account
+2026-02-19,"Pagamento com QR Pix COMPANHIA BRASILEIRA DE DISTRIBUICAO",-19.59,,thiago-mercadopago-account
+2026-02-19,"Pagamento com QR Pix COMPANHIA BRASILEIRA DE DISTRIBUICAO",-27.40,,thiago-mercadopago-account
+2026-02-19,"Pix enviado Felipe Silva de Sousa",-350.00,,thiago-mercadopago-account
+2026-02-20,"Rendimentos ",0.17,,thiago-mercadopago-account
+2026-02-20,"Pagamento com QR Pix A LAREIRA - RESTAURANTE, PAES, DOCES E CONVENIENCIAS LTDA",-6.80,,thiago-mercadopago-account
+2026-02-20,"Pagamento com QR Pix BULLGUER ALIMENTACOES S.A. EM RECUPERACAO JUDICIAL",-62.00,,thiago-mercadopago-account
+2026-02-20,"Dinheiro retirado Emergências",200.00,,thiago-mercadopago-account
+2026-02-20,"Pagamento com QR Pix MSF CAFE LTDA",-42.94,,thiago-mercadopago-account
+2026-02-21,"Pagamento com QR Pix REDE INTEGRADA DE LOJAS DE CONVENIENCIA E PROXIMIDADE S.A.",-35.90,,thiago-mercadopago-account
+2026-02-21,"Pagamento com QR Pix COMPANHIA BRASILEIRA DE DISTRIBUICAO",-107.67,,thiago-mercadopago-account
+2026-02-22,"Pagamento com QR Pix Ff Tech E Participacoes Ltda",-288.01,,thiago-mercadopago-account
+2026-02-22,"Pix enviado ",-156.90,,thiago-mercadopago-account
+2026-02-22,"Dinheiro retirado Emergências",800.66,,thiago-mercadopago-account
+2026-02-23,"Rendimentos ",0.45,,thiago-mercadopago-account
+2026-02-23,"Pix enviado EBAZAR.COM.BR. LTDA",-112.44,,thiago-mercadopago-account
+2026-02-23,"Pagamento com QR Pix COMPANHIA BRASILEIRA DE DISTRIBUICAO",-12.10,,thiago-mercadopago-account
+2026-02-24,"Rendimentos ",0.14,,thiago-mercadopago-account
+2026-02-24,"Pagamento com QR Pix COMPANHIA BRASILEIRA DE DISTRIBUICAO",-50.39,,thiago-mercadopago-account
+2026-02-25,"Rendimentos ",0.15,,thiago-mercadopago-account
+2026-02-25,"Pagamento com QR Pix COMPANHIA BRASILEIRA DE DISTRIBUICAO",-47.19,,thiago-mercadopago-account
+2026-02-25,"Pagamento com QR Pix REDE INTEGRADA DE LOJAS DE CONVENIENCIA E PROXIMIDADE S.A.",-2.69,,thiago-mercadopago-account
+2026-02-25,"Pagamento com QR Pix COMPANHIA BRASILEIRA DE DISTRIBUICAO",-16.25,,thiago-mercadopago-account
+2026-02-26,"Rendimentos ",0.10,,thiago-mercadopago-account
+2026-02-26,"Pagamento com QR Pix REDE INTEGRADA DE LOJAS DE CONVENIENCIA E PROXIMIDADE S.A.",-51.61,,thiago-mercadopago-account
+2026-02-27,"Pagamento com QR Pix COMPANHIA BRASILEIRA DE DISTRIBUICAO",-26.08,,thiago-mercadopago-account
+2026-02-27,"Rendimentos ",0.07,,thiago-mercadopago-account
+2026-02-28,"Pagamento com QR Pix GRUPO FARTURA DE HORTIFRUT S.A.",-110.47,,thiago-mercadopago-account
+2026-02-28,"6a2bf8aaa5a93045d258f93a3379e0d351582a27b49d7b5498534af669dfaad9",0,chain-transaction,thiago-mercadopago-account
+2026-02-28,"b860454ea5613b7a739f1cca6af99666b5372c3c034aef29c727a5aa95566302",0,chain-transaction,thiago-mercadopago-account
+2026-03-01,"Pix enviado Ripio Brasil Servicos Plataforma Online de Ativos Digitais Ltda",-10.00,,thiago-mercadopago-account
+2026-03-02,"Rendimentos ",0.05,,thiago-mercadopago-account
+2026-03-03,"Rendimentos ",0.01,,thiago-mercadopago-account
+2026-03-03,"Pix recebido THIAGO ALBERTO DE SOUZA COLEN",1074.10,,thiago-mercadopago-account
+2026-03-04,"Rendimentos ",0.47,,thiago-mercadopago-account
+2026-03-04,"Pagamento de assinatura HBO Max",-31.43,,thiago-mercadopago-account
+2026-03-04,"Pagamento com QR Pix REDE INTEGRADA DE LOJAS DE CONVENIENCIA E PROXIMIDADE S.A.",-26.60,,thiago-mercadopago-account
+2026-03-05,"Rendimentos ",0.46,,thiago-mercadopago-account
+2026-03-05,"Pagamento com QR Pix Francisco Soares de Lima",-29.00,,thiago-mercadopago-account
+2026-03-05,"Pagamento com QR Pix COMPANHIA BRASILEIRA DE DISTRIBUICAO",-38.98,,thiago-mercadopago-account
+2026-03-06,"Rendimentos ",0.43,,thiago-mercadopago-account
+2026-03-07,"Pagamento com QR Pix COMPANHIA BRASILEIRA DE DISTRIBUICAO",-47.18,,thiago-mercadopago-account
+2026-03-08,"Pagamento com QR Pix LB CASA DE PAES LTDA",-124.19,,thiago-mercadopago-account
+2026-03-08,"Pagamento com QR Pix COMPANHIA BRASILEIRA DE DISTRIBUICAO",-4.98,,thiago-mercadopago-account
+2026-03-08,"Pagamento com QR Pix COMPANHIA BRASILEIRA DE DISTRIBUICAO",-60.91,,thiago-mercadopago-account
+2026-03-09,"Rendimentos ",0.43,,thiago-mercadopago-account
+2026-03-09,"Pagamento com QR Pix MERCANTIL RED LTDA",-11.99,,thiago-mercadopago-account
+2026-03-09,"Pagamento com QR Pix DR. CONSULTA CENTRO MEDICO LTDA",-159.00,,thiago-mercadopago-account
+2026-03-09,"Pix enviado ",-99.58,,thiago-mercadopago-account
+2026-03-09,"Pix recebido THIAGO ALBERTO DE SOUZA COLEN",3595.67,,thiago-mercadopago-account
+2026-03-10,"Pagamento com QR Pix GRUPO FARTURA DE HORTIFRUT S.A.",-146.59,,thiago-mercadopago-account
+2026-03-10,"Pagamento com QR Pix REDE INTEGRADA DE LOJAS DE CONVENIENCIA E PROXIMIDADE S.A.",-37.90,,thiago-mercadopago-account
+2026-03-10,"Pagamento com QR Pix FORNERIA CIA LTDA",-36.90,,thiago-mercadopago-account
+2026-03-10,"Rendimentos ",1.80,,thiago-mercadopago-account
+2026-03-10,"Dinheiro reservado Emergências",-3500.00,,thiago-mercadopago-account
+2026-03-11,"Rendimentos ",0.15,,thiago-mercadopago-account
+2026-03-11,"Pagamento com QR Pix NAGANO LOJA DE UTILIDADES LTDA",-2.50,,thiago-mercadopago-account
+2026-03-11,"Pagamento com QR Pix COMPANHIA BRASILEIRA DE DISTRIBUICAO",-79.72,,thiago-mercadopago-account
+2026-03-11,"Pagamento com QR Pix COMPANHIA BRASILEIRA DE DISTRIBUICAO",-2.49,,thiago-mercadopago-account
+2026-03-12,"Rendimentos ",0.10,,thiago-mercadopago-account
+2026-03-12,"Pagamento de assinatura Meli+",-19.90,,thiago-mercadopago-account
+2026-03-13,"Pagamento com QR Pix COMPANHIA BRASILEIRA DE DISTRIBUICAO",-37.59,,thiago-mercadopago-account
+2026-03-13,"Rendimentos ",0.09,,thiago-mercadopago-account
+2026-03-14,"Pagamento com QR Pix COMPANHIA BRASILEIRA DE DISTRIBUICAO",-2.49,,thiago-mercadopago-account
+2026-03-14,"Pagamento com QR Pix COMPANHIA BRASILEIRA DE DISTRIBUICAO",-36.02,,thiago-mercadopago-account
+2026-03-14,"Pagamento com QR Pix DIA BRASIL SOCIEDADE LIMITADA EM RECUPERACAO JUDICIAL",-9.18,,thiago-mercadopago-account
+2026-03-14,"Pagamento com QR Pix CASA DE CARNES REI DO GLICERIO LTDA",-35.37,,thiago-mercadopago-account
+2026-03-15,"Pagamento com QR Pix REDE INTEGRADA DE LOJAS DE CONVENIENCIA E PROXIMIDADE S.A.",-74.72,,thiago-mercadopago-account
+2026-03-15,"Dinheiro retirado Emergências",300.00,,thiago-mercadopago-account
+2026-03-15,"Pagamento com QR Pix GRUPO FARTURA DE HORTIFRUT S.A.",-173.22,,thiago-mercadopago-account
+2026-03-16,"Rendimentos ",0.07,,thiago-mercadopago-account
+2026-03-16,"Pagamento com QR Pix COMPANHIA BRASILEIRA DE DISTRIBUICAO",-68.66,,thiago-mercadopago-account
+2026-03-17,"Pagamento com QR Pix COMPANHIA BRASILEIRA DE DISTRIBUICAO",-65.73,,thiago-mercadopago-account
+2026-03-17,"Pix enviado Acre Empreendimentos Esportivos Sociedade Unipessoal Ltda",-462.00,,thiago-mercadopago-account
+2026-03-17,"Rendimentos ",0.03,,thiago-mercadopago-account
+2026-03-17,"Dinheiro retirado Emergências",500.00,,thiago-mercadopago-account
+2026-03-18,"Rendimentos ",0.02,,thiago-mercadopago-account
+2026-03-19,"Rendimentos ",0.02,,thiago-mercadopago-account
+2026-03-19,"Pagamento de assinatura ",-24.43,,thiago-mercadopago-account
+2026-03-19,"Dinheiro retirado Emergências",100.00,,thiago-mercadopago-account
+2026-03-19,"Pagamento com QR Pix COMPANHIA DE GAS DE SAO PAULO COMGAS",-48.12,,thiago-mercadopago-account
+2026-03-19,"Pix recebido JESSICA DA SILVA LEITE",2500.00,,thiago-mercadopago-account
+2026-03-20,"Rendimentos ",1.14,,thiago-mercadopago-account
+2026-03-21,"Pagamento com QR Pix BAR E LANCHES AIMBERE LTDA",-79.00,,thiago-mercadopago-account
+2026-03-21,"Dinheiro retirado Emergências",400.00,,thiago-mercadopago-account
+2026-03-21,"Pagamento com QR Pix COMPANHIA BRASILEIRA DE DISTRIBUICAO",-151.99,,thiago-mercadopago-account
+2026-03-22,"Pagamento com QR Pix COMPANHIA BRASILEIRA DE DISTRIBUICAO",-75.23,,thiago-mercadopago-account
+2026-03-23,"Rendimentos ",1.25,,thiago-mercadopago-account
+2026-03-24,"Pagamento com QR Pix COMPANHIA BRASILEIRA DE DISTRIBUICAO",-35.59,,thiago-mercadopago-account
+2026-03-24,"Rendimentos ",1.18,,thiago-mercadopago-account
+2026-03-24,"Pagamento com QR Pix COMPANHIA BRASILEIRA DE DISTRIBUICAO",-66.55,,thiago-mercadopago-account
+2026-03-24,"Pix enviado Flavio Gomes Pereira",-650.00,,thiago-mercadopago-account
+2026-03-25,"Pagamento Mercado Libre",-94.90,,thiago-mercadopago-account
+2026-03-25,"Rendimentos ",0.98,,thiago-mercadopago-account
+2026-03-26,"Pagamento com QR Pix Francisco Soares de Lima",-29.00,,thiago-mercadopago-account
+2026-03-26,"Pagamento com QR Pix HENRIQUE JAIME DO NASCIMENTO",-10.00,,thiago-mercadopago-account
+2026-03-26,"Pix enviado Elaine dos Santos",-40.00,,thiago-mercadopago-account
+2026-03-26,"Pix enviado Ronaldo de Franca",-37.00,,thiago-mercadopago-account
+2026-03-26,"Rendimentos ",0.81,,thiago-mercadopago-account
+2026-03-26,"Pagamento com QR Pix FRUTAS FRESCAS SANTANA MARTINS LTDA",-10.00,,thiago-mercadopago-account
+2026-03-27,"Rendimentos ",0.75,,thiago-mercadopago-account
+2026-03-27,"Pagamento Mercado Libre",-147.44,,thiago-mercadopago-account
+2026-03-27,"Pagamento com QR Pix COMPANHIA BRASILEIRA DE DISTRIBUICAO",-82.49,,thiago-mercadopago-account
+2026-03-28,"Pagamento com QR Pix COMPANHIA BRASILEIRA DE DISTRIBUICAO",-2.79,,thiago-mercadopago-account
+2026-03-28,"Pagamento com QR Pix COMPANHIA BRASILEIRA DE DISTRIBUICAO",-20.17,,thiago-mercadopago-account
+2026-03-29,"Pagamento com QR Pix LB CASA DE PAES LTDA",-165.44,,thiago-mercadopago-account
+2026-03-29,"Pagamento com QR Pix A LAREIRA - RESTAURANTE, PAES, DOCES E CONVENIENCIAS LTDA",-45.97,,thiago-mercadopago-account
+2026-03-29,"Pagamento com QR Pix COMPANHIA BRASILEIRA DE DISTRIBUICAO",-31.46,,thiago-mercadopago-account
+2026-03-29,"Pagamento com QR Pix COMPANHIA BRASILEIRA DE DISTRIBUICAO",-29.79,,thiago-mercadopago-account
+2026-03-30,"Pagamento com QR Pix COMPANHIA BRASILEIRA DE DISTRIBUICAO",-17.58,,thiago-mercadopago-account
+2026-03-30,"Rendimentos ",0.56,,thiago-mercadopago-account
+2026-03-30,"Pagamento com QR Pix RAIA DROGASIL SA",-156.04,,thiago-mercadopago-account
+2026-03-30,"Pagamento com QR Pix COMPANHIA BRASILEIRA DE DISTRIBUICAO",-16.29,,thiago-mercadopago-account
+2026-03-31,"Pagamento com QR Pix COMPANHIA BRASILEIRA DE DISTRIBUICAO",-43.79,,thiago-mercadopago-account
+2026-03-31,"Rendimentos ",0.43,,thiago-mercadopago-account
+2026-03-31,"Pagamento com QR Pix COMPANHIA BRASILEIRA DE DISTRIBUICAO",-20.09,,thiago-mercadopago-account
+2026-03-31,"46f6dca3c31181963d2fbe8be8271721211728ccd5950dc87f6aaee3836b70b8",0,chain-transaction,thiago-mercadopago-account
+2026-03-31,"8ac9bc25092209940b24eadbf90e02c1e6e715d277f4d7281aa3c8ea7145a0d9",0,chain-transaction,thiago-mercadopago-account
+2026-01-01,"Pagamento de assinatura HBO Max",-31.43,,thiago-mercadopago-account
+2026-01-01,"Pagamento com QR Pix COMPANHIA DE GAS DE SAO PAULO COMGAS",-26.89,,thiago-mercadopago-account
+2026-01-01,"Pagamento com QR Pix ELETROPAULO METROPOLITANA ELETRICIDADE DE SAO PAULO S.A.",-34.48,,thiago-mercadopago-account
+2026-01-02,"Pagamento com QR Pix SENDAS DISTRIBUIDORA SA",-20.81,,thiago-mercadopago-account
+2026-01-02,"Rendimentos ",0.19,,thiago-mercadopago-account
+2026-01-02,"Pagamento com QR Pix BARAO ZAGOTTIS LTDA",-45.00,,thiago-mercadopago-account
+2026-01-02,"Pagamento com QR Pix JJCR CONVENIENCIA LTDA",-8.90,,thiago-mercadopago-account
+2026-01-02,"Pagamento com QR Pix SUPERMERCADO HIROTA LTDA",-16.46,,thiago-mercadopago-account
+2026-01-03,"Pagamento JOSELANE CORDEIRO DA SILVA 01155163443",-12.00,,thiago-mercadopago-account
+2026-01-03,"Pagamento com QR Pix GELATO ARTESANAL PARAISO LTDA",-69.50,,thiago-mercadopago-account
+2026-01-03,"Pagamento GRAN COFFEE",-13.00,,thiago-mercadopago-account
+2026-01-03,"Pagamento com QR Pix Maria Conceicao dos Santos",-13.00,,thiago-mercadopago-account
+2026-01-03,"Pagamento com QR Pix PANIFICADORA LA INMACULADA LTDA",-81.43,,thiago-mercadopago-account
+2026-01-03,"Pagamento com QR Pix Cristiane Silva Souza",-17.00,,thiago-mercadopago-account
+2026-01-04,"Transferência Pix recebida THIAGO ALBERTO DE SOUZA COLEN",1500.00,,thiago-mercadopago-account
+2026-01-04,"Pagamento com QR Pix Ff Tech E Participacoes Ltda",-310.48,,thiago-mercadopago-account
+2026-01-04,"Pagamento com QR Pix Ff Tech E Participacoes Ltda",-266.29,,thiago-mercadopago-account
+2026-01-05,"Pagamento com QR Pix SENDAS DISTRIBUIDORA SA",-12.90,,thiago-mercadopago-account
+2026-01-05,"Pagamento com QR Pix SENDAS DISTRIBUIDORA SA",-67.44,,thiago-mercadopago-account
+2026-01-05,"Pagamento com QR Pix SENDAS DISTRIBUIDORA SA",-17.48,,thiago-mercadopago-account
+2026-01-05,"Rendimentos ",0.10,,thiago-mercadopago-account
+2026-01-05,"Pagamento com QR Pix BARAO ZAGOTTIS LTDA",-48.00,,thiago-mercadopago-account
+2026-01-06,"Pagamento com QR Pix REDE INTEGRADA DE LOJAS DE CONVENIENCIA E PROXIMIDADE S.A.",-26.90,,thiago-mercadopago-account
+2026-01-06,"Rendimentos ",0.37,,thiago-mercadopago-account
+2026-01-06,"Pagamento com QR Pix FORNERIA CIA LTDA",-36.90,,thiago-mercadopago-account
+2026-01-06,"Pagamento com QR Pix COMPANHIA BRASILEIRA DE DISTRIBUICAO",-17.98,,thiago-mercadopago-account
+2026-01-06,"Transferência Pix recebida THIAGO ALBERTO DE SOUZA COLEN",2500.00,,thiago-mercadopago-account
+2026-01-06,"Pagamento com QR Pix LANCHONETE HIGIENOPOLIS LTDA",-66.00,,thiago-mercadopago-account
+2026-01-06,"Pagamento com QR Pix DIAGNOSTICOS DA AMERICA S A",-2372.70,,thiago-mercadopago-account
+2026-01-07,"Transferência Pix enviada Simone Molica",-550.00,,thiago-mercadopago-account
+2026-01-07,"Rendimentos ",0.38,,thiago-mercadopago-account
+2026-01-07,"Pagamento com QR Pix COMPANHIA BRASILEIRA DE DISTRIBUICAO",-18.09,,thiago-mercadopago-account
+2026-01-08,"Transferência Pix recebida THIAGO ALBERTO DE SOUZA COLEN",1000.00,,thiago-mercadopago-account
+2026-01-08,"Pagamento com QR Pix COMPANHIA BRASILEIRA DE DISTRIBUICAO",-125.54,,thiago-mercadopago-account
+2026-01-08,"Rendimentos ",0.10,,thiago-mercadopago-account
+2026-01-08,"Pagamento com QR Pix COMPANHIA BRASILEIRA DE DISTRIBUICAO",-22.09,,thiago-mercadopago-account
+2026-01-09,"Pagamento com QR Pix Ff Tech E Participacoes Ltda",-236.41,,thiago-mercadopago-account
+2026-01-09,"Rendimentos ",0.10,,thiago-mercadopago-account
+2026-01-10,"Pagamento com QR Pix PANIFICADORA HOMEM DE MELLO LTDA",-84.40,,thiago-mercadopago-account
+2026-01-10,"Pagamento com QR Pix 42.455.131 PABLO CESAR GENERAL",-24.00,,thiago-mercadopago-account
+2026-01-10,"Pagamento Fernando Neves da Cruz",-15.00,,thiago-mercadopago-account
+2026-01-10,"Pagamento com QR Pix COMANCHE CHURRASCARIA LTDA",-269.94,,thiago-mercadopago-account
+2026-01-10,"Pagamento com QR Pix LA ITALIA CAFE VILA MATILDE LTDA",-8.00,,thiago-mercadopago-account
+2026-01-10,"Pagamento JOSELANE CORDEIRO DA SILVA 01155163443",-24.00,,thiago-mercadopago-account
+2026-01-10,"Pagamento com QR Pix COMPANHIA BRASILEIRA DE DISTRIBUICAO",-87.94,,thiago-mercadopago-account
+2026-01-11,"Pagamento com QR Pix PANIFICADORA E CONFEITARIA ELITE DAS PERDIZES LTDA",-7.90,,thiago-mercadopago-account
+2026-01-11,"Pagamento de assinatura Meli+",-19.90,,thiago-mercadopago-account
+2026-01-11,"Pagamento com QR Pix AUTO POSTO VISTA BELLA LTDA.",-5.99,,thiago-mercadopago-account
+2026-01-11,"Pagamento com QR Pix COMPANHIA BRASILEIRA DE DISTRIBUICAO",-180.83,,thiago-mercadopago-account
+2026-01-12,"Rendimentos ",0.38,,thiago-mercadopago-account
+2026-01-12,"Transferência Pix recebida THIAGO ALBERTO DE SOUZA COLEN",1000.00,,thiago-mercadopago-account
+2026-01-12,"Pagamento com QR Pix SENDAS DISTRIBUIDORA SA",-9.69,,thiago-mercadopago-account
+2026-01-12,"Pagamento com QR Pix BARAO ZAGOTTIS LTDA",-48.00,,thiago-mercadopago-account
+2026-01-12,"Pagamento com QR Pix JJCR CONVENIENCIA LTDA",-11.00,,thiago-mercadopago-account
+2026-01-12,"Compra Mercado Libre",-151.48,,thiago-mercadopago-account
+2026-01-13,"Pagamento com QR Pix COMPANHIA BRASILEIRA DE DISTRIBUICAO",-22.09,,thiago-mercadopago-account
+2026-01-13,"Pagamento com QR Pix Ff Tech E Participacoes Ltda",-172.15,,thiago-mercadopago-account
+2026-01-13,"Rendimentos ",0.39,,thiago-mercadopago-account
+2026-01-13,"Transferência Pix recebida JESSICA DA SILVA LEITE",1016.00,,thiago-mercadopago-account
+2026-01-14,"Rendimentos ",0.70,,thiago-mercadopago-account
+2026-01-14,"Pagamento com QR Pix GRUPO FARTURA DE HORTIFRUT S.A.",-25.67,,thiago-mercadopago-account
+2026-01-14,"Pagamento com QR Pix 2C ALIMENTACAO LTDA",-33.92,,thiago-mercadopago-account
+2026-01-14,"Pagamento com QR Pix SUPERMERCADO HIROTA LTDA",-4.48,,thiago-mercadopago-account
+2026-01-15,"Pagamento com QR Pix Ff Tech E Participacoes Ltda",-196.96,,thiago-mercadopago-account
+2026-01-15,"Rendimentos ",0.66,,thiago-mercadopago-account
+2026-01-15,"Pagamento com QR Pix FORNERIA CIA LTDA",-36.90,,thiago-mercadopago-account
+2026-01-15,"Pagamento Ana Carolina De Oliveira Silva",-12.00,,thiago-mercadopago-account
+2026-01-15,"Pagamento com QR Pix MILTON SANTANA",-20.00,,thiago-mercadopago-account
+2026-01-15,"Pagamento com QR Pix MILTON SANTANA",-15.00,,thiago-mercadopago-account
+2026-01-15,"Pagamento com QR Pix Antonio Claudio Rodrigues",-25.00,,thiago-mercadopago-account
+2026-01-15,"Pagamento com QR Pix 45.240.788 DAYANA SOUZA COSTA",-57.00,,thiago-mercadopago-account
+2026-01-15,"Pagamento com QR Pix COMPANHIA BRASILEIRA DE DISTRIBUICAO",-21.98,,thiago-mercadopago-account
+2026-01-16,"Pagamento com QR Pix BARAO ZAGOTTIS LTDA",-48.00,,thiago-mercadopago-account
+2026-01-16,"Rendimentos ",0.59,,thiago-mercadopago-account
+2026-01-16,"Pagamento com QR Pix BRASMADI COMERCIO DE ALIMENTOS LTDA",-22.00,,thiago-mercadopago-account
+2026-01-17,"Pagamento com QR Pix PANIFICADORA HOMEM DE MELLO LTDA",-92.68,,thiago-mercadopago-account
+2026-01-17,"Pagamento com QR Pix DIA BRASIL SOCIEDADE LIMITADA EM RECUPERACAO JUDICIAL",-23.49,,thiago-mercadopago-account
+2026-01-17,"Pagamento com QR Pix URBIA AGUAS CLARAS SA",-120.00,,thiago-mercadopago-account
+2026-01-17,"Pagamento com QR Pix PIZZAS RESTAURANTE LTDA",-108.80,,thiago-mercadopago-account
+2026-01-17,"Pagamento JOSELANE CORDEIRO DA SILVA 01155163443",-12.00,,thiago-mercadopago-account
+2026-01-18,"Pagamento com QR Pix REDE INTEGRADA DE LOJAS DE CONVENIENCIA E PROXIMIDADE S.A.",-29.80,,thiago-mercadopago-account
+2026-01-18,"Pagamento de assinatura ",-19.53,,thiago-mercadopago-account
+2026-01-18,"Pagamento com QR Pix GIFFA IMPERIAL CERVEJARIA LTDA ",-248.60,,thiago-mercadopago-account
+2026-01-18,"Pagamento com QR Pix PADARIA E CONFEITARIA PAO D ORO LTDA ",-30.15,,thiago-mercadopago-account
+2026-01-19,"Rendimentos ",0.46,,thiago-mercadopago-account
+2026-01-19,"Pagamento com QR Pix COMPANHIA BRASILEIRA DE DISTRIBUICAO",-30.04,,thiago-mercadopago-account
+2026-01-19,"Pagamento com QR Pix DR. CONSULTA CENTRO MEDICO LTDA",-199.00,,thiago-mercadopago-account
+2026-01-19,"Pagamento com QR Pix REDE INTEGRADA DE LOJAS DE CONVENIENCIA E PROXIMIDADE S.A.",-8.47,,thiago-mercadopago-account
+2026-01-20,"Pagamento com QR Pix COMPANHIA BRASILEIRA DE DISTRIBUICAO",-19.79,,thiago-mercadopago-account
+2026-01-20,"Transferência cancelada COMPANHIA BRASILEIRA DE DISTRIBUICAO",19.79,,thiago-mercadopago-account
+2026-01-20,"Pagamento com QR Pix COMPANHIA BRASILEIRA DE DISTRIBUICAO",-19.79,,thiago-mercadopago-account
+2026-01-20,"Pagamento com QR Pix BRASMADI COMERCIO DE ALIMENTOS LTDA",-18.00,,thiago-mercadopago-account
+2026-01-20,"Rendimentos ",0.06,,thiago-mercadopago-account
+2026-01-20,"Pagamento com QR Pix COZINHA.DO.CHEFE LTDA",-42.90,,thiago-mercadopago-account
+2026-01-21,"Pagamento Renner",-359.80,,thiago-mercadopago-account
+2026-01-21,"Rendimentos ",0.01,,thiago-mercadopago-account
+2026-01-21,"Transferência Pix recebida THIAGO ALBERTO DE SOUZA COLEN",1000.00,,thiago-mercadopago-account
+2026-01-21,"Pagamento com QR Pix BRASMADI COMERCIO DE ALIMENTOS LTDA",-18.00,,thiago-mercadopago-account
+2026-01-21,"Pagamento com QR Pix SUPERMERCADO HIROTA LTDA",-7.98,,thiago-mercadopago-account
+2026-01-21,"Pagamento com QR Pix INTERLAGOS COMERCIAL DE GENEROS ALIMENTICIOS LTDA",-36.84,,thiago-mercadopago-account
+2026-01-22,"Rendimentos ",0.27,,thiago-mercadopago-account
+2026-01-22,"Pagamento com QR Pix COMPANHIA BRASILEIRA DE DISTRIBUICAO",-10.49,,thiago-mercadopago-account
+2026-01-22,"Pagamento com QR Pix BRASMADI COMERCIO DE ALIMENTOS LTDA",-18.00,,thiago-mercadopago-account
+2026-01-22,"Pagamento com QR Pix 2C ALIMENTACAO LTDA",-42.87,,thiago-mercadopago-account
+2026-01-22,"Pagamento com QR Pix ATACADAO S.A.",-11.90,,thiago-mercadopago-account
+2026-01-22,"Pagamento com QR Pix GOURMET LOJA FAMILY IX LTDA",-20.88,,thiago-mercadopago-account
+2026-01-23,"Pagamento com QR Pix REDE INTEGRADA DE LOJAS DE CONVENIENCIA E PROXIMIDADE S.A.",-79.19,,thiago-mercadopago-account
+2026-01-23,"Rendimentos ",0.22,,thiago-mercadopago-account
+2026-01-24,"Transferência Pix recebida THIAGO ALBERTO DE SOUZA COLEN",1000.00,,thiago-mercadopago-account
+2026-01-24,"Pagamento com QR Pix COMPANHIA BRASILEIRA DE DISTRIBUICAO",-53.15,,thiago-mercadopago-account
+2026-01-24,"Pagamento com QR Pix REDE INTEGRADA DE LOJAS DE CONVENIENCIA E PROXIMIDADE S.A.",-31.20,,thiago-mercadopago-account
+2026-01-25,"Pagamento com QR Pix RAIA DROGASIL S A",-7.59,,thiago-mercadopago-account
+2026-01-26,"Rendimentos ",0.18,,thiago-mercadopago-account
+2026-01-26,"Pagamento com QR Pix PANIFICADORA HOMEM DE MELLO LTDA",-68.00,,thiago-mercadopago-account
+2026-01-26,"Pagamento com QR Pix COMPANHIA BRASILEIRA DE DISTRIBUICAO",-8.99,,thiago-mercadopago-account
+2026-01-26,"Pagamento com QR Pix DSV - COMERCIO DE ALIMENTOS LTDA",-149.60,,thiago-mercadopago-account
+2026-01-26,"Pagamento com QR Pix BENELLI - SERVICOS DE ALIMENTACAO LTDA",-27.00,,thiago-mercadopago-account
+2026-01-26,"Pagamento com QR Pix CONSORCIO ESTACIONAMENTO CAMPINAS SHOPPING",-18.00,,thiago-mercadopago-account
+2026-01-26,"Pagamento com QR Pix AUTO POSTO RVM TAPIRATIBA LTDA",-122.03,,thiago-mercadopago-account
+2026-01-26,"Pagamento com QR Pix SUPERMERCADOS BH COMERCIO DE ALIMENTOS SA",-197.06,,thiago-mercadopago-account
+2026-01-27,"Pagamento com QR Pix 32 177 384 MARIA DE FATIMA PEREIRA",-34.00,,thiago-mercadopago-account
+2026-01-27,"Pagamento com QR Pix SUPERMERCADOS BH COMERCIO DE ALIMENTOS SA",-86.28,,thiago-mercadopago-account
+2026-01-27,"Pagamento com QR Pix VALENTE CALCADOS E CONFECCOES LTDA",-179.80,,thiago-mercadopago-account
+2026-01-27,"Dinheiro reservado Emergências",-3000.00,,thiago-mercadopago-account
+2026-01-27,"Transferência Pix recebida JESSICA DA SILVA LEITE",4000.00,,thiago-mercadopago-account
+2026-01-27,"Pagamento com QR Pix Ff Tech E Participacoes Ltda",-205.52,,thiago-mercadopago-account
+2026-01-27,"Rendimentos ",0.41,,thiago-mercadopago-account
+2026-01-28,"Rendimentos ",0.56,,thiago-mercadopago-account
+2026-01-28,"Pagamento com QR Pix CYNTHIA PIMENTA MATTAR",-125.00,,thiago-mercadopago-account
+2026-01-28,"Pagamento com QR Pix CYNTHIA PIMENTA MATTAR",-168.00,,thiago-mercadopago-account
+2026-01-28,"Pagamento com QR Pix CYNTHIA PIMENTA MATTAR",-43.00,,thiago-mercadopago-account
+2026-01-28,"Pagamento com QR Pix SUPERMERCADOS BH COMERCIO DE ALIMENTOS SA",-198.28,,thiago-mercadopago-account
+2026-01-29,"Rendimentos ",0.30,,thiago-mercadopago-account
+2026-01-29,"Pagamento com QR Pix FLAVIO GOULART DA SILVA CPF 770662516 87",-10.98,,thiago-mercadopago-account
+2026-01-29,"Pagamento com QR Pix TROPEIRO LTDA",-231.00,,thiago-mercadopago-account
+2026-01-29,"Pagamento com QR Pix SUPERMERCADOS BH COMERCIO DE ALIMENTOS SA",-103.14,,thiago-mercadopago-account
+2026-01-30,"Rendimentos ",0.15,,thiago-mercadopago-account
+2026-01-30,"Transferência Pix enviada Jaider Michel de Souza",-140.00,,thiago-mercadopago-account
+2026-01-31,"Pagamento com QR Pix POINT BEER ESCARPAS FLUTUANTE BAR LTDA",-54.00,,thiago-mercadopago-account
+2026-01-31,"Pagamento com QR Pix VIVIANE APARECIDA FARIA 05329494630",-35.00,,thiago-mercadopago-account
+2026-01-31,"Pagamento com QR Pix ESCARPAS AUTO POSTO DE COMBUSTIVEL LTDA",-360.00,,thiago-mercadopago-account
+2026-01-31,"Pagamento com QR Pix CONTRA PONTO ESPACO GASTRONOMICO LTDA",-163.90,,thiago-mercadopago-account
+2026-01-31,"Dinheiro retirado Emergências",700.00,,thiago-mercadopago-account
+2026-01-31,"Pagamento de assinatura HBO Max",-31.43,,thiago-mercadopago-account
+2026-01-31,"Pagamento com QR Pix MARINA MANUTENcOES NAUTICAS DE ESCARPAS LTDA",-20.00,,thiago-mercadopago-account
+2026-01-31,"Pagamento com QR Pix SUPERMERCADOS BH COMERCIO DE ALIMENTOS SA",-64.51,,thiago-mercadopago-account
+2026-01-31,"bd3823929732511ca5fb0211363dc3d72b8f768a169012c1e3dbd98e99229cf1",0,chain-transaction,thiago-mercadopago-account
+2026-01-31,"f0121e97d08581812090fe7a86493d50e939439914f8aedb729716533e26309a",0,chain-transaction,thiago-mercadopago-account
+2026-02-05,"Transferência recebida pelo Pix - THIAGO ALBERTO DE SOUZA COLEN - •••.581.718-•• - BCO SANTANDER (BRASIL) S.A. (0033) Agência: 1 Conta: 2027075-8",3200.00,,thiago-nubank-account
+2026-02-05,"Pagamento de fatura",-3117.78,,thiago-nubank-account
+2026-02-05,"8f2a3325008b582ec8421c533b17fa90a5ba6b0637316125c1b8481016d86050",0,chain-transaction,thiago-nubank-account
+2026-02-05,"52b3a6a5268311d420377ae90a35b484ef485711982231d79aae143c242fbf41",0,chain-transaction,thiago-nubank-account
+2026-03-02,"Transferência Recebida - CAIXA ECONOMICA FEDERAL",123011.05,,thiago-nubank-account
+2026-03-02,"Transferência Recebida - CAIXA ECONOMICA FEDERAL",51987.02,,thiago-nubank-account
+2026-03-02,"Transferência enviada pelo Pix - Gowd Instituicao de Pagamento Ltda - 33.630.661/0001-50 - STARK BANK S.A. - IP (0665) Agência: 1 Conta: 459761216231833-6",-10.00,,thiago-nubank-account
+2026-03-02,"Transferência enviada pelo Pix - Latam Gateway - 33.630.661/0001-50 - BCO BS2 S.A. (0218) Agência: 1 Conta: 1084662-0",-9990.00,,thiago-nubank-account
+2026-03-02,"Transferência enviada pelo Pix - Latam Gateway - 33.630.661/0001-50 - BCO BS2 S.A. (0218) Agência: 1 Conta: 1084662-0",-10000.00,,thiago-nubank-account
+2026-03-02,"Aplicação RDB",-150000.00,,thiago-nubank-account
+2026-03-03,"Transferência enviada pelo Pix - Gowd Instituicao de Pagamento Ltda - 33.630.661/0001-50 - STARK BANK S.A. - IP (0665) Agência: 1 Conta: 459761216231833-6",-4950.00,,thiago-nubank-account
+2026-03-03,"Resgate RDB",20000.00,,thiago-nubank-account
+2026-03-03,"Pagamento de boleto efetuado - LOCABENS PREDIAL IMOVEIS LTDA",-2836.39,,thiago-nubank-account
+2026-03-03,"Transferência enviada pelo Pix - Gowd Instituicao de Pagamento Ltda - 33.630.661/0001-50 - STARK BANK S.A. - IP (0665) Agência: 1 Conta: 459761216231833-6",-7500.00,,thiago-nubank-account
+2026-03-03,"Pagamento de boleto efetuado - ENEL DISTRIBUICAO SAO PAULO",-85.61,,thiago-nubank-account
+2026-03-03,"Pagamento de fatura",-1807.44,,thiago-nubank-account
+2026-03-03,"Transferência enviada pelo Pix - TELEFONICA BRAS - 02.558.157/0001-62 - BCO SANTANDER (BRASIL) S.A. (0033) Agência: 2271 Conta: 13002745-8",-230.70,,thiago-nubank-account
+2026-03-04,"Resgate RDB",12000.00,,thiago-nubank-account
+2026-03-04,"Transferência enviada pelo Pix - Gowd Instituicao de Pagamento Ltda - 33.630.661/0001-50 - STARK BANK S.A. - IP (0665) Agência: 1 Conta: 459761216231833-6",-4951.00,,thiago-nubank-account
+2026-03-04,"Transferência enviada pelo Pix - Latam Gateway - 33.630.661/0001-50 - BCO BS2 S.A. (0218) Agência: 1 Conta: 1084662-0",-4992.00,,thiago-nubank-account
+2026-03-04,"Transferência enviada pelo Pix - Gowd Instituicao de Pagamento Ltda - 33.630.661/0001-50 - STARK BANK S.A. - IP (0665) Agência: 1 Conta: 459761216231833-6",-4993.00,,thiago-nubank-account
+2026-03-04,"Transferência enviada pelo Pix - Gowd Instituicao de Pagamento Ltda - 33.630.661/0001-50 - STARK BANK S.A. - IP (0665) Agência: 1 Conta: 459761216231833-6",-4748.29,,thiago-nubank-account
+2026-03-05,"Resgate RDB",20000.00,,thiago-nubank-account
+2026-03-05,"Transferência enviada pelo Pix - Gowd Instituicao de Pagamento Ltda - 33.630.661/0001-50 - STARK BANK S.A. - IP (0665) Agência: 1 Conta: 459761216231833-6",-4995.00,,thiago-nubank-account
+2026-03-05,"Transferência enviada pelo Pix - Latam Gateway - 33.630.661/0001-50 - BCO BS2 S.A. (0218) Agência: 1 Conta: 1084662-0",-4996.00,,thiago-nubank-account
+2026-03-05,"Transferência enviada pelo Pix - Gowd Instituicao de Pagamento Ltda - 33.630.661/0001-50 - STARK BANK S.A. - IP (0665) Agência: 1 Conta: 459761216231833-6",-4997.00,,thiago-nubank-account
+2026-03-05,"Transferência enviada pelo Pix - Gowd Instituicao de Pagamento Ltda - 33.630.661/0001-50 - STARK BANK S.A. - IP (0665) Agência: 1 Conta: 459761216231833-6",-4998.00,,thiago-nubank-account
+2026-03-09,"Transferência enviada pelo Pix - Latam Gateway - 33.630.661/0001-50 - BCO BS2 S.A. (0218) Agência: 1 Conta: 1084662-0",-4996.00,,thiago-nubank-account
+2026-03-09,"Transferência enviada pelo Pix - Gowd Instituicao de Pagamento Ltda - 33.630.661/0001-50 - STARK BANK S.A. - IP (0665) Agência: 1 Conta: 459761216231833-6",-4997.00,,thiago-nubank-account
+2026-03-09,"Transferência enviada pelo Pix - Latam Gateway - 33.630.661/0001-50 - BCO BS2 S.A. (0218) Agência: 1 Conta: 1084662-0",-4998.00,,thiago-nubank-account
+2026-03-09,"Transferência enviada pelo Pix - Gowd Instituicao de Pagamento Ltda - 33.630.661/0001-50 - STARK BANK S.A. - IP (0665) Agência: 1 Conta: 459761216231833-6",-4999.00,,thiago-nubank-account
+2026-03-09,"Resgate RDB",20000.00,,thiago-nubank-account
+2026-03-10,"Resgate RDB",20000.00,,thiago-nubank-account
+2026-03-10,"Pagamento de boleto efetuado - SAMEDIL - SERVICOS DE ATENDIMENTO MEDICO",-1314.87,,thiago-nubank-account
+2026-03-10,"Transferência enviada pelo Pix - Latam Gateway - 33.630.661/0001-50 - BCO BS2 S.A. (0218) Agência: 1 Conta: 1084662-0",-4997.00,,thiago-nubank-account
+2026-03-10,"Transferência enviada pelo Pix - Gowd Instituicao de Pagamento Ltda - 33.630.661/0001-50 - STARK BANK S.A. - IP (0665) Agência: 1 Conta: 459761216231833-6",-4998.00,,thiago-nubank-account
+2026-03-10,"Transferência enviada pelo Pix - Latam Gateway - 33.630.661/0001-50 - BCO BS2 S.A. (0218) Agência: 1 Conta: 1084662-0",-4997.00,,thiago-nubank-account
+2026-03-12,"Resgate RDB",16300.00,,thiago-nubank-account
+2026-03-12,"Transferência enviada pelo Pix - Latam Gateway - 33.630.661/0001-50 - BCO BS2 S.A. (0218) Agência: 1 Conta: 1084662-0",-4996.00,,thiago-nubank-account
+2026-03-12,"Transferência enviada pelo Pix - Latam Gateway - 33.630.661/0001-50 - BCO BS2 S.A. (0218) Agência: 1 Conta: 1084662-0",-4997.00,,thiago-nubank-account
+2026-03-12,"Transferência enviada pelo Pix - Gowd Instituicao de Pagamento Ltda - 33.630.661/0001-50 - STARK BANK S.A. - IP (0665) Agência: 1 Conta: 459761216231833-6",-4998.00,,thiago-nubank-account
+2026-03-12,"Transferência enviada pelo Pix - Gowd Instituicao de Pagamento Ltda - 33.630.661/0001-50 - STARK BANK S.A. - IP (0665) Agência: 1 Conta: 459761216231833-6",-4999.00,,thiago-nubank-account
+2026-03-14,"Transferência enviada pelo Pix - Gowd Instituicao de Pagamento Ltda - 33.630.661/0001-50 - STARK BANK S.A. - IP (0665) Agência: 1 Conta: 459761216231833-6",-4999.00,,thiago-nubank-account
+2026-03-14,"Transferência enviada pelo Pix - Gowd Instituicao de Pagamento Ltda - 33.630.661/0001-50 - STARK BANK S.A. - IP (0665) Agência: 1 Conta: 459761216231833-6",-4998.00,,thiago-nubank-account
+2026-03-14,"Resgate RDB",20000.00,,thiago-nubank-account
+2026-03-14,"Transferência enviada pelo Pix - Gowd Instituicao de Pagamento Ltda - 33.630.661/0001-50 - STARK BANK S.A. - IP (0665) Agência: 1 Conta: 459761216231833-6",-4996.00,,thiago-nubank-account
+2026-03-14,"Transferência enviada pelo Pix - Gowd Instituicao de Pagamento Ltda - 33.630.661/0001-50 - STARK BANK S.A. - IP (0665) Agência: 1 Conta: 459761216231833-6",-4997.00,,thiago-nubank-account
+2026-03-16,"Resgate RDB",20000.00,,thiago-nubank-account
+2026-03-16,"Transferência enviada pelo Pix - Latam Gateway - 33.630.661/0001-50 - BCO BS2 S.A. (0218) Agência: 1 Conta: 1084662-0",-4996.00,,thiago-nubank-account
+2026-03-16,"Transferência enviada pelo Pix - Latam Gateway - 33.630.661/0001-50 - BCO BS2 S.A. (0218) Agência: 1 Conta: 1084662-0",-4997.00,,thiago-nubank-account
+2026-03-16,"Transferência enviada pelo Pix - Latam Gateway - 33.630.661/0001-50 - BCO BS2 S.A. (0218) Agência: 1 Conta: 1084662-0",-4998.00,,thiago-nubank-account
+2026-03-16,"Transferência enviada pelo Pix - Gowd Instituicao de Pagamento Ltda - 33.630.661/0001-50 - STARK BANK S.A. - IP (0665) Agência: 1 Conta: 459761216231833-6",-4999.00,,thiago-nubank-account
+2026-03-17,"Resgate RDB",450.00,,thiago-nubank-account
+2026-03-18,"Resgate RDB",1375.95,,thiago-nubank-account
+2026-03-18,"Transferência enviada pelo Pix - PIX Marketplace - 10.573.521/0001-91 - MERCADO PAGO IP LTDA. (0323) Agência: 1 Conta: 2918333524-0",-1198.71,,thiago-nubank-account
+2026-03-18,"1df55858b052ed475b70e38684292c62753a3e3e1e1d135b7dc3275315f45f3d",0,chain-transaction,thiago-nubank-account
+2026-03-18,"e0740b97ccfef97145c51e18bdc25ce66ae07510e0a12fea1d4f296ec3e25298",0,chain-transaction,thiago-nubank-account
+2025-12-02,"Zp*Academia Nada Melho - Parcela 4/5",448.00,,thiago-nubank-credit-card
+2025-12-02,"Dr. Consulta Centro - Parcela 6/8",41.87,,thiago-nubank-credit-card
+2025-12-02,"Mlp*Magazineluiza - Parcela 12/12",98.23,,thiago-nubank-credit-card
+2025-12-02,"Sua Academia",149.90,,thiago-nubank-credit-card
+2025-12-02,"Pagamento recebido",-3922.01,,thiago-nubank-credit-card
+2025-12-02,"Pg *Power Sneaker Come - Parcela 9/10",88.70,,thiago-nubank-credit-card
+2025-12-02,"Localiza - Parcela 2/4",268.79,,thiago-nubank-credit-card
+2025-12-05,"Google Youtube",53.90,,thiago-nubank-credit-card
+2025-12-06,"Netflix.Com",85.70,,thiago-nubank-credit-card
+2025-12-07,"Uber Uber *Trip Help.U",39.94,,thiago-nubank-credit-card
+2025-12-08,"Amazon Prime Aluguel",45.99,,thiago-nubank-credit-card
+2025-12-08,"Amazon Ad Free For Pri",10.00,,thiago-nubank-credit-card
+2025-12-09,"Localiza - Multas Tran",136.67,,thiago-nubank-credit-card
+2025-12-11,"Uber Uber *Trip Help.U",21.94,,thiago-nubank-credit-card
+2025-12-11,"Uber Uber *Trip Help.U",46.95,,thiago-nubank-credit-card
+2025-12-11,"Uber Uber *Trip Help.U",34.92,,thiago-nubank-credit-card
+2025-12-11,"Uber Uber *Trip Help.U",34.95,,thiago-nubank-credit-card
+2025-12-15,"Apple.Com/Bill",29.90,,thiago-nubank-credit-card
+2025-12-20,"Ifood Club",12.90,,thiago-nubank-credit-card
+2025-12-21,"Uber Uber *Trip Help.U",24.95,,thiago-nubank-credit-card
+2025-12-25,"Uber Uber *Trip Help.U",40.96,,thiago-nubank-credit-card
+2025-12-26,"Uber Uber *Trip Help.U",15.94,,thiago-nubank-credit-card
+2025-12-26,"Uber Uber *Trip Help.U",53.96,,thiago-nubank-credit-card
+2025-12-26,"Uber Uber *Trip Help.U",32.96,,thiago-nubank-credit-card
+2025-12-26,"Uber Uber *Trip Help.U",41.95,,thiago-nubank-credit-card
+2025-12-27,"Uber Uber *Trip Help.U",5.00,,thiago-nubank-credit-card
+2026-01-01,"Uber Uber *Trip Help.U",30.94,,thiago-nubank-credit-card
+2026-01-01,"Uber Uber *Trip Help.U",5.00,,thiago-nubank-credit-card
+2026-01-01,"06a360562d08ec86303cc85c56daacec78b32e590496ac8bec92b3f2a554605b",0,chain-transaction,thiago-nubank-credit-card
+2026-01-01,"3ae0bb232d6297d225da57282e3298878f6a79d9f2f752756e3f150d2597ed70",0,chain-transaction,thiago-nubank-credit-card
+2026-01-02,"Localiza - Parcela 3/4",268.79,,thiago-nubank-credit-card
+2026-01-02,"Zp*Academia Nada Melho - Parcela 5/5",448.00,,thiago-nubank-credit-card
+2026-01-02,"Dr. Consulta Centro - Parcela 7/8",41.87,,thiago-nubank-credit-card
+2026-01-02,"Pg *Power Sneaker Come - Parcela 10/10",88.70,,thiago-nubank-credit-card
+2026-01-03,"Sua Academia",149.90,,thiago-nubank-credit-card
+2026-01-05,"Google Youtube",53.90,,thiago-nubank-credit-card
+2026-01-06,"Netflix.Com",85.70,,thiago-nubank-credit-card
+2026-01-07,"Uber Uber *Trip Help.U",20.94,,thiago-nubank-credit-card
+2026-01-08,"Pagamento recebido",-1900.91,,thiago-nubank-credit-card
+2026-01-09,"Amazon Ad Free For Pri",10.00,,thiago-nubank-credit-card
+2026-01-15,"Apple.Com/Bill",29.90,,thiago-nubank-credit-card
+2026-01-19,"Turbi Fechamento da Vi",9.24,,thiago-nubank-credit-card
+2026-01-19,"Turbi",400.00,,thiago-nubank-credit-card
+2026-01-20,"Uber Uber *Trip Help.U",33.94,,thiago-nubank-credit-card
+2026-01-20,"Uber Uber *Trip Help.U",19.94,,thiago-nubank-credit-card
+2026-01-20,"Ifood Club",12.90,,thiago-nubank-credit-card
+2026-01-20,"Dl *Uberrides",21.95,,thiago-nubank-credit-card
+2026-01-24,"Google One",96.99,,thiago-nubank-credit-card
+2026-01-26,"Airbnb * Hm9zcjs4hb - Parcela 1/6",290.21,,thiago-nubank-credit-card
+2026-01-27,"Localiza - Parcela 1/4",743.68,,thiago-nubank-credit-card
+2026-01-31,"Plus 12 Month Family",281.38,,thiago-nubank-credit-card
+2026-01-31,"IOF de ""Plus 12 Month Family""",9.84,,thiago-nubank-credit-card
+2026-01-31,"0063d91199ff7f9b053fe99491b3e5dcf6f5ea7011f3dd7c1801597d827ef078",0,chain-transaction,thiago-nubank-credit-card
+2026-01-31,"0451d970ea03cac78a67e8f0daae96b230abf724a03a736c2d5a6d017cee0879",0,chain-transaction,thiago-nubank-credit-card
+2026-02-02,"Localiza - Parcela 2/4",743.66,,thiago-nubank-credit-card
+2026-02-02,"Airbnb * Hm9zcjs4hb - Parcela 2/6",290.17,,thiago-nubank-credit-card
+2026-02-02,"Dr. Consulta Centro - Parcela 8/8",41.87,,thiago-nubank-credit-card
+2026-02-02,"Sua Academia",149.90,,thiago-nubank-credit-card
+2026-02-02,"Localiza - Parcela 4/4",268.79,,thiago-nubank-credit-card
+2026-02-05,"Pagamento recebido",-3117.78,,thiago-nubank-credit-card
+2026-02-05,"Google Youtube",53.90,,thiago-nubank-credit-card
+2026-02-06,"Amazon Aws Servicos Br",0.70,,thiago-nubank-credit-card
+2026-02-06,"Netflix.Com",85.70,,thiago-nubank-credit-card
+2026-02-09,"Amazon Ad Free For Pri",10.00,,thiago-nubank-credit-card
+2026-02-15,"Applecombill",29.90,,thiago-nubank-credit-card
+2026-02-17,"Uber Uber *Trip Help.U",22.96,,thiago-nubank-credit-card
+2026-02-20,"Ifd*Ifood Club",12.90,,thiago-nubank-credit-card
+2026-02-24,"Google One",96.99,,thiago-nubank-credit-card
+2026-02-24,"85dd1b82564d979fad7e94325a825e575506b5f717b1ffaeb84af810e37d6258",0,chain-transaction,thiago-nubank-credit-card
+2026-02-24,"1e0f393cb12d1b76659cc02c6eb9b980d186c7cadc86c71b0b0dbe8d02e5e615",0,chain-transaction,thiago-nubank-credit-card
