@@ -1,8 +1,2 @@
-﻿Time,Method,Amount,Receive Amount,Fee,Status,Transaction ID,Type,owner,row-hash
+Time,Method,Amount,Receive Amount,Fee,Status,Transaction ID,Type,owner,row-hash
 2026-01-01 00:00:00,seed,0,0,0,seed,"c86110c24ac8af14049a4c65bb6eabce1b1e693e6b76e5b32c2414e877ecd8e7",seed,seed,f46a9f10207301cabba45d4bdb21403170c97b26898de273c692aa1f51d74fe3
-26-01-01 00:00:00,Bank Transfer (PIX),1.00 BRL,1.00 BRL,0.00 BRL,Successful,*Fake Transaction,Deposit,test-user,fc0a5e99437aaff569afa5c1f22a0b8a07515f7d34ed3f910ae61d1f1e93e9e2
-26-01-01 00:00:00,chain,0,0,0,chain,"29b045def4969eb9fce2156304895e2a07ba25e94f6fff8aa4514ac2ece25e25",chain,test-user,5cce900f9cb2a983671ce5dd21a49780d89ff4d89436e629881fa7374910c962
-26-01-01 00:00:00,chain,0,0,0,chain,"c77d6aeaaf1e94662254aa275dd87e2b37755b51355225a08b2ae725429e2b2c",chain,test-user,963710571a25a167f09d6e7172b2cbd899b6504d0d4c85f00ce1497c681a6ba0
-26-01-01 00:00:00,Bank Transfer (PIX),1.00 BRL,1.00 BRL,0.00 BRL,Successful,*Fake Transaction,Withdraw,test-user,a6056dc5d43db5fced2e3b966bbe8b6427f67e6e31f8620fcabbfa60a6ddee83
-26-01-01 00:00:00,chain,0,0,0,chain,"5e22f78a56cceccfa9141bf48c2b4fdc0339706ee57a031194584d6e498be00e",chain,test-user,4feb44c62b8612fd7f5c0c1c81468addc7235b4141ecc3c30b596a0c0d869db1
-26-01-01 00:00:00,chain,0,0,0,chain,"05c08be37cd393d38297ac96ca7f982053c88e84a938bb28caeb01357303097a",chain,test-user,c40f9fa02e913e9877820c75fa06412adc8bd1fd2d4bcd6772e6dbd8be5dc9af

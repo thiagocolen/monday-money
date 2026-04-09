@@ -1,5 +1,20 @@
 import Papa from 'papaparse';
 
+declare global {
+  interface Window {
+    electron?: {
+      invoke: (channel: string, ...args: any[]) => Promise<any>;
+    };
+  }
+}
+
+async function invoke<T>(channel: string, ...args: any[]): Promise<T> {
+  if (window.electron) {
+    return window.electron.invoke(channel, ...args);
+  }
+  return null as any;
+}
+
 export interface Transaction {
   date: string;
   description: string;
@@ -63,15 +78,29 @@ interface RawCategory {
 export async function fetchTransactions(): Promise<Transaction[]> {
   try {
     const timestamp = new Date().getTime();
-    const response = await fetch(`/api/data/monthly-transactions.csv?t=${timestamp}`);
-    if (!response.ok) throw new Error(`Failed to fetch transactions: ${response.statusText}`);
-    const csvData = await response.text();
+    let csvData: string;
+    
+    if (window.electron) {
+      csvData = await invoke<string>('get-csv-data', 'monthly-transactions.csv');
+    } else {
+      const response = await fetch(`/api/data/monthly-transactions.csv?t=${timestamp}`);
+      if (!response.ok) throw new Error(`Failed to fetch transactions: ${response.statusText}`);
+      csvData = await response.text();
+    }
     
     let metadataMap: Record<string, { category: string, tags: string }> = {};
     try {
-      const catResponse = await fetch(`/api/data/monthly-transactions-category.csv?t=${timestamp}`);
-      if (catResponse.ok) {
-        const catCsv = await catResponse.text();
+      let catCsv = '';
+      if (window.electron) {
+        try {
+          catCsv = await invoke<string>('get-csv-data', 'monthly-transactions-category.csv');
+        } catch (e) { /* ignore if not found */ }
+      } else {
+        const catResponse = await fetch(`/api/data/monthly-transactions-category.csv?t=${timestamp}`);
+        if (catResponse.ok) catCsv = await catResponse.text();
+      }
+
+      if (catCsv) {
         const catResult = Papa.parse<RawCategory>(catCsv, { header: true, skipEmptyLines: true });
         catResult.data.forEach(row => {
           const txHash = row['transaction-hash'];
@@ -133,9 +162,16 @@ export async function fetchBinanceFiatDepositWithdraw(): Promise<BinanceFiatDepo
 async function fetchCsvData<T>(url: string): Promise<T[]> {
   try {
     const timestamp = new Date().getTime();
-    const response = await fetch(`${url}?t=${timestamp}`);
-    if (!response.ok) throw new Error(`Failed to fetch ${url}: ${response.statusText}`);
-    const csvData = await response.text();
+    let csvData: string;
+
+    if (window.electron) {
+      const fileName = url.split('/').pop()?.split('?')[0] || '';
+      csvData = await invoke<string>('get-csv-data', fileName);
+    } else {
+      const response = await fetch(`${url}?t=${timestamp}`);
+      if (!response.ok) throw new Error(`Failed to fetch ${url}: ${response.statusText}`);
+      csvData = await response.text();
+    }
 
     return new Promise((resolve, reject) => {
       Papa.parse<T>(csvData, {
@@ -156,6 +192,10 @@ async function fetchCsvData<T>(url: string): Promise<T[]> {
 
 export async function saveMetadata(transactionHash: string, category: string, tags: string): Promise<boolean> {
   try {
+    if (window.electron) {
+      const result = await invoke<{ success: boolean }>('save-category', { transactionHash, category, tags });
+      return result.success;
+    }
     const response = await fetch('/api/save-category', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -170,6 +210,10 @@ export async function saveMetadata(transactionHash: string, category: string, ta
 
 export async function saveCategory(transactionHash: string, category: string): Promise<boolean> {
   try {
+    if (window.electron) {
+      const result = await invoke<{ success: boolean }>('save-category', { transactionHash, category });
+      return result.success;
+    }
     const response = await fetch('/api/save-category', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -184,6 +228,10 @@ export async function saveCategory(transactionHash: string, category: string): P
 
 export async function saveTags(transactionHash: string, tags: string): Promise<boolean> {
   try {
+    if (window.electron) {
+      const result = await invoke<{ success: boolean }>('save-category', { transactionHash, tags });
+      return result.success;
+    }
     const response = await fetch('/api/save-category', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -210,6 +258,9 @@ export async function saveBulkCategories(updates: { transactionHash: string, cat
 
 export async function backupCategories(): Promise<{ success: boolean; fileName?: string; error?: string }> {
   try {
+    if (window.electron) {
+      return await invoke('backup-categories');
+    }
     const response = await fetch('/api/backup-categories', {
       method: 'POST',
     });
@@ -222,6 +273,9 @@ export async function backupCategories(): Promise<{ success: boolean; fileName?:
 
 export async function fetchBackupInfo(): Promise<{ count: number; latestDate: string | null }> {
   try {
+    if (window.electron) {
+      return await invoke('get-backup-info');
+    }
     const response = await fetch('/api/backup-info');
     if (!response.ok) throw new Error(`Failed to fetch backup info: ${response.statusText}`);
     return await response.json();
@@ -233,6 +287,9 @@ export async function fetchBackupInfo(): Promise<{ count: number; latestDate: st
 
 export async function fetchOwners(): Promise<string[]> {
   try {
+    if (window.electron) {
+      return await invoke('get-owners');
+    }
     const response = await fetch('/api/owners');
     if (!response.ok) throw new Error('Failed to fetch owners');
     return await response.json();
@@ -244,6 +301,9 @@ export async function fetchOwners(): Promise<string[]> {
 
 export async function importFile(owner: string, fileName: string, fileContent: string): Promise<{ success: boolean; error?: string }> {
   try {
+    if (window.electron) {
+      return await invoke('import-file', { owner, fileName, fileContent });
+    }
     const response = await fetch('/api/import-file', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -267,6 +327,9 @@ export interface ImportHistory {
 
 export async function fetchImportHistory(): Promise<ImportHistory[]> {
   try {
+    if (window.electron) {
+      return await invoke('get-import-history');
+    }
     const response = await fetch('/api/import-history');
     if (!response.ok) throw new Error('Failed to fetch import history');
     return await response.json();
@@ -278,6 +341,9 @@ export async function fetchImportHistory(): Promise<ImportHistory[]> {
 
 export async function deleteImport(owner: string, fileName: string): Promise<{ success: boolean; error?: string; logs?: string }> {
   try {
+    if (window.electron) {
+      return await invoke('delete-import', { owner, fileName });
+    }
     const response = await fetch('/api/delete-import', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

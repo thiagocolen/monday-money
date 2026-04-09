@@ -1,17 +1,35 @@
 {
   "name": "web-interface",
   "private": true,
-  "version": "0.3.0",
+  "version": "0.4.0",
   "type": "module",
+  "main": "dist-electron/main.js",
   "scripts": {
     "dev": "vite",
     "integrity-check": "tsx backend/integrity-check.ts",
     "data-reset": "tsx backend/reset-csv-files.ts && tsx backend/create-seed-transaction.ts && tsx backend/data-import-registration.ts",
     "protect-files": "tsx backend/protect-files.ts",
-    "build": "tsc -b && vite build",
+    "build": "tsc -b && vite build && electron-builder",
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "npx playwright test"
+  },
+  "build": {
+    "appId": "com.mondaymoney.app",
+    "productName": "MondayMoney",
+    "directories": {
+      "output": "release/${version}"
+    },
+    "files": [
+      "dist",
+      "dist-electron",
+      "core/**/*"
+    ],
+    "win": {
+      "target": [
+        "portable"
+      ]
+    }
   },
   "dependencies": {
     "@fontsource-variable/jetbrains-mono": "^5.2.8",
@@ -48,6 +66,8 @@
     "@vitejs/plugin-react": "^6.0.1",
     "autoprefixer": "^10.4.27",
     "babel-plugin-react-compiler": "^1.0.0",
+    "electron": "^41.2.0",
+    "electron-builder": "^26.8.1",
     "eslint": "^9.39.4",
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.5.2",
@@ -57,6 +77,8 @@
     "tsx": "^4.21.0",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.57.0",
-    "vite": "^8.0.1"
+    "vite": "^8.0.1",
+    "vite-plugin-electron": "^0.29.1",
+    "vite-plugin-electron-renderer": "^0.14.6"
   }
 }

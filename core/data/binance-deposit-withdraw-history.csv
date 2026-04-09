@@ -1,8 +1,2 @@
-﻿Time,Coin,Network,Amount,Fee,Address,TXID,Status,Type,owner,row-hash
+Time,Coin,Network,Amount,Fee,Address,TXID,Status,Type,owner,row-hash
 2026-01-01 00:00:00,seed,seed,0,0,seed,"8640075155dfe3984e80d3c781c749ae65ac8056cb65317c6a9fc119aca5ff66",seed,seed,seed,d5ca585492d41b39c53e2b21cc0d19e01b000084099fde73a8abda19c5f2b7a0
-2026-01-01 00:00:00,USDT,TRX,1.00,0,0x0,*Fake Transaction,Completed,Deposit,test-user,96336fbb261cc50bb7d1a652edc70c236bedfac0863541efd3b6865f36b1f13d
-2026-01-01 00:00:00,chain,chain,0,0,chain,"710822ead1ed1071e78e9c2c86ad4fc077d11a33141774c429280b244577692b",chain,chain,test-user,ef34de329674fc99e64c2be78c7523f0df22ace35a896ca8230cc6083ff9151e
-2026-01-01 00:00:00,chain,chain,0,0,chain,"0ba154cb80f162ddb77835a7d986fc731b6d8705b12386a8a97d8c713ef1d4ac",chain,chain,test-user,8e479dd76e8115edac3c95d37f959037e5bf909d228d9400a364a9aa78909b7a
-26-01-01 00:00:00,USDT,TRX,1.00,0.00,0x0,*Fake Transaction,Completed,Withdraw,test-user,1e4732460c9163c4cfaea4979b5bd37667a7639eeedea05a956d1a8ddbdc71a9
-26-01-01 00:00:00,chain,chain,0,0,chain,"00ef8a0e4398daa71319cc23edddd6fa859b9c05a74a946ca5bf797effeed6a5",chain,chain,test-user,34f1ba300dd66230bde28fadded111b8e334a25213f8d2852fdc810c8aa663fd
-26-01-01 00:00:00,chain,chain,0,0,chain,"7d9d748758a7d744150d44410dc8a552fe7d716ee1224d0ea195d4eb6cd53870",chain,chain,test-user,a19bfcbd341a272e0e9379e7bc5abad67127710a65ce6a31aaf132d3a4f22a0d

@@ -6,6 +6,13 @@ import { defineConfig } from "vite"
 import react, { reactCompilerPreset } from "@vitejs/plugin-react"
 import babel from "@rolldown/plugin-babel"
 import tailwindcss from "@tailwindcss/vite"
+import electron from "vite-plugin-electron/simple"
+import { 
+  clearLedger, 
+  createSeedTransaction, 
+  dataImportRegistration, 
+  integrityCheck 
+} from "./backend/index.js"
 
 function getSha256(input: string | Buffer) {
   return crypto.createHash("sha256").update(input).digest("hex")
@@ -25,6 +32,14 @@ export default defineConfig({
     react(),
     babel({ presets: [reactCompilerPreset()] }),
     tailwindcss(),
+    electron({
+      main: {
+        entry: "electron/main.ts",
+      },
+      preload: {
+        input: "electron/preload.ts",
+      },
+    }),
     {
       name: "csv-api",
       configureServer(server) {
@@ -117,19 +132,11 @@ export default defineConfig({
                 // Save file
                 fs.writeFileSync(targetPath, buffer)
 
-                // Run scripts
-                const scriptsDir = path.resolve(coreDir, "scripts")
-                const commands = [
-                  `powershell -ExecutionPolicy Bypass -File "${path.join(scriptsDir, "clear-ledger.ps1")}"`,
-                  `powershell -ExecutionPolicy Bypass -File "${path.join(scriptsDir, "create-seed-transaction.ps1")}"`,
-                  `powershell -ExecutionPolicy Bypass -File "${path.join(scriptsDir, "data-import-registration.ps1")}"`,
-                  `powershell -ExecutionPolicy Bypass -File "${path.join(scriptsDir, "integrity-check.ps1")}"`
-                ]
-
-                for (const cmd of commands) {
-                  console.log(`Executing: ${cmd}`)
-                  execSync(cmd, { stdio: 'inherit' })
-                }
+                // Run backend functions directly
+                clearLedger()
+                createSeedTransaction()
+                dataImportRegistration()
+                integrityCheck()
 
                 res.statusCode = 200
                 res.end(JSON.stringify({ success: true }))
@@ -158,31 +165,14 @@ export default defineConfig({
                 if (fs.existsSync(filePath)) {
                   fs.unlinkSync(filePath)
                   
-                  // Run scripts to reprocess remaining files
-                  const backendDir = path.resolve(__dirname, "backend")
-                  const commands = [
-                    `npx tsx "${path.join(backendDir, "clear-ledger.ts")}"`,
-                    `npx tsx "${path.join(backendDir, "create-seed-transaction.ts")}"`,
-                    `npx tsx "${path.join(backendDir, "data-import-registration.ts")}"`,
-                    `npx tsx "${path.join(backendDir, "integrity-check.ts")}"`
-                  ]
-
-                  let allLogs = ""
-                  for (const cmd of commands) {
-                    allLogs += `\n> ${cmd}\n`
-                    try {
-                      const output = execSync(cmd, { encoding: 'utf-8' })
-                      allLogs += output
-                    } catch (err: any) {
-                      allLogs += `ERROR: ${err.message}\n`
-                      if (err.stdout) allLogs += err.stdout
-                      if (err.stderr) allLogs += err.stderr
-                      throw new Error(`Reprocessing failed at: ${cmd}\n\nLogs:\n${allLogs}`)
-                    }
-                  }
+                  // Run backend functions directly
+                  clearLedger()
+                  createSeedTransaction()
+                  dataImportRegistration()
+                  integrityCheck()
 
                   res.statusCode = 200
-                  res.end(JSON.stringify({ success: true, logs: allLogs }))
+                  res.end(JSON.stringify({ success: true, logs: "Reprocessing completed." }))
                 } else {
                   res.statusCode = 404
                   res.end(JSON.stringify({ success: false, error: "File not found" }))
