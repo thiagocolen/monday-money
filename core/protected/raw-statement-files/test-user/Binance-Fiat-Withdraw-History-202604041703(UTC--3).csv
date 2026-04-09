@@ -1,0 +1,2 @@
+Time,Method,Withdraw Amount,Receive Amount,Fee,Status,Transaction ID
+26-01-01 00:00:00,Bank Transfer (PIX),1.00 BRL,1.00 BRL,0.00 BRL,Successful,*Fake Transaction

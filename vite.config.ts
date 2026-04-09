@@ -16,6 +16,11 @@ export default defineConfig({
   optimizeDeps: {
     include: ["@phosphor-icons/react"],
   },
+  server: {
+    watch: {
+      ignored: ["**/core/**"],
+    },
+  },
   plugins: [
     react(),
     babel({ presets: [reactCompilerPreset()] }),
@@ -24,7 +29,7 @@ export default defineConfig({
       name: "csv-api",
       configureServer(server) {
         server.middlewares.use((req, res, next) => {
-          const coreDir = path.resolve(__dirname, "../core")
+          const coreDir = path.resolve(__dirname, "core")
           const dataDir = path.resolve(coreDir, "data")
           const protectedDir = path.resolve(coreDir, "protected")
 
@@ -154,12 +159,12 @@ export default defineConfig({
                   fs.unlinkSync(filePath)
                   
                   // Run scripts to reprocess remaining files
-                  const scriptsDir = path.resolve(coreDir, "scripts")
+                  const backendDir = path.resolve(__dirname, "backend")
                   const commands = [
-                    `powershell -ExecutionPolicy Bypass -File "${path.join(scriptsDir, "clear-ledger.ps1")}"`,
-                    `powershell -ExecutionPolicy Bypass -File "${path.join(scriptsDir, "create-seed-transaction.ps1")}"`,
-                    `powershell -ExecutionPolicy Bypass -File "${path.join(scriptsDir, "data-import-registration.ps1")}"`,
-                    `powershell -ExecutionPolicy Bypass -File "${path.join(scriptsDir, "integrity-check.ps1")}"`
+                    `npx tsx "${path.join(backendDir, "clear-ledger.ts")}"`,
+                    `npx tsx "${path.join(backendDir, "create-seed-transaction.ts")}"`,
+                    `npx tsx "${path.join(backendDir, "data-import-registration.ts")}"`,
+                    `npx tsx "${path.join(backendDir, "integrity-check.ts")}"`
                   ]
 
                   let allLogs = ""

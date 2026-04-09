@@ -8,7 +8,7 @@ import { TransactionChart } from '../components/transaction-chart'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { addMonths, startOfMonth, endOfMonth, isWithinInterval, format, parseISO } from 'date-fns'
-import { ChevronLeft, ChevronRight, RotateCcw, Edit3, Trash2, Database, Info, Tags as TagsIcon, History } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Edit3, Trash2, Database, Info, Tags as TagsIcon, History } from 'lucide-react'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import {

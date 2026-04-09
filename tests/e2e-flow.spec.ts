@@ -6,7 +6,7 @@ import { execSync } from 'child_process';
 test.describe('E2E Flow: Import and Verify', () => {
   test.beforeEach(async () => {
     // 0. Clean up test-user files from previous runs to ensure fresh import
-    const protectedTestUserDir = path.resolve(process.cwd(), '..', 'core', 'protected', 'raw-statement-files', 'test-user');
+    const protectedTestUserDir = path.resolve(process.cwd(), 'core', 'protected', 'raw-statement-files', 'test-user');
     if (fs.existsSync(protectedTestUserDir)) {
       fs.rmSync(protectedTestUserDir, { recursive: true, force: true });
     }

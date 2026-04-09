@@ -5,7 +5,6 @@ import type { Transaction } from "@/lib/api"
 import { format, parseISO } from "date-fns"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
 import { Tag } from "lucide-react"
 
 export const columns: ColumnDef<Transaction>[] = [
