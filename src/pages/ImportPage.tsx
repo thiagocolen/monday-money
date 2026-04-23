@@ -356,7 +356,19 @@ export function ImportPage() {
         </CardContent>
       </Card>
 
-      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteOpen}>
+      <Dialog open={isDeleteDialogOpen} onOpenChange={(open) => {
+        setIsDeleteOpen(open);
+        if (!open) {
+          // If the dialog is closed without confirming, reset the deleting file state
+          // A small delay helps prevent UI flicker while the dialog animates out
+          setTimeout(() => {
+            const logsModalStillOpen = !!document.querySelector('[data-slot="dialog-content"]');
+            if (!isLogsModalOpen && !logsModalStillOpen) {
+              setDeletingFile(null);
+            }
+          }, 150);
+        }
+      }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Remove Statement File</DialogTitle>

@@ -1,3 +1,4 @@
+export * from './api-core.js';
 export * from './clear-ledger.js';
 export * from './create-seed-transaction.js';
 export * from './data-import-registration.js';

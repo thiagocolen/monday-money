@@ -1,17 +1,17 @@
 {
-  "name": "web-interface",
+  "name": "monday-money",
   "private": true,
-  "version": "0.4.0",
+  "version": "0.5.0",
   "type": "module",
   "main": "dist-electron/main.js",
   "scripts": {
     "dev": "vite",
-    "integrity-check": "tsx backend/integrity-check.ts",
-    "data-reset": "tsx backend/reset-csv-files.ts && tsx backend/create-seed-transaction.ts && tsx backend/data-import-registration.ts",
-    "protect-files": "tsx backend/protect-files.ts",
-    "build": "tsc -b && vite build && electron-builder",
     "lint": "eslint .",
     "preview": "vite preview",
+    "build": "tsc -b && vite build && electron-builder",
+    "integrity-check": "tsx backend/integrity-check.ts",
+    "data-reset": "tsx backend/reset-csv-files.ts && tsx backend/create-seed-transaction.ts",
+    "protect-files": "tsx backend/protect-files.ts",
     "test": "npx playwright test"
   },
   "build": {

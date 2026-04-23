@@ -1,110 +1,86 @@
-# MondayMoney Documentation
+# MondayMoney 💰
 
-## What it is
-MondayMoney is a personal finance web application designed to consolidate, track, and categorize financial transactions from various sources. It offers a secure, offline-first approach to managing personal finances, with an emphasis on data integrity. The system consists of a Node.js/TypeScript ETL (Extract, Transform, Load) pipeline for processing raw banking and exchange statements, and a modern React web interface for data visualization and categorization.
+[![Version](https://img.shields.io/badge/version-0.4.0-blue.svg)](package.json)
+[![License: Existential](https://img.shields.io/badge/License-Existential-purple.svg)](#-license)
 
-## How to use it
-1.  **Data Extraction:** Export your transaction statements (CSV format) from your supported banks (e.g., Nubank, Bradesco, Mercado Pago) or exchanges (Binance).
-2.  **Importing:** 
-    *   **Option A (Web UI - Recommended):** Use the new **Import** page in the web interface to select an owner and upload your CSV files. The system will automatically verify integrity and process them.
-    *   **Option B (Manual Staging):** Place these raw statement files into the appropriate owner's directory within `core/protected/raw-statement-files/` (e.g., `core/protected/raw-statement-files/thiago/`) and run the processing scripts manually.
-3.  **Processing:** If using Option B, run `npm run data-reset`.
-4.  **Visualization:** Start the web interface (`npm run dev` in the `web-interface` folder) to view your dashboard.
-5.  **Categorization:** Use the web interface to assign categories to your transactions individually or in bulk. Categorization changes are saved locally to `monthly-transactions-category.csv`.
+**MondayMoney** is a lightweight, privacy-focused desktop application for personal finance management. Built with Electron and React, it allows you to track transactions, visualize spending, and manage your data locally via CSV files.
 
-## Folder Structure
--   `backend/`: Node.js/TypeScript logic for the ETL pipeline.
--   `core/`: Contains the data.
-    -   `data/`: Stores the processed, normalized `.csv` files used by the web application.
-    -   `protected/`: Secure storage for critical data.
-        -   `monthly-transactions-category-bkp/`: Timestamped backups of user-assigned categories.
-        -   `raw-statement-files/`: Secure storage and source for original, raw statement files.
--   `src/`: The React-based frontend application.
+---
 
-## Scripts
-The Node.js automation suite located in `backend/` handles the data pipeline:
--   `data-import-registration.ts`: The primary ETL script. It reads CSV files from `core/protected/raw-statement-files/`, maps their varied columns to a standardized format, checks for duplicates using hashing, calculates cryptographic chains to ensure integrity, and appends the data to the destination files in `core/data/`.
--   `create-seed-transaction.ts`: Initializes the target CSV files (if missing) with headers and a secure "seed" chain-transaction to start the cryptographic chain.
--   `reset-csv-files.ts`: A destructive script used for a clean slate. It deletes all processed data and all protected statement files.
--   `protect-files.ts`: A utility script that recursively sets all files in the `core/protected/` directory to read-only, providing an extra layer of protection for original statement files and backups.
--   `integrity-check.ts`: A data validation script that audits all CSV files in `core/data/` for tampering. It recalculates row-level SHA256 hashes and verifies the cryptographic "Linked List" chain per owner, ensuring data remains unaltered.
+## ✨ Features
 
-## Web Interface
-The web interface is a fast, responsive dashboard built with React 19, TypeScript, and Vite.
--   **Dashboard:** Features interactive Recharts (Bar Charts for daily activity, Pie Charts for category distribution).
--   **Data Navigation:** Allows filtering by month, day, owner, and category, alongside a global search.
--   **Categorization:** Click on rows to assign a category via a dialog, or use checkboxes for bulk updates.
--   **Tags:** Manage custom comma-separated labels for transactions via a dedicated "Edit Tags" action.
--   **Visual Branding:** Branded as "Monday Money" with custom favicons and a consistent professional aesthetic.
--   **Data Integrity:** System reserved "chain-transaction" rows are automatically filtered out from the UI. The backend maintains cryptographic verification using a `row-hash` that includes transaction data, category, and tags.
--   **Styling:** Styled with Tailwind CSS v4 and utilizes `shadcn/ui` components for a modern, accessible user experience (supporting both light and dark modes).
+- **Privacy First:** All data stays on your machine. No cloud sync, no trackers.
+- **CSV Integration:** Easily import and manage transaction history using standard formats.
+- **Data Visualization:** Interactive charts powered by Recharts to understand your spending habits.
+- **Integrity Checks:** Built-in tools to ensure your ledger remains consistent.
+- **Developer Friendly:** Extensible architecture with a full E2E test suite.
 
-## Data Flow
-1.  **Raw Data:** Financial institutions provide CSV statements.
-2.  **Staging:** Files are dropped into `core/protected/raw-statement-files/[owner]/`.
-3.  **ETL Pipeline:** Node.js backend scripts parse the CSVs.
-4.  **Normalization:** Columns are standardized (e.g., date formats, amount decimals).
-5.  **Integrity Layer:** SHA256 hashes are generated for each row, and a "Linked List" structure (chain-transactions) is created to guarantee that historical data is not altered.
-6.  **Storage:** Normalized data is appended to `core/data/*.csv`.
-7.  **Frontend Consumption:** The React app reads the CSV files via an internal API abstraction to render the UI.
-8.  **User Input:** User-assigned categories from the UI are written back to `core/data/monthly-transactions-category.csv`.
+---
 
-## Database Schema (CSV based)
-The primary "database" consists of plain text CSV files:
--   `monthly-transactions.csv`: `date`, `description`, `amount`, `owner`, `row-hash`
--   `monthly-transactions-category.csv`: `transaction-hash`, `category`, `row-hash`
--   `binance-transaction-history.csv`: `User ID`, `Time`, `Account`, `Operation`, `Coin`, `Change`, `Remark`, `row-hash`
--   `binance-deposit-withdraw-history.csv`: `Time`, `Coin`, `Network`, `Amount`, `Fee`, `Address`, `TXID`, `Status`, `Type`, `row-hash`
--   `binance-fiat-deposit-withdraw-history.csv`: `Time`, `Method`, `Amount`, `Receive Amount`, `Fee`, `Status`, `Transaction ID`, `Type`, `row-hash`
+## 🚀 Getting Started
 
-Categories supported: `INCOME`, `HOUSE`, `ONLINE_SERVICES`, `HEALTH`, `SUPERMARKET`, `FOOD`, `TRANSPORTATION`, `INVESTMENTS`, `OTHERS`, and `chain-transaction` (system reserved).
+### For Users
 
-## API
-The application operates locally without a traditional backend server. The "API" layer in the React application (`lib/api.ts`) contains asynchronous functions that interface directly with the local file system (through Vite's dev server middleware) to read CSV data and write category updates or backups.
+MondayMoney is currently distributed as a **Portable Windows Application**.
 
-## Tests
-Currently, the primary testing mechanism is data integrity verification and a Playwright E2E suite. The cryptographic chaining (SHA256) ensures that any manual tampering with historical CSV data breaks the chain, which can be audited via scripts. 
+1. Download the latest `MondayMoney.exe` from the [Releases](link-to-releases) page.
+2. Run the executable—no installation required.
 
-## Deployment
-MondayMoney is designed as a local, offline-first application for personal privacy.
--   **Requirements:** Node.js (for the web interface and backend).
--   **Execution:** Run `npm run dev` in the `web-interface` folder to start the application locally.
--   *Note: Because it writes to the local file system for categories, it is not currently intended to be hosted on static web hosts (like Vercel or Netlify) without an accompanying backend service.*
+### For Developers
 
-## Maintenance
--   **Backups:** Regularly use the "Backup Categories" button in the UI to safeguard your manual categorization work. Store your `protected/raw-statement-files/` securely.
--   **Updates:** When financial institutions change their CSV export formats, the parsing logic within `backend/data-import-registration.ts` must be updated to match the new headers or delimiters.
+**Prerequisites:**
 
-## Troubleshooting
--   **Transactions not showing:** Ensure the raw CSV file was placed in the correct owner folder and matches the naming pattern expected by `data-import-registration.ts`.
--   **Encoding Issues:** If descriptions appear with strange characters, ensure the source CSV was downloaded in UTF-8 encoding. The Node.js scripts attempt to force UTF-8 processing.
--   **Data Corruption:** If the application state seems invalid, run `npm run data-reset` to rebuild the entire database from the raw protected files. Note that this preserves your categories as long as you haven't deleted the category file.
+- [Node.js](https://nodejs.org/) (v20+ recommended)
+- [npm](https://www.npmjs.com/) or [yarn](https://yarnpkg.com/)
 
-## Best Practices
--   **Never delete raw statements:** Always keep a copy in `core/protected/raw-statement-files/` to allow for full database rebuilds.
--   **Regular Backups:** Frequently backup your categorization file.
--   **Review Unknown Patterns:** The backend scripts will warn if a file pattern is unknown. Inspect the console output when running imports.
+**Setup:**
 
-## Limitations
--   **Local Only:** Designed for local execution; no multi-device sync out-of-the-box unless the file system is synced (e.g., via Google Drive/Dropbox).
--   **Format Fragility:** Tightly coupled to the exact CSV export formats of specific banks. Bank updates will require script maintenance.
--   **Performance:** Parsing large CSV files on the fly might become slower as years of data accumulate.
+1. Clone the repository:
 
-## Future Features
--   Transformation into a standalone Desktop application (Electron/Tauri).
--   Support for more banks and credit card providers.
--   Customizable budgeting goals and alerts.
--   More granular analytics and custom date range pickers.
--   Automated integrity check UI dashboard.
+   ```bash
+   git clone https://github.com/your-username/monday-money.git
+   cd monday-money
+   ```
 
-## Known Issues
--   Financial institutions occasionally change their CSV column headers or delimiters without notice, which will cause the import script to skip those files until updated.
--   Timezone conversions on dates from different banks may require strict ISO parsing to prevent off-by-one-day errors.
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
+3. Start the development server:
+   ```bash
+   npm run dev
+   ```
 
-## Dependencies
--   **Frontend:** React 19, Vite, Tailwind CSS v4, shadcn/ui (Radix UI), Recharts, date-fns, lucide-react, sonner.
--   **Backend/Data:** Node.js, `tsx` (for script execution), `papaparse` (for server-side CSV parsing).
+---
 
-## Requirements
--   Node.js installed (v18+ recommended).
--   Any modern OS (Windows, macOS, Linux).
+## 🛠️ Tech Stack
+
+- **Runtime:** [Electron](https://www.electronjs.org/)
+- **Frontend:** [React 19](https://react.dev/), [Vite](https://vitejs.dev/), [Tailwind CSS 4](https://tailwindcss.com/)
+- **UI Components:** [Radix UI](https://www.radix-ui.com/), [Shadcn/UI](https://ui.shadcn.com/)
+- **Charts:** [Recharts](https://recharts.org/)
+- **Data Parsing:** [PapaParse](https://www.papaparse.com/)
+- **Testing:** [Playwright](https://playwright.dev/)
+
+---
+
+## 🧪 Maintenance & Tools
+
+The project includes specialized scripts to maintain data health:
+
+- **`npm run integrity-check`**: Validates the consistency of your local CSV files.
+- **`npm run data-reset`**: Wipes current data and creates a fresh seed transaction.
+- **`npm run protect-files`**: Sets local data files to a protected state.
+- **`npm run test`**: Executes the full E2E test suite via Playwright.
+
+---
+
+## 🔒 Data Architecture
+
+MondayMoney stores transactions in the `core/data/` directory as CSV files. To backup your data, simply copy the `core/` folder. This ensures you have full ownership and portability of your financial history.
+
+---
+
+## 📄 License
+
+<sub>By using this project, you accept a license written in the ink of cosmic indifference, where life is a temporary variable, aliens are your true auditors, and the universe is a simulation with 42 as its root password. Everything you track is mere digital dust; ownership is a firmware bug, and we are all just bytes in a celestial ledger awaiting the final garbage collection of the Great Refactor.</sub>

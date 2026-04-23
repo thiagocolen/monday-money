@@ -2,8 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+import { getCoreDir } from './utils.js';
 
 function getFilesRecursively(dir: string): string[] {
   let results: string[] = [];
@@ -21,7 +20,7 @@ function getFilesRecursively(dir: string): string[] {
 }
 
 export function protectFiles() {
-  const protectedPath = path.resolve(__dirname, '../core/protected');
+  const protectedPath = path.join(getCoreDir(), 'protected');
   
   if (fs.existsSync(protectedPath)) {
     console.log(`Analyzing files in ${protectedPath}...\n`);
@@ -52,6 +51,6 @@ export function protectFiles() {
   }
 }
 
-if (process.argv[1] === __filename) {
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
   protectFiles();
 }

@@ -2,11 +2,10 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+import { getCoreDir } from './utils.js';
 
 export function clearLedger() {
-  const dataDir = path.resolve(__dirname, '../core/data');
+  const dataDir = path.join(getCoreDir(), 'data');
   console.log(`Clearing generated ledger files in: ${dataDir}`);
   
   if (fs.existsSync(dataDir)) {
@@ -25,6 +24,6 @@ export function clearLedger() {
   console.log('Ledger cleared successfully.');
 }
 
-if (process.argv[1] === __filename) {
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
   clearLedger();
 }

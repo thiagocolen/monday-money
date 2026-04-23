@@ -2,13 +2,11 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import Papa from 'papaparse';
-import { getSha256 } from './utils.js';
+import { getSha256, getCoreDir } from './utils.js';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 export function integrityCheck() {
-  const coreDir = path.resolve(__dirname, '../core/data');
+  const coreDir = path.join(getCoreDir(), 'data');
   const targetFiles = [
     'monthly-transactions.csv',
     'monthly-transactions-category.csv',
@@ -153,7 +151,7 @@ export function integrityCheck() {
     console.log('\nSUCCESS: All target CSV files passed integrity checks.');
   } else {
     console.log('\nFAILURE: Integrity check failed for one or more files.');
-    if (process.argv[1] === __filename) {
+    if (process.argv[1] === fileURLToPath(import.meta.url)) {
       process.exit(1);
     } else {
       throw new Error('Integrity check failed');
@@ -161,6 +159,6 @@ export function integrityCheck() {
   }
 }
 
-if (process.argv[1] === __filename) {
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
   integrityCheck();
 }

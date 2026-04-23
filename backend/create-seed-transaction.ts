@@ -1,13 +1,11 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { getSha256 } from './utils.js';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+import { getSha256, getCoreDir } from './utils.js';
 
 export function createSeedTransaction() {
-  const dataDir = path.resolve(__dirname, '../core/data');
+  const coreDir = getCoreDir();
+  const dataDir = path.join(coreDir, 'data');
   
   if (!fs.existsSync(dataDir)) {
     fs.mkdirSync(dataDir, { recursive: true });
@@ -44,7 +42,7 @@ export function createSeedTransaction() {
     let restoreFromBackup = false;
 
     if (target.Path.includes('monthly-transactions-category.csv')) {
-      const backupDir = path.resolve(__dirname, '../core/protected/monthly-transactions-category-bkp');
+      const backupDir = path.join(coreDir, 'protected', 'monthly-transactions-category-bkp');
       if (fs.existsSync(backupDir)) {
         const files = fs.readdirSync(backupDir).filter(f => f.startsWith('monthly-transactions-category-') && f.endsWith('-bkp.csv'));
         if (files.length > 0) {
@@ -54,7 +52,7 @@ export function createSeedTransaction() {
           const latestBackup = files[0];
           console.log(`Restoring category file from latest backup: ${latestBackup}...`);
           fs.copyFileSync(path.join(backupDir, latestBackup), target.Path);
-          fs.chmodSync(target.Path, 0o666);
+          fs.chmodSync(target.Path, 0o644);
           restoreFromBackup = true;
         }
       }
@@ -121,6 +119,6 @@ export function createSeedTransaction() {
   console.log('Seed transactions created successfully.');
 }
 
-if (process.argv[1] === __filename) {
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
   createSeedTransaction();
 }

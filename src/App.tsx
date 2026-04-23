@@ -1,4 +1,4 @@
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
+import { createMemoryRouter, RouterProvider, Outlet } from 'react-router-dom'
 import { ThemeProvider } from '@/components/theme-provider'
 import { Layout } from './components/Layout'
 import { TransactionsPage } from './pages/TransactionsPage'
@@ -7,19 +7,39 @@ import { ImportPage } from './pages/ImportPage'
 import { Toaster } from 'sonner'
 import { TooltipProvider } from './components/ui/tooltip'
 
+const router = createMemoryRouter([
+  {
+    path: '/',
+    element: (
+      <Layout>
+        <Outlet />
+      </Layout>
+    ),
+    children: [
+      {
+        index: true,
+        element: <TransactionsPage />,
+      },
+      {
+        path: 'investments',
+        element: <InvestmentsPage />,
+      },
+      {
+        path: 'import',
+        element: <ImportPage />,
+      },
+    ],
+  },
+], {
+  initialEntries: ['/'],
+  initialIndex: 0,
+})
+
 function App() {
   return (
     <ThemeProvider defaultTheme="system" storageKey="monday-money-theme">
       <TooltipProvider>
-        <Router>
-          <Layout>
-            <Routes>
-              <Route path="/" element={<TransactionsPage />} />
-              <Route path="/investments" element={<InvestmentsPage />} />
-              <Route path="/import" element={<ImportPage />} />
-            </Routes>
-          </Layout>
-        </Router>
+        <RouterProvider router={router} />
         <Toaster position="bottom-right" />
       </TooltipProvider>
     </ThemeProvider>
