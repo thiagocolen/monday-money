@@ -32,4 +32,4 @@ release
 /playwright/.cache/
 /playwright/.auth/
 
-/docs/*
+/_gitignore-folder/*
