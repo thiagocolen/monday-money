@@ -33,3 +33,4 @@ release
 /playwright/.auth/
 
 /_gitignore-folder/*
+/core/*
