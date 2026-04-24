@@ -14,6 +14,18 @@ export interface FileParser {
   parse: (fileName: string, content: string, ownerName: string) => { destFile: string; rows: any[] };
 }
 
+function normalizeAmount(val: string): string {
+  if (!val) return '0';
+  const trimmed = val.trim();
+  // If it contains a comma, we assume Brazilian/European format (e.g., 1.234,56 or 123,45)
+  // or a format where comma is the decimal separator.
+  if (trimmed.includes(',')) {
+    return trimmed.replace(/\./g, '').replace(',', '.');
+  }
+  // Otherwise assume standard decimal point or integer
+  return trimmed;
+}
+
 export const PARSERS: FileParser[] = [
   {
     name: 'MercadoPago',
@@ -26,8 +38,7 @@ export const PARSERS: FileParser[] = [
       const rows = parsed.filter(item => item.RELEASE_DATE && item.TRANSACTION_NET_AMOUNT).map(item => {
         const dateParts = item.RELEASE_DATE.split('-');
         const formattedDate = `${dateParts[2]}-${dateParts[1]}-${dateParts[0]}`;
-        const amount = item.TRANSACTION_NET_AMOUNT.replace('.', '').replace(',', '.');
-        return { date: formattedDate, description: item.TRANSACTION_TYPE, amount, owner };
+        return { date: formattedDate, description: item.TRANSACTION_TYPE, amount: normalizeAmount(item.TRANSACTION_NET_AMOUNT), owner };
       });
       return { destFile: 'monthly-transactions.csv', rows };
     }
@@ -41,8 +52,7 @@ export const PARSERS: FileParser[] = [
         const dateParts = item.Data.split('/');
         const formattedDate = `${dateParts[2]}-${dateParts[1]}-${dateParts[0]}`;
         const descCol = Object.keys(item).find(k => k.startsWith('Descri'));
-        const amount = item.Valor.replace('.', '').replace(',', '.');
-        return { date: formattedDate, description: item[descCol!], amount, owner };
+        return { date: formattedDate, description: item[descCol!], amount: normalizeAmount(item.Valor), owner };
       });
       return { destFile: 'monthly-transactions.csv', rows };
     }
@@ -53,7 +63,7 @@ export const PARSERS: FileParser[] = [
     parse: (_f, content, owner) => {
       const parsed = Papa.parse<any>(content, { header: true, delimiter: ',', skipEmptyLines: true }).data;
       const rows = parsed.filter(item => item.date && item.amount).map(item => ({
-        date: item.date, description: item.title, amount: item.amount.replace('.', '').replace(',', '.'), owner
+        date: item.date, description: item.title, amount: normalizeAmount(item.amount), owner
       }));
       return { destFile: 'monthly-transactions.csv', rows };
     }
@@ -64,7 +74,7 @@ export const PARSERS: FileParser[] = [
     parse: (_f, content, owner) => {
       const parsed = Papa.parse<any>(content, { header: true, delimiter: ',', skipEmptyLines: true }).data;
       const rows = parsed.filter(item => item.Time && item.Coin).map(item => ({
-        'User ID': item['User ID'], Time: item.Time, Account: item.Account, Operation: item.Operation, Coin: item.Coin, Change: item.Change, Remark: item.Remark, owner
+        'User ID': item['User ID'], Time: item.Time, Account: item.Account, Operation: item.Operation, Coin: item.Coin, Change: normalizeAmount(item.Change), Remark: item.Remark, owner
       }));
       return { destFile: 'binance-transaction-history.csv', rows };
     }
@@ -76,7 +86,7 @@ export const PARSERS: FileParser[] = [
       const type = f.includes('Deposit') ? 'Deposit' : 'Withdraw';
       const parsed = Papa.parse<any>(content, { header: true, delimiter: ',', skipEmptyLines: true }).data;
       const rows = parsed.filter(item => item.Time && item.Amount).map(item => ({
-        Time: item.Time, Coin: item.Coin, Network: item.Network, Amount: item.Amount, Fee: item.Fee || 0, Address: item.Address, TXID: item.TXID, Status: item.Status, Type: type, owner
+        Time: item.Time, Coin: item.Coin, Network: item.Network, Amount: normalizeAmount(item.Amount), Fee: normalizeAmount(item.Fee || '0'), Address: item.Address, TXID: item.TXID, Status: item.Status, Type: type, owner
       }));
       return { destFile: 'binance-deposit-withdraw-history.csv', rows };
     }
@@ -90,8 +100,7 @@ export const PARSERS: FileParser[] = [
       const parsed = Papa.parse<any>(content, { header: true, delimiter: ',', skipEmptyLines: true }).data;
       const rows = parsed.filter(item => item.Time && item['Transaction ID']).map(item => {
         const amtCol = Object.keys(item).find(k => k.includes('Amount') && !k.includes('Receive'));
-        let amountStr = item[amtCol!].replace(',', '').trim();
-        let amount = parseFloat(amountStr);
+        let amount = parseFloat(normalizeAmount(item[amtCol!]));
         if (isDeposit) amount = Math.abs(amount);
         else amount = -Math.abs(amount);
         return {
@@ -116,11 +125,11 @@ export const PARSERS: FileParser[] = [
         const histCol = Object.keys(item).find(k => k.startsWith('Hist'));
         const credCol = Object.keys(item).find(k => k.startsWith('Cr') && k.includes('dito'));
         const debCol = Object.keys(item).find(k => k.startsWith('D') && k.includes('bito'));
-        const creditStr = (credCol && item[credCol]) ? item[credCol].replace('.', '').replace(',', '.').trim() : '';
-        const debitStr = (debCol && item[debCol]) ? item[debCol].replace('.', '').replace(',', '.').trim() : '';
+        const creditStr = (credCol && item[credCol]) ? item[credCol].trim() : '';
+        const debitStr = (debCol && item[debCol]) ? item[debCol].trim() : '';
         let amount = '0';
-        if (creditStr && creditStr !== '0' && creditStr !== '0.00') amount = creditStr;
-        else if (debitStr && debitStr !== '0' && debitStr !== '0.00') amount = `-${debitStr}`;
+        if (creditStr && creditStr !== '0' && creditStr !== '0,00') amount = normalizeAmount(creditStr);
+        else if (debitStr && debitStr !== '0' && debitStr !== '0,00') amount = `-${normalizeAmount(debitStr)}`;
         return amount !== '0' ? { date: formattedDate, description: item[histCol!], amount, owner } : null;
       }).filter(Boolean);
       return { destFile: 'monthly-transactions.csv', rows: rows as any[] };

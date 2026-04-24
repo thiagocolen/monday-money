@@ -359,6 +359,7 @@ export function TransactionsPage() {
                 size="icon"
                 className="h-8 w-8"
                 onClick={() => handleMonthChange(prev => prev - 1)}
+                aria-label="Previous Month"
               >
                 <ChevronLeft className="h-4 w-4" />
               </Button>
@@ -380,6 +381,7 @@ export function TransactionsPage() {
                 size="icon"
                 className="h-8 w-8"
                 onClick={() => handleMonthChange(prev => prev + 1)}
+                aria-label="Next Month"
               >
                 <ChevronRight className="h-4 w-4" />
               </Button>
