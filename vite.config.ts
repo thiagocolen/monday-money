@@ -12,6 +12,9 @@ import {
   handleDeleteImport,
   handleGetImportHistory,
   handleSaveCategory,
+  handleBulkSaveMetadata,
+  handleGetMetadata,
+  handleSaveMetadata,
   handleBackupCategories,
   handleGetBackupInfo
 } from "./backend/index.js"
@@ -116,6 +119,50 @@ export default defineConfig({
                 try {
                   const { transactionHash, category, tags } = JSON.parse(body)
                   const result = await handleSaveCategory(transactionHash, category, tags)
+                  res.statusCode = 200
+                  res.setHeader("Content-Type", "application/json")
+                  res.end(JSON.stringify(result))
+                } catch (e: any) {
+                  res.statusCode = 400
+                  res.end(JSON.stringify({ success: false, error: e.message }))
+                }
+              })
+              return
+            }
+
+            if (req.url === "/api/bulk-save-metadata" && req.method === "POST") {
+              let body = ""
+              req.on("data", (chunk) => { body += chunk.toString() })
+              req.on("end", async () => {
+                try {
+                  const updates = JSON.parse(body)
+                  const result = await handleBulkSaveMetadata(updates)
+                  res.statusCode = 200
+                  res.setHeader("Content-Type", "application/json")
+                  res.end(JSON.stringify(result))
+                } catch (e: any) {
+                  res.statusCode = 400
+                  res.end(JSON.stringify({ success: false, error: e.message }))
+                }
+              })
+              return
+            }
+
+            if (req.url === "/api/metadata" && req.method === "GET") {
+              const metadata = await handleGetMetadata()
+              res.statusCode = 200
+              res.setHeader("Content-Type", "application/json")
+              res.end(JSON.stringify(metadata))
+              return
+            }
+
+            if (req.url === "/api/metadata" && req.method === "POST") {
+              let body = ""
+              req.on("data", (chunk) => { body += chunk.toString() })
+              req.on("end", async () => {
+                try {
+                  const { type, data } = JSON.parse(body)
+                  const result = await handleSaveMetadata(type, data)
                   res.statusCode = 200
                   res.setHeader("Content-Type", "application/json")
                   res.end(JSON.stringify(result))

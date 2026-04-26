@@ -1,12 +1,17 @@
 import { test, expect } from '@playwright/test';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { execSync } from 'child_process';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+test.beforeEach(async () => {
+  execSync('npm run data-reset');
+});
+
 test('import, process, check and delete transaction from: Nubank Credit, Nubank Debit, Mercado Pago, Bradesco', async ({ page }) => {
-  await page.goto('http://localhost:5173/');
+  await page.goto('http://localhost:5173/', { waitUntil: 'networkidle', timeout: 60000 });
   await page.getByRole('link', { name: 'Import' }).click();
   // Ensure the owner exists by creating it
   await page.getByRole('button', { name: 'Create New' }).click();
@@ -53,16 +58,16 @@ test('import, process, check and delete transaction from: Nubank Credit, Nubank 
   const mercadoPagoRow = page.getByRole('row', { name: '*Fake Mercado Pago Transaction' });
   await expect(mercadoPagoRow).toContainText('810,00');
   await page.getByRole('link', { name: 'Import' }).click();
-  await page.getByRole('row', { name: 'Nubank_2026-01-09.csv' }).getByRole('button').click();
+  await page.getByRole('row').filter({ hasText: 'Nubank_2026-01-09.csv' }).filter({ hasText: 'test-user' }).getByRole('button').click();
   await page.getByRole('button', { name: 'Remove and Reprocess' }).click();
   await page.getByRole('button', { name: 'Close' }).first().click();
-  await page.getByRole('row', { name: 'NU_99626330_01FEV2026_28FEV2026.csv' }).getByRole('button').click();
+  await page.getByRole('row').filter({ hasText: 'NU_99626330_01FEV2026_28FEV2026.csv' }).filter({ hasText: 'test-user' }).getByRole('button').click();
   await page.getByRole('button', { name: 'Remove and Reprocess' }).click();
   await page.getByRole('button', { name: 'Close' }).first().click();
-  await page.getByRole('row', { name: 'account_statement-4b9b9af5-' }).getByRole('button').click();
+  await page.getByRole('row').filter({ hasText: 'account_statement-4b9b9af5-' }).filter({ hasText: 'test-user' }).getByRole('button').click();
   await page.getByRole('button', { name: 'Remove and Reprocess' }).click();
   await page.getByRole('button', { name: 'Close' }).first().click();
-  await page.getByRole('row', { name: '4d305b23-7f64-46ed-823f-' }).getByRole('button').click();
+  await page.getByRole('row').filter({ hasText: '4d305b23-7f64-46ed-823f-' }).filter({ hasText: 'test-user' }).getByRole('button').click();
   await page.getByRole('button', { name: 'Remove and Reprocess' }).click();
   await page.getByRole('button', { name: 'Close' }).first().click();
   await expect(page.getByRole('main')).toContainText('No import history found.');

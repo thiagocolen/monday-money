@@ -12,7 +12,8 @@
     "integrity-check": "tsx backend/integrity-check.ts",
     "data-reset": "tsx backend/reset-csv-files.ts && tsx backend/create-seed-transaction.ts",
     "protect-files": "tsx backend/protect-files.ts",
-    "test": "npx playwright test"
+    "test": "npx playwright test --headed",
+    "codegen": "npx playwright codegen http://localhost:5173"
   },
   "build": {
     "appId": "com.mondaymoney.app",

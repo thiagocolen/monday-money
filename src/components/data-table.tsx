@@ -34,6 +34,9 @@ interface DataTableProps<TData, TValue> {
   data: TData[]
   onRowClick?: (row: TData) => void
   onSelectionChange?: (selectedRows: TData[]) => void
+  rowSelection?: Record<string, boolean>
+  onRowSelectionChange?: React.Dispatch<React.SetStateAction<Record<string, boolean>>>
+  getRowId?: (row: TData) => string
   filterable?: boolean
   paginated?: boolean
   pageSize?: number
@@ -48,6 +51,9 @@ export function DataTable<TData, TValue>({
   data,
   onRowClick,
   onSelectionChange,
+  rowSelection: controlledRowSelection,
+  onRowSelectionChange: controlledOnRowSelectionChange,
+  getRowId,
   filterable = false,
   paginated = false,
   pageSize = 50,
@@ -59,7 +65,10 @@ export function DataTable<TData, TValue>({
   const [sorting, setSorting] = React.useState<SortingState>([])
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
   const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({})
-  const [rowSelection, setRowSelection] = React.useState({})
+  const [internalRowSelection, setInternalRowSelection] = React.useState({})
+
+  const rowSelection = controlledRowSelection !== undefined ? controlledRowSelection : internalRowSelection
+  const setRowSelection = controlledOnRowSelectionChange !== undefined ? controlledOnRowSelectionChange : setInternalRowSelection
 
   const table = useReactTable({
     data,
@@ -71,7 +80,8 @@ export function DataTable<TData, TValue>({
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
     onColumnVisibilityChange: setColumnVisibility,
-    onRowSelectionChange: setRowSelection,
+    onRowSelectionChange: setRowSelection as any,
+    getRowId: getRowId as any,
     meta,
     state: {
       sorting,

@@ -33,4 +33,5 @@ release
 /playwright/.auth/
 
 /_gitignore-folder/*
-/core/*
+# Ignore core folder and all its contents (files and subfolders)
+core/*

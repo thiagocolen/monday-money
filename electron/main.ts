@@ -8,6 +8,9 @@ import {
   handleDeleteImport,
   handleGetImportHistory,
   handleSaveCategory,
+  handleBulkSaveMetadata,
+  handleGetMetadata,
+  handleSaveMetadata,
   handleBackupCategories,
   handleGetBackupInfo
 } from '../backend/index.js';
@@ -72,4 +75,16 @@ ipcMain.handle('backup-categories', async () => {
 
 ipcMain.handle('get-backup-info', async () => {
   return handleGetBackupInfo();
+});
+
+ipcMain.handle('bulk-save-metadata', async (event, updates) => {
+  return handleBulkSaveMetadata(updates);
+});
+
+ipcMain.handle('get-metadata', async () => {
+  return handleGetMetadata();
+});
+
+ipcMain.handle('save-metadata', async (event, { type, data }) => {
+  return handleSaveMetadata(type, data);
 });

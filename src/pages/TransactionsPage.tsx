@@ -1,5 +1,15 @@
 import { useEffect, useState, useMemo, useCallback } from 'react'
-import { fetchTransactions, saveCategory, saveTags, saveBulkCategories, backupCategories, fetchBackupInfo } from '../lib/api'
+import { 
+  fetchTransactions, 
+  saveCategory, 
+  saveTags, 
+  saveBulkCategories, 
+  backupCategories, 
+  fetchBackupInfo,
+  fetchMetadata,
+  saveMetadataConfig,
+  bulkSaveMetadata
+} from '../lib/api'
 import type { Transaction } from '../lib/api'
 import { columns } from '../components/columns'
 import { DataTable } from '../components/data-table'
@@ -8,7 +18,7 @@ import { TransactionChart } from '../components/transaction-chart'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { addMonths, startOfMonth, endOfMonth, isWithinInterval, format, parseISO } from 'date-fns'
-import { ChevronLeft, ChevronRight, Edit3, Trash2, Database, Info, Tags as TagsIcon, History } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Edit3, Trash2, Database, Info, Tags as TagsIcon, History, Plus, X, Check, Search } from 'lucide-react'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -31,31 +41,52 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs"
 
-const CATEGORIES = [
-  "INCOME",
-  "HOUSE",
-  "ONLINE_SERVICES",
-  "HEALTH",
-  "SUPERMARKET",
-  "FOOD",
-  "TRANSPORTATION",
-  "INVESTMENTS",
-  "OTHERS"
+const PRESET_COLORS = [
+  { name: 'Slate', color: '#64748b' },
+  { name: 'Red', color: '#ef4444' },
+  { name: 'Orange', color: '#f97316' },
+  { name: 'Amber', color: '#f59e0b' },
+  { name: 'Yellow', color: '#eab308' },
+  { name: 'Lime', color: '#84cc16' },
+  { name: 'Green', color: '#22c55e' },
+  { name: 'Emerald', color: '#10b981' },
+  { name: 'Teal', color: '#14b8a6' },
+  { name: 'Cyan', color: '#06b6d4' },
+  { name: 'Sky', color: '#0ea5e9' },
+  { name: 'Blue', color: '#3b82f6' },
+  { name: 'Indigo', color: '#6366f1' },
+  { name: 'Violet', color: '#8b5cf6' },
+  { name: 'Purple', color: '#a855f7' },
+  { name: 'Fuchsia', color: '#d946ef' },
+  { name: 'Pink', color: '#ec4899' },
+  { name: 'Rose', color: '#f43f5e' },
 ];
+
 
 export function TransactionsPage() {
   const [data, setData] = useState<Transaction[]>([])
   const [loading, setLoading] = useState(true)
   const [filterOffset, setFilterOffset] = useState<number>(0)
-  const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null)
-  const [selectedTagsTransaction, setSelectedTagsTransaction] = useState<Transaction | null>(null)
-  const [selectedRows, setSelectedRows] = useState<Transaction[]>([])
-  const [newCategory, setNewCategory] = useState<string>("")
-  const [newTags, setNewTags] = useState<string>("")
+  const [rowSelection, setRowSelection] = useState<Record<string, boolean>>({})
   const [isSaving, setIsSaving] = useState(false)
   const [isBulkEditDialogOpen, setIsBulkEditDialogOpen] = useState(false)
-  const [bulkCategory, setBulkCategory] = useState<string>("")
+  
+  // Metadata state
+  const [metaTags, setMetaTags] = useState<{ name: string, color: string, isDefault?: boolean }[]>([])
+  const [metaCategories, setMetaCategories] = useState<{ name: string, color: string, isDefault?: boolean }[]>([])
+  
+  // Bulk Edit state
+  const [bulkActiveTab, setBulkActiveTab] = useState<string>("categories")
+  const [bulkSearch, setBulkSearch] = useState("")
+  const [editingItem, setEditingItem] = useState<{ name: string, color: string, isNew?: boolean, isDefault?: boolean } | null>(null)
+
   const [isBackingUp, setIsBackingUp] = useState(false)
   const [backupInfo, setBackupInfo] = useState<{ count: number; latestDate: string | null }>({ count: 0, latestDate: null })
   const [isMonthHovered, setIsMonthHovered] = useState(false)
@@ -84,10 +115,17 @@ export function TransactionsPage() {
     }
   }, [])
 
+  const loadMetadata = useCallback(async () => {
+    const meta = await fetchMetadata()
+    setMetaTags(meta.tags || [])
+    setMetaCategories(meta.categories || [])
+  }, [])
+
   useEffect(() => {
     loadData()
     loadBackupInfo()
-  }, [loadData, loadBackupInfo])
+    loadMetadata()
+  }, [loadData, loadBackupInfo, loadMetadata])
 
   // 1. First, filter by month
   const monthData = useMemo(() => {
@@ -147,7 +185,18 @@ export function TransactionsPage() {
       const matchesSearch = searchTerms.every(term => {
         const amountStr = item.amount.toString();
         const formattedAmount = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(item.amount).toLowerCase();
-        
+
+        // Numeric comparisons (e.g., >100, <50, >=200, <=-10)
+        const numericMatch = term.match(/^([<>]=?)(-?\d+(?:\.\d+)?)$/);
+        if (numericMatch) {
+          const [, operator, valueStr] = numericMatch;
+          const value = parseFloat(valueStr);
+          if (operator === ">") return item.amount > value;
+          if (operator === "<") return item.amount < value;
+          if (operator === ">=") return item.amount >= value;
+          if (operator === "<=") return item.amount <= value;
+        }
+
         return (
           item.description.toLowerCase().includes(term) ||
           (item.category || "Uncategorized").toLowerCase().includes(term) ||
@@ -158,7 +207,6 @@ export function TransactionsPage() {
           formattedAmount.includes(term)
         );
       });
-
       const matchOwner = ownerFilter === "all" || (item.owner || "No owner") === ownerFilter
       const matchCat = categoryFilter === "all" || (item.category || "Uncategorized") === categoryFilter
       const matchTag = tagFilter === "all" || (item.tags || "").split(',').some(t => t.trim() === tagFilter)
@@ -168,90 +216,97 @@ export function TransactionsPage() {
     })
   }, [monthData, globalSearch, ownerFilter, categoryFilter, tagFilter, dayFilter])
 
+  const selectedRows = useMemo(() => {
+    return filteredData.filter(row => rowSelection[row.id])
+  }, [filteredData, rowSelection])
+
+  const handleSaveMetaItem = async (type: 'tags' | 'categories', item: { name: string, color: string }) => {
+    const current = type === 'tags' ? [...metaTags] : [...metaCategories]
+    const index = current.findIndex(i => i.name.toLowerCase() === item.name.toLowerCase())
+    
+    if (index > -1) {
+      if (current[index].isDefault) {
+        toast.error(`Cannot modify default ${type === 'tags' ? 'tag' : 'category'}`)
+        return
+      }
+      current[index] = { ...current[index], ...item }
+    } else {
+      current.push(item)
+    }
+    
+    const success = await saveMetadataConfig(type, current)
+    if (success) {
+      if (type === 'tags') setMetaTags(current)
+      else setMetaCategories(current)
+      setEditingItem(null)
+      toast.success(`${type === 'tags' ? 'Tag' : 'Category'} saved`)
+    }
+  }
+
+  const handleDeleteMetaItem = async (type: 'tags' | 'categories', name: string) => {
+    const current = type === 'tags' ? metaTags.filter(i => i.name !== name) : metaCategories.filter(i => i.name !== name)
+    const success = await saveMetadataConfig(type, current)
+    if (success) {
+      if (type === 'tags') setMetaTags(current)
+      else setMetaCategories(current)
+      toast.success(`${type === 'tags' ? 'Tag' : 'Category'} deleted`)
+    }
+  }
+
+  const handleBulkApply = async (type: 'tags' | 'categories', value: string, action: 'add' | 'remove' | 'set') => {
+    if (selectedRows.length === 0) return
+    setIsSaving(true)
+
+    const updates = selectedRows.map(row => {
+      const update: any = { transactionHash: row.rowHash }
+      if (type === 'categories') {
+        update.category = action === 'remove' ? '' : value
+      } else {
+        const currentTags = row.tags ? row.tags.split(',').map(t => t.trim()).filter(Boolean) : []
+        if (action === 'add') {
+          if (!currentTags.includes(value)) currentTags.push(value)
+        } else if (action === 'remove') {
+          const index = currentTags.indexOf(value)
+          if (index > -1) currentTags.splice(index, 1)
+        } else {
+          // 'set' is not usually used for tags in bulk but we could
+        }
+        update.tags = currentTags.join(',')
+      }
+      return update
+    })
+
+    const success = await bulkSaveMetadata(updates)
+    if (success) {
+      toast.success(`Updated ${selectedRows.length} transactions`)
+      loadData(false)
+    } else {
+      toast.error("Failed to update transactions")
+    }
+    setIsSaving(false)
+  }
+
   const currentMonthLabel = useMemo(() => {
     const now = new Date()
     const targetDate = addMonths(now, filterOffset)
     return format(targetDate, 'MMMM yyyy')
   }, [filterOffset])
 
-  const handleRowClick = (transaction: Transaction) => {
+  const handleEditCategory = (transaction: Transaction) => {
     if (transaction.category === 'chain-transaction') return;
-    setSelectedTransaction(transaction)
-    setNewCategory(transaction.category || "")
+    if (!rowSelection[transaction.id]) {
+      setRowSelection({ [transaction.id]: true })
+    }
+    setBulkActiveTab("categories")
+    setIsBulkEditDialogOpen(true)
   }
 
   const handleEditTags = (transaction: Transaction) => {
-    setSelectedTagsTransaction(transaction)
-    setNewTags(transaction.tags || "")
-  }
-
-  const handleSaveCategory = async () => {
-    if (!selectedTransaction) return
-    setIsSaving(true)
-    
-    // Optimistic UI update
-    const previousData = [...data]
-    setData(prev => prev.map(item => 
-      item.rowHash === selectedTransaction.rowHash 
-        ? { ...item, category: newCategory } 
-        : item
-    ))
-
-    const success = await saveCategory(selectedTransaction.rowHash, newCategory)
-    if (success) {
-      toast.success("Category updated")
-      setSelectedTransaction(null)
-      loadData(false) // Background refresh
-    } else {
-      toast.error("Failed to save category")
-      setData(previousData) // Revert on failure
+    if (!rowSelection[transaction.id]) {
+      setRowSelection({ [transaction.id]: true })
     }
-    setIsSaving(false)
-  }
-
-  const handleSaveTags = async () => {
-    if (!selectedTagsTransaction) return
-    setIsSaving(true)
-    
-    // Optimistic UI update
-    const previousData = [...data]
-    setData(prev => prev.map(item => 
-      item.rowHash === selectedTagsTransaction.rowHash 
-        ? { ...item, tags: newTags } 
-        : item
-    ))
-
-    const success = await saveTags(selectedTagsTransaction.rowHash, newTags)
-    if (success) {
-      toast.success("Tags updated")
-      setSelectedTagsTransaction(null)
-      loadData(false) // Background refresh
-    } else {
-      toast.error("Failed to save tags")
-      setData(previousData) // Revert on failure
-    }
-    setIsSaving(false)
-  }
-
-  const handleBulkSave = async () => {
-    if (selectedRows.length === 0 || !bulkCategory) return
-    setIsSaving(true)
-    
-    const updates = selectedRows.map(row => ({
-      transactionHash: row.rowHash,
-      category: bulkCategory
-    }))
-
-    const success = await saveBulkCategories(updates)
-    if (success) {
-      toast.success(`Updated ${selectedRows.length} transactions`)
-      setIsBulkEditDialogOpen(false)
-      setBulkCategory("")
-      loadData(false)
-    } else {
-      toast.error("Failed to update some transactions")
-    }
-    setIsSaving(false)
+    setBulkActiveTab("tags")
+    setIsBulkEditDialogOpen(true)
   }
 
   const handleBackup = async () => {
@@ -353,11 +408,11 @@ export function TransactionsPage() {
               </div>
             </div>
 
-            <div className="flex items-center space-x-2 border rounded-md p-1 bg-background shadow-sm">
+            <div className="flex items-center space-x-2 border rounded-md p-1 bg-indigo-50/30 dark:bg-indigo-950/20 shadow-sm border-indigo-100/50 dark:border-indigo-900/50">
               <Button 
                 variant="ghost" 
                 size="icon"
-                className="h-8 w-8"
+                className="h-8 w-8 hover:bg-indigo-600 hover:text-white transition-all duration-200"
                 onClick={() => handleMonthChange(prev => prev - 1)}
                 aria-label="Previous Month"
               >
@@ -367,7 +422,7 @@ export function TransactionsPage() {
               <span 
                 className={cn(
                   "text-xs font-mono font-bold min-w-[120px] text-center uppercase tracking-tighter cursor-pointer transition-all duration-200 rounded px-2 py-1",
-                  isMonthHovered ? "bg-indigo-600 text-white scale-105" : "text-foreground"
+                  isMonthHovered ? "bg-indigo-600 text-white scale-105" : "text-foreground hover:bg-muted/50"
                 )}
                 onMouseEnter={() => setIsMonthHovered(true)}
                 onMouseLeave={() => setIsMonthHovered(false)}
@@ -379,7 +434,7 @@ export function TransactionsPage() {
               <Button 
                 variant="ghost" 
                 size="icon"
-                className="h-8 w-8"
+                className="h-8 w-8 hover:bg-indigo-600 hover:text-white transition-all duration-200"
                 onClick={() => handleMonthChange(prev => prev + 1)}
                 aria-label="Next Month"
               >
@@ -390,12 +445,12 @@ export function TransactionsPage() {
         </div>
       </div>
 
-      <TransactionChart 
+      {/* <TransactionChart 
         data={filteredData} 
         filterOffset={filterOffset} 
         onDayClick={(day) => setDayFilter(day === dayFilter ? null : day)}
         loading={loading}
-      />
+      /> */}
 
       <div className="sticky top-14 z-30 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 py-4 -mx-4 px-4 border-b mb-4 shadow-sm">
         <div className="flex flex-wrap items-center gap-2">
@@ -479,160 +534,188 @@ export function TransactionsPage() {
       <DataTable 
         columns={columns} 
         data={filteredData} 
-        onSelectionChange={setSelectedRows}
+        rowSelection={rowSelection}
+        onRowSelectionChange={setRowSelection}
+        getRowId={(row) => row.id}
         paginated={false}
         stickyHeader
         headerOffset={121}
         loading={loading}
         meta={{
           onEditTags: handleEditTags,
-          onEditCategory: handleRowClick
+          onEditCategory: handleEditCategory,
+          tagsMeta: metaTags,
+          categoriesMeta: metaCategories
         }}
       />
 
-      {/* Individual Category Edit Dialog */}
-      <Dialog open={!!selectedTransaction} onOpenChange={(open) => !open && setSelectedTransaction(null)}>
-        <DialogContent className="sm:max-w-[425px]">
-          <DialogHeader>
-            <DialogTitle className="text-lg font-bold">Edit Category</DialogTitle>
-            <DialogDescription className="text-xs">
-              Update the category for this specific transaction.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-4 space-y-4">
-            <div className="grid grid-cols-4 items-start gap-4">
-              <span className="text-[10px] font-bold text-muted-foreground uppercase pt-1">Description</span>
-              <span className="col-span-3 text-sm font-medium">{selectedTransaction?.description}</span>
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <span className="text-[10px] font-bold text-muted-foreground uppercase">Amount</span>
-              <span className={`col-span-3 text-sm font-mono font-bold ${selectedTransaction && selectedTransaction.amount < 0 ? "text-destructive" : "text-emerald-600"}`}>
-                {selectedTransaction && new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(selectedTransaction.amount)}
-              </span>
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <div className="flex items-center gap-1.5">
-                <span className="text-[10px] font-bold text-muted-foreground uppercase">Category</span>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Info className="h-3 w-3 text-muted-foreground hover:text-foreground cursor-help" />
-                  </TooltipTrigger>
-                  <TooltipContent side="right" className="max-w-[300px] p-3">
-                    <div className="space-y-2 text-[10px]">
-                      <p><strong>INCOME</strong> (TRANSAÇÕES POSITIVAS)</p>
-                      <p><strong>HOUSE</strong> (ALUGUEL, CONDOMÍNIO, IPTU, INTERNET, LUZ, GÁS)</p>
-                      <p><strong>ONLINE_SERVICES</strong> (NETFLIX, SPOTIFY, OUTROS)</p>
-                      <p><strong>HEALTH</strong> (PLANO DE SAÚDE, FARMÁCIA, MÉDICO, ACADEMIA, NATAÇÃO)</p>
-                      <p><strong>SUPERMARKET</strong> (SUPERMERCADO, HORTFRUTI, AÇOUGUE)</p>
-                      <p><strong>FOOD</strong> (DELIVERY, RESTAURANTE, BAR, BALADA)</p>
-                      <p><strong>TRANSPORTATION</strong> (UBER, BILHETE ÚNICO, COMBUSTÍVEL)</p>
-                      <p><strong>INVESTMENTS</strong> (INVESTIMENTOS)</p>
-                      <p><strong>OTHERS</strong> (OUTROS)</p>
-                      <p><strong>chain-transaction</strong> (SYSTEM RESERVED)</p>
-                    </div>
-                  </TooltipContent>
-                </Tooltip>
-              </div>
-              <div className="col-span-3">
-                <Select value={newCategory} onValueChange={setNewCategory}>
-                  <SelectTrigger className="h-9 text-xs">
-                    <SelectValue placeholder="Select a category" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {CATEGORIES.map(cat => (
-                      <SelectItem key={cat} value={cat} className="text-xs">{cat}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" size="sm" onClick={() => setSelectedTransaction(null)} disabled={isSaving}>Cancel</Button>
-            <Button size="sm" onClick={handleSaveCategory} disabled={isSaving}>{isSaving ? "Saving..." : "Save Changes"}</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Individual Tags Edit Dialog */}
-      <Dialog open={!!selectedTagsTransaction} onOpenChange={(open) => !open && setSelectedTagsTransaction(null)}>
-        <DialogContent className="sm:max-w-[425px]">
-          <DialogHeader>
-            <DialogTitle className="text-lg font-bold flex items-center gap-2">
-              <TagsIcon className="h-5 w-5 text-indigo-600" />
-              Edit Tags
-            </DialogTitle>
-            <DialogDescription className="text-xs">
-              Manage tags for this transaction. Separate multiple tags with commas.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-4 space-y-4">
-            <div className="grid grid-cols-4 items-start gap-4">
-              <span className="text-[10px] font-bold text-muted-foreground uppercase pt-1">Description</span>
-              <span className="col-span-3 text-sm font-medium">{selectedTagsTransaction?.description}</span>
-            </div>
-            <div className="space-y-2">
-              <span className="text-[10px] font-bold text-muted-foreground uppercase">Tags (comma separated)</span>
-              <Input 
-                value={newTags} 
-                onChange={(e) => setNewTags(e.target.value)}
-                placeholder="e.g. travel, urgent, recurring"
-                className="h-10 text-sm font-mono"
-                autoFocus
-              />
-            </div>
-            {newTags && (
-              <div className="flex flex-wrap gap-1.5 pt-2">
-                {newTags.split(',').map((t, i) => {
-                  const tag = t.trim()
-                  if (!tag) return null
-                  return (
-                    <div key={i} className="text-[9px] px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-100 font-bold uppercase tracking-wider">
-                      {tag}
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" size="sm" onClick={() => setSelectedTagsTransaction(null)} disabled={isSaving}>Cancel</Button>
-            <Button className="bg-indigo-600 hover:bg-indigo-700 text-white" size="sm" onClick={handleSaveTags} disabled={isSaving}>
-              {isSaving ? "Saving..." : "Update Tags"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Bulk Edit Dialog */}
+      {/* Bulk Edit Tags and Categories Dialog */}
       <Dialog open={isBulkEditDialogOpen} onOpenChange={setIsBulkEditDialogOpen}>
-        <DialogContent className="sm:max-w-[425px]">
-          <DialogHeader>
-            <DialogTitle className="text-lg font-bold text-indigo-600">Bulk Edit Categories</DialogTitle>
-            <DialogDescription className="text-xs">
-              Changing category for <strong>{selectedRows.length}</strong> selected transactions.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-6">
-            <div className="space-y-3">
-              <p className="text-[10px] font-bold text-muted-foreground uppercase">New Category</p>
-              <Select value={bulkCategory} onValueChange={setBulkCategory}>
-                <SelectTrigger className="h-10">
-                  <SelectValue placeholder="Select category for all..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {CATEGORIES.map(cat => (
-                    <SelectItem key={cat} value={cat} className="text-sm">{cat}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+        <DialogContent className="sm:max-w-[500px] p-0 overflow-hidden">
+          <div className="p-6 border-b bg-muted/20">
+            <DialogHeader>
+              <DialogTitle className="text-xl font-bold flex items-center gap-2 text-indigo-600">
+                <Edit3 className="h-5 w-5" />
+                Bulk Edit Transactions
+              </DialogTitle>
+              <DialogDescription className="text-xs">
+                Applying changes to <strong>{selectedRows.length}</strong> selected records.
+              </DialogDescription>
+            </DialogHeader>
           </div>
-          <DialogFooter>
-            <Button variant="outline" size="sm" onClick={() => setIsBulkEditDialogOpen(false)} disabled={isSaving}>Cancel</Button>
-            <Button className="bg-indigo-600 hover:bg-indigo-700" size="sm" onClick={handleBulkSave} disabled={isSaving || !bulkCategory}>
-              {isSaving ? "Updating..." : `Update ${selectedRows.length} Records`}
-            </Button>
+
+          <Tabs value={bulkActiveTab} onValueChange={setBulkActiveTab} className="w-full">
+            <div className="px-6 pt-4">
+              <TabsList className="grid w-full grid-cols-2 h-9">
+                <TabsTrigger value="categories" className="text-xs">Categories</TabsTrigger>
+                <TabsTrigger value="tags" className="text-xs">Tags</TabsTrigger>
+              </TabsList>
+            </div>
+
+            <div className="p-6">
+              <div className="flex items-center gap-2 mb-4 bg-muted/50 rounded-md px-2.5 py-1.5 border">
+                <Search className="h-3.5 w-3.5 text-muted-foreground" />
+                <Input 
+                  placeholder={`Search ${bulkActiveTab}...`} 
+                  className="h-6 border-none bg-transparent shadow-none focus-visible:ring-0 text-xs p-0"
+                  value={bulkSearch}
+                  onChange={(e) => setBulkSearch(e.target.value)}
+                />
+                <Button 
+                  size="sm" 
+                  variant="ghost" 
+                  aria-label="add-button"
+                  className="h-6 w-6 p-0 hover:bg-indigo-100 hover:text-indigo-600 rounded-full"
+                  onClick={() => setEditingItem({ name: '', color: PRESET_COLORS[0].color, isNew: true })}
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+
+              {editingItem && (
+                <div className="mb-6 p-4 rounded-lg border border-indigo-100 bg-indigo-50/30 space-y-3 animate-in fade-in slide-in-from-top-2 duration-200">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-indigo-600 uppercase tracking-wider">
+                      {editingItem.isNew ? `New ${bulkActiveTab === 'categories' ? 'category' : 'tag'}` : `Edit ${editingItem.name}`}
+                    </span>
+                    <Button size="icon" variant="ghost" className="h-5 w-5 rounded-full" onClick={() => setEditingItem(null)}>
+                      <X className="h-3 w-3" />
+                    </Button>
+                  </div>
+                  
+                  <div className="flex gap-2">
+                    <Input 
+                      placeholder="Name" 
+                      className="h-8 text-xs font-medium" 
+                      value={editingItem.name}
+                      onChange={(e) => setEditingItem({ ...editingItem, name: e.target.value })}
+                    />
+                    <div className="flex flex-wrap gap-1 max-w-[200px]">
+                      {PRESET_COLORS.map(c => (
+                        <button
+                          key={c.color}
+                          className={cn(
+                            "h-4 w-4 rounded-full border border-white shadow-sm transition-transform hover:scale-125",
+                            editingItem.color === c.color && "ring-2 ring-indigo-400 ring-offset-1"
+                          )}
+                          style={{ backgroundColor: c.color }}
+                          onClick={() => setEditingItem({ ...editingItem, color: c.color })}
+                          title={c.name}
+                        />
+                      ))}
+                    </div>
+                  </div>
+
+                  <Button 
+                    className="w-full h-8 text-xs bg-indigo-600 hover:bg-indigo-700"
+                    onClick={() => handleSaveMetaItem(bulkActiveTab as 'tags' | 'categories', { name: editingItem.name, color: editingItem.color })}
+                    disabled={!editingItem.name}
+                  >
+                    <Check className="mr-2 h-3.5 w-3.5" />
+                    Save {bulkActiveTab === 'categories' ? 'category' : 'tag'}
+                  </Button>
+                </div>
+              )}
+
+              <div className="space-y-1.5 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
+                {(bulkActiveTab === 'categories' ? metaCategories : metaTags)
+                  .filter(item => item.name.toLowerCase().includes(bulkSearch.toLowerCase()))
+                  .map(item => (
+                    <div key={item.name} className="flex items-center justify-between p-2 rounded-md hover:bg-muted/50 transition-colors group">
+                      <div className="flex items-center gap-2">
+                        <div className="h-3 w-3 rounded-full" style={{ backgroundColor: item.color }} />
+                        <span className="text-xs font-medium">{item.name}</span>
+                        {item.isDefault && <Badge variant="outline" className="text-[8px] h-3.5 px-1 py-0 uppercase tracking-tighter opacity-50">Default</Badge>}
+                      </div>
+                      
+                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        {bulkActiveTab === 'categories' ? (
+                          <>
+                            {selectedRows.length === 1 && selectedRows[0].category === item.name ? (
+                              <Badge variant="secondary" className="h-7 text-[10px] bg-emerald-100 text-emerald-700 border-emerald-200">Selected</Badge>
+                            ) : (
+                              <Button 
+                                variant="ghost" 
+                                size="sm" 
+                                className="h-7 text-[10px] text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 px-2"
+                                onClick={() => handleBulkApply('categories', item.name, 'set')}
+                              >
+                                Set
+                              </Button>
+                            )}
+                          </>
+                        ) : (
+                          <>
+                            {selectedRows.length === 1 && selectedRows[0].tags?.split(',').map(t => t.trim()).includes(item.name) ? (
+                              <Button 
+                                variant="ghost" 
+                                size="sm" 
+                                className="h-7 text-[10px] text-rose-600 hover:text-rose-700 hover:bg-rose-50 px-2"
+                                onClick={() => handleBulkApply('tags', item.name, 'remove')}
+                              >
+                                Rem
+                              </Button>
+                            ) : (
+                              <Button 
+                                variant="ghost" 
+                                size="sm" 
+                                className="h-7 text-[10px] text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 px-2"
+                                onClick={() => handleBulkApply('tags', item.name, 'add')}
+                              >
+                                Add
+                              </Button>
+                            )}
+                          </>
+                        )}
+                        {!item.isDefault && (
+                          <>
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="h-7 w-7 rounded-full"
+                              onClick={() => setEditingItem({ ...item, isNew: false })}
+                            >
+                              <Edit3 className="h-3 w-3 text-muted-foreground" />
+                            </Button>
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="h-7 w-7 rounded-full hover:text-destructive"
+                              onClick={() => handleDeleteMetaItem(bulkActiveTab as 'tags' | 'categories', item.name)}
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </Button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            </div>
+          </Tabs>
+
+          <DialogFooter className="bg-muted/20 p-6 border-t mt-0">
+            <Button variant="outline" size="sm" onClick={() => setIsBulkEditDialogOpen(false)}>Done</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

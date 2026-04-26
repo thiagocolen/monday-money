@@ -3,6 +3,18 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 
+export const DEFAULT_CATEGORIES = [
+  { name: "INCOME", color: "#cbd5e1", isDefault: true },
+  { name: "HOUSE", color: "#cbd5e1", isDefault: true },
+  { name: "ONLINE_SERVICES", color: "#cbd5e1", isDefault: true },
+  { name: "HEALTH", color: "#cbd5e1", isDefault: true },
+  { name: "SUPERMARKET", color: "#cbd5e1", isDefault: true },
+  { name: "FOOD", color: "#cbd5e1", isDefault: true },
+  { name: "TRANSPORTATION", color: "#cbd5e1", isDefault: true },
+  { name: "INVESTMENTS", color: "#cbd5e1", isDefault: true },
+  { name: "OTHERS", color: "#cbd5e1", isDefault: true }
+];
+
 export function getSha256(inputString: string | Buffer): string {
   const content = typeof inputString === 'string' ? inputString : inputString.toString('utf8');
   return crypto.createHash('sha256').update(content, 'utf8').digest('hex').toLowerCase();
