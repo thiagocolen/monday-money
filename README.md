@@ -72,6 +72,8 @@ The project includes specialized scripts to maintain data health:
 - **`npm run data-reset`**: Wipes current data and creates a fresh seed transaction.
 - **`npm run protect-files`**: Sets local data files to a protected state.
 - **`npm run test`**: Executes the full E2E test suite via Playwright.
+- **`npm run test:file`**: Executes a single test file via Playwright in headed mode.
+  - *Example:* `npm run test:file tests/categories.spec.ts`
 
 ---
 
