@@ -125,7 +125,7 @@ export const columns: ColumnDef<Transaction>[] = [
       
       return (
         <div 
-          className="flex flex-wrap gap-1 max-w-[150px] cursor-pointer"
+          className="flex flex-wrap gap-1 max-w-[150px] cursor-pointer hover:bg-muted/50 rounded-sm transition-colors"
           onClick={handleClick}
         >
           {tags.map((tag, i) => {

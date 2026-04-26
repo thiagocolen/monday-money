@@ -143,4 +143,15 @@
   html {
     @apply font-mono;
   }
+  button,
+  [role="button"],
+  a,
+  select,
+  input[type="submit"],
+  input[type="button"],
+  input[type="checkbox"],
+  input[type="radio"],
+  label {
+    @apply cursor-pointer;
+  }
 }

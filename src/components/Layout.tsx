@@ -1,10 +1,31 @@
 import { Link, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { useEffect } from "react";
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const location = useLocation();
   const currentPath = location.pathname;
+
+  // Global drag/drop prevention for Electron to prevent navigation
+  useEffect(() => {
+    const preventDefault = (e: DragEvent) => {
+      // If we are on the import page, we want to let the specific drop zone handle it
+      // but if the drop happens elsewhere on the window, we prevent it.
+      // However, it's safer to just prevent it globally and let the specific 
+      // handlers call e.stopPropagation() if they handle it.
+      e.preventDefault();
+      e.stopPropagation();
+    };
+
+    window.addEventListener('dragover', preventDefault);
+    window.addEventListener('drop', preventDefault);
+
+    return () => {
+      window.removeEventListener('dragover', preventDefault);
+      window.removeEventListener('drop', preventDefault);
+    };
+  }, []);
 
   const navItems = [
     { name: "Transactions", path: "." },

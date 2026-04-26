@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react"
+import { useState, useEffect, useCallback, useMemo, useRef } from "react"
 import { fetchOwners, importFile, fetchImportHistory, deleteImport } from "../lib/api"
 import type { ImportHistory } from "../lib/api"
 import { Button } from "@/components/ui/button"
@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Upload, FileText, CheckCircle2, AlertCircle, Loader2, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 import { format, parseISO } from "date-fns"
+import { cn } from "@/lib/utils"
 
 export function ImportPage() {
   const [owners, setOwners] = useState<string[]>([])
@@ -17,13 +18,19 @@ export function ImportPage() {
   const [selectedOwner, setSelectedOwner] = useState<string>("")
   const [isNewOwner, setIsNewOwner] = useState(false)
   const [newOwnerName, setNewOwnerName] = useState("")
-  const [selectedFiles, setSelectedFiles] = useState<FileList | null>(null)
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([])
   const [isImporting, setIsImporting] = useState(false)
   const [deletingFile, setDeletingFile] = useState<ImportHistory | null>(null)
   const [isDeleteDialogOpen, setIsDeleteOpen] = useState(false)
   const [isLogsModalOpen, setIsLogsModalOpen] = useState(false)
   const [reprocessingLogs, setReprocessingLogs] = useState("")
   const [isLoading, setIsLoading] = useState(true)
+  const [isDragging, setIsDragging] = useState(false)
+  const dragCounter = useRef(0)
+
+  const hasOwner = useMemo(() => {
+    return isNewOwner ? newOwnerName.trim() !== "" : selectedOwner !== ""
+  }, [isNewOwner, newOwnerName, selectedOwner])
 
   const loadData = useCallback(async () => {
     setIsLoading(true)
@@ -55,7 +62,95 @@ export function ImportPage() {
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
-      setSelectedFiles(e.target.files)
+      setSelectedFiles(Array.from(e.target.files))
+    }
+  }
+
+  const handleDragEnter = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    dragCounter.current++
+    
+    // In Electron/Chrome, items/files might be empty during dragenter from OS
+    // but types will contain 'Files'
+    const hasFiles = e.dataTransfer.types && (
+      Array.from(e.dataTransfer.types).includes('Files') || 
+      e.dataTransfer.types.includes('Files')
+    )
+    
+    if (hasFiles) {
+      setIsDragging(true)
+    }
+  }
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    dragCounter.current--
+    if (dragCounter.current <= 0) {
+      dragCounter.current = 0
+      setIsDragging(false)
+    }
+  }
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    e.dataTransfer.dropEffect = "copy"
+    
+    if (!isDragging) {
+      const hasFiles = e.dataTransfer.types && (
+        Array.from(e.dataTransfer.types).includes('Files') || 
+        e.dataTransfer.types.includes('Files')
+      )
+      if (hasFiles) setIsDragging(true)
+    }
+  }
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragging(false)
+    dragCounter.current = 0
+    
+    if (!hasOwner) {
+      toast.error("Please select or create an owner first")
+      return
+    }
+
+    const files = e.dataTransfer.files
+    console.log("Dropped files:", files?.length)
+
+    if (files && files.length > 0) {
+      const fileArray = Array.from(files)
+      const csvFiles = fileArray.filter(file => file.name.toLowerCase().endsWith('.csv'))
+      
+      if (csvFiles.length === 0) {
+        toast.error("Please drop only CSV files")
+        return
+      }
+      
+      if (csvFiles.length !== files.length) {
+        toast.warning(`Only ${csvFiles.length} of ${files.length} files were CSV and will be imported`)
+      }
+
+      // Set the selected files
+      setSelectedFiles(csvFiles)
+      
+      // Update the input element for consistency using DataTransfer
+      const fileInput = document.getElementById('file-upload') as HTMLInputElement
+      if (fileInput) {
+        try {
+          const dataTransfer = new DataTransfer()
+          csvFiles.forEach(file => dataTransfer.items.add(file))
+          fileInput.files = dataTransfer.files
+        } catch (err) {
+          // This can fail in some restricted environments but we already have files in state
+          console.error("Could not set files on input", err)
+        }
+      }
+    } else {
+      toast.error("No files detected in drop event")
     }
   }
 
@@ -139,7 +234,7 @@ export function ImportPage() {
 
       if (successCount > 0) {
         toast.success(`Successfully imported and processed ${successCount} files.`)
-        setSelectedFiles(null)
+        setSelectedFiles([])
         setNewOwnerName("")
         setIsNewOwner(false)
         const fileInput = document.getElementById('file-upload') as HTMLInputElement
@@ -209,19 +304,69 @@ export function ImportPage() {
 
             <div className="space-y-2">
               <label className="text-[10px] font-bold text-muted-foreground uppercase">CSV Files</label>
-              <Input 
-                id="file-upload"
-                type="file" 
-                accept=".csv" 
-                multiple
-                onChange={handleFileChange}
-                className="h-9 text-xs cursor-pointer file:text-xs file:font-medium"
-              />
-              {selectedFiles && selectedFiles.length > 0 && (
-                <div className="text-[9px] text-muted-foreground font-mono mt-1">
-                  {selectedFiles.length} file(s) selected
+              <div 
+                className={cn(
+                  "border-2 border-dashed rounded-md p-4 transition-all text-center flex flex-col items-center gap-2",
+                  !hasOwner ? "opacity-50 border-muted-foreground/20" : "cursor-pointer border-muted-foreground/20 hover:border-indigo-600/50 hover:bg-muted/30",
+                  hasOwner && isDragging && "border-indigo-600 bg-indigo-50/50 scale-[1.02]",
+                  !hasOwner && isDragging && "border-amber-500 bg-amber-50/50 scale-[1.02]"
+                )}
+                onDragEnter={handleDragEnter}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+                onClick={() => {
+                  if (hasOwner) {
+                    document.getElementById('file-upload')?.click()
+                  } else {
+                    toast.error("Please select or create an owner first")
+                  }
+                }}
+              >
+                <Input 
+                  id="file-upload"
+                  type="file" 
+                  accept=".csv" 
+                  multiple
+                  onChange={handleFileChange}
+                  className="hidden"
+                  disabled={!hasOwner}
+                />
+                <Upload className={cn(
+                  "h-8 w-8 transition-colors", 
+                  isDragging ? (hasOwner ? "text-indigo-600" : "text-amber-500") : "text-muted-foreground/60"
+                )} />
+                <div className="space-y-1">
+                  <p className="text-[10px] font-bold uppercase">
+                    {!hasOwner 
+                      ? (isDragging ? "Select owner first!" : "Select owner to enable upload") 
+                      : (isDragging ? "Drop to upload" : "Click or drag CSV files here")}
+                  </p>
+                  {selectedFiles && selectedFiles.length > 0 ? (
+                    <div className="flex flex-col gap-1">
+                      <p className="text-[9px] text-indigo-600 font-mono font-bold">
+                        {selectedFiles.length} file(s) selected
+                      </p>
+                      <div className="max-h-[60px] overflow-y-auto px-2">
+                        {Array.from(selectedFiles).slice(0, 3).map((f, idx) => (
+                          <p key={idx} className="text-[8px] text-muted-foreground truncate max-w-[150px]">
+                            {f.name}
+                          </p>
+                        ))}
+                        {selectedFiles.length > 3 && (
+                          <p className="text-[8px] text-muted-foreground italic">
+                            + {selectedFiles.length - 3} more...
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-[9px] text-muted-foreground">
+                      Only .csv files are supported
+                    </p>
+                  )}
                 </div>
-              )}
+              </div>
             </div>
 
             <Button 

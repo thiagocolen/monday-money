@@ -666,14 +666,33 @@ export function TransactionsPage() {
                           </>
                         ) : (
                           <>
-                            {selectedRows.length === 1 && selectedRows[0].tags?.split(',').map(t => t.trim()).includes(item.name) ? (
+                            {selectedRows.length > 1 ? (
+                              <div className="flex gap-1">
+                                <Button 
+                                  variant="ghost" 
+                                  size="sm" 
+                                  className="h-7 text-[10px] text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 px-2"
+                                  onClick={() => handleBulkApply('tags', item.name, 'add')}
+                                >
+                                  Add
+                                </Button>
+                                <Button 
+                                  variant="ghost" 
+                                  size="sm" 
+                                  className="h-7 text-[10px] text-rose-600 hover:text-rose-700 hover:bg-rose-50 px-2"
+                                  onClick={() => handleBulkApply('tags', item.name, 'remove')}
+                                >
+                                  Remove
+                                </Button>
+                              </div>
+                            ) : selectedRows[0]?.tags?.split(',').map(t => t.trim()).includes(item.name) ? (
                               <Button 
                                 variant="ghost" 
                                 size="sm" 
                                 className="h-7 text-[10px] text-rose-600 hover:text-rose-700 hover:bg-rose-50 px-2"
                                 onClick={() => handleBulkApply('tags', item.name, 'remove')}
                               >
-                                Rem
+                                Remove
                               </Button>
                             ) : (
                               <Button 
