@@ -12,6 +12,7 @@ export const DEFAULT_CATEGORIES = [
   { name: "FOOD", color: "#cbd5e1", isDefault: true },
   { name: "TRANSPORTATION", color: "#cbd5e1", isDefault: true },
   { name: "INVESTMENTS", color: "#cbd5e1", isDefault: true },
+  { name: "NULLED", color: "#cbd5e1", isDefault: true },
   { name: "OTHERS", color: "#cbd5e1", isDefault: true }
 ];
 

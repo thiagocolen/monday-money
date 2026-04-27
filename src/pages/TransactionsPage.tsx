@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useCallback } from 'react'
+import { useEffect, useState, useMemo, useCallback, useTransition } from 'react'
 import { 
   fetchTransactions, 
   saveCategory, 
@@ -18,7 +18,7 @@ import { TransactionChart } from '../components/transaction-chart'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { addMonths, startOfMonth, endOfMonth, isWithinInterval, format, parseISO } from 'date-fns'
-import { ChevronLeft, ChevronRight, Edit3, Trash2, Database, Info, Tags as TagsIcon, History, Plus, X, Check, Search } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Edit3, Trash2, Database, Info, Tags as TagsIcon, History, Plus, X, Check, Search, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -71,6 +71,8 @@ const PRESET_COLORS = [
 
 
 export function TransactionsPage() {
+  const [isPending, startTransition] = useTransition()
+  const [isVisualPending, setIsVisualPending] = useState(false)
   const [data, setData] = useState<Transaction[]>([])
   const [loading, setLoading] = useState(true)
   const [filterOffset, setFilterOffset] = useState<number>(0)
@@ -93,10 +95,27 @@ export function TransactionsPage() {
 
   // Filter states
   const [globalSearch, setGlobalSearch] = useState("")
+  const [localSearch, setLocalSearch] = useState("")
   const [ownerFilter, setOwnerFilter] = useState("all")
   const [categoryFilter, setCategoryFilter] = useState("all")
   const [tagFilter, setTagFilter] = useState("all")
   const [dayFilter, setDayFilter] = useState<string | null>(null)
+
+  // Debounce search input
+  useEffect(() => {
+    if (localSearch === globalSearch) return
+
+    const timer = setTimeout(() => {
+      setIsVisualPending(true)
+      requestAnimationFrame(() => {
+        startTransition(() => {
+          setGlobalSearch(localSearch)
+        })
+      })
+    }, 400) // 400ms debounce
+
+    return () => clearTimeout(timer)
+  }, [localSearch, globalSearch])
 
   const loadBackupInfo = useCallback(async () => {
     const info = await fetchBackupInfo()
@@ -127,16 +146,21 @@ export function TransactionsPage() {
     loadMetadata()
   }, [loadData, loadBackupInfo, loadMetadata])
 
+  // Sync isVisualPending with isPending
+  useEffect(() => {
+    if (!isPending) setIsVisualPending(false)
+  }, [isPending])
+
   // 1. First, filter by month
   const monthData = useMemo(() => {
     const now = new Date()
     const targetDate = addMonths(now, filterOffset)
-    const start = startOfMonth(targetDate)
-    const end = endOfMonth(targetDate)
+    const startStr = format(startOfMonth(targetDate), 'yyyy-MM-dd')
+    const endStr = format(endOfMonth(targetDate), 'yyyy-MM-dd')
 
     return data.filter((item) => {
-      const itemDate = parseISO(item.date)
-      return isWithinInterval(itemDate, { start, end })
+      // High-performance string date comparison
+      return item.date >= startStr && item.date <= endStr
     })
   }, [data, filterOffset])
 
@@ -327,20 +351,31 @@ export function TransactionsPage() {
   }
 
   const resetFilters = () => {
-    setGlobalSearch("")
-    setOwnerFilter("all")
-    setCategoryFilter("all")
-    setTagFilter("all")
-    setDayFilter(null)
+    setIsVisualPending(true)
+    requestAnimationFrame(() => {
+      startTransition(() => {
+        setLocalSearch("")
+        setGlobalSearch("")
+        setOwnerFilter("all")
+        setCategoryFilter("all")
+        setTagFilter("all")
+        setDayFilter(null)
+      })
+    })
   }
 
   const handleMonthChange = (offsetUpdate: number | ((prev: number) => number)) => {
-    if (typeof offsetUpdate === 'function') {
-      setFilterOffset(offsetUpdate)
-    } else {
-      setFilterOffset(offsetUpdate)
-    }
-    setDayFilter(null)
+    setIsVisualPending(true)
+    requestAnimationFrame(() => {
+      startTransition(() => {
+        if (typeof offsetUpdate === 'function') {
+          setFilterOffset(offsetUpdate)
+        } else {
+          setFilterOffset(offsetUpdate)
+        }
+        setDayFilter(null)
+      })
+    })
   }
 
   if (loading && data.length === 0) {
@@ -445,23 +480,23 @@ export function TransactionsPage() {
         </div>
       </div>
 
-      {/* <TransactionChart 
+      <TransactionChart 
         data={filteredData} 
         filterOffset={filterOffset} 
         onDayClick={(day) => setDayFilter(day === dayFilter ? null : day)}
         loading={loading}
-      /> */}
+      />
 
       <div className="sticky top-14 z-30 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 py-4 -mx-4 px-4 border-b mb-4 shadow-sm">
         <div className="flex flex-wrap items-center gap-2">
           <Input
             placeholder="Search all columns..."
-            value={globalSearch}
-            onChange={(e) => setGlobalSearch(e.target.value)}
+            value={localSearch}
+            onChange={(e) => setLocalSearch(e.target.value)}
             className="max-w-xs h-8 text-xs font-mono"
           />
           
-          <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+          <Select value={categoryFilter} onValueChange={(v) => startTransition(() => setCategoryFilter(v))}>
             <SelectTrigger className="h-8 w-[140px] text-xs">
               <SelectValue placeholder="Category" />
             </SelectTrigger>
@@ -473,7 +508,7 @@ export function TransactionsPage() {
             </SelectContent>
           </Select>
 
-          <Select value={tagFilter} onValueChange={setTagFilter}>
+          <Select value={tagFilter} onValueChange={(v) => startTransition(() => setTagFilter(v))}>
             <SelectTrigger className="h-8 w-[140px] text-xs">
               <SelectValue placeholder="Tag" />
             </SelectTrigger>
@@ -485,7 +520,7 @@ export function TransactionsPage() {
             </SelectContent>
           </Select>
 
-          <Select value={ownerFilter} onValueChange={setOwnerFilter}>
+          <Select value={ownerFilter} onValueChange={(v) => startTransition(() => setOwnerFilter(v))}>
             <SelectTrigger className="h-8 w-[140px] text-xs">
               <SelectValue placeholder="Owner" />
             </SelectTrigger>
@@ -531,27 +566,35 @@ export function TransactionsPage() {
         </div>
       </div>
 
-      <DataTable 
-        columns={columns} 
-        data={filteredData} 
-        rowSelection={rowSelection}
-        onRowSelectionChange={setRowSelection}
-        getRowId={(row) => row.id}
-        paginated={false}
-        stickyHeader
-        headerOffset={121}
-        loading={loading}
-        meta={{
-          onEditTags: handleEditTags,
-          onEditCategory: handleEditCategory,
-          tagsMeta: metaTags,
-          categoriesMeta: metaCategories
-        }}
-      />
+      <div className="relative">
+        {(isPending || isSaving || isVisualPending) && (
+          <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-background/60 backdrop-blur-[1px] animate-in fade-in duration-200 rounded-lg">
+            <div className="flex flex-col items-center p-6 bg-background/90 rounded-xl shadow-xl border border-indigo-100 dark:border-indigo-900 scale-90">
+              <Loader2 className="h-8 w-8 animate-spin text-indigo-600 mb-3" />
+              <p className="text-xs font-bold uppercase tracking-[0.2em] text-indigo-900 dark:text-indigo-400">Processing</p>
+            </div>
+          </div>
+        )}
+        <DataTable 
+          columns={columns} 
+          data={filteredData} 
+          rowSelection={rowSelection}
+          onRowSelectionChange={setRowSelection}
+          getRowId={(row) => row.id}
+          paginated={false}
+          stickyHeader
+          headerOffset={121}
+          meta={{
+            onEditTags: handleEditTags,
+            onEditCategory: handleEditCategory,
+            tagsMeta: metaTags,
+            categoriesMeta: metaCategories
+          }}
+          />      </div>
 
       {/* Bulk Edit Tags and Categories Dialog */}
       <Dialog open={isBulkEditDialogOpen} onOpenChange={setIsBulkEditDialogOpen}>
-        <DialogContent className="sm:max-w-[500px] p-0 overflow-hidden">
+        <DialogContent className="sm:max-w-[500px] p-0 overflow-hidden relative">
           <div className="p-6 border-b bg-muted/20">
             <DialogHeader>
               <DialogTitle className="text-xl font-bold flex items-center gap-2 text-indigo-600">

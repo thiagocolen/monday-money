@@ -57,6 +57,10 @@ const formatCurrency = (value: number) => {
 }
 
 export function TransactionChart({ data, filterOffset, onDayClick, loading = false }: TransactionChartProps) {
+  const chartData = React.useMemo(() => {
+    return data.filter(t => t.category !== 'NULLED' && t.category !== 'chain-transaction')
+  }, [data])
+
   const barChartData = React.useMemo(() => {
     const now = new Date()
     const targetDate = new Date(now.getFullYear(), now.getMonth() + filterOffset, 1)
@@ -68,7 +72,7 @@ export function TransactionChart({ data, filterOffset, onDayClick, loading = fal
       daysMap[format(day, "yyyy-MM-dd")] = 0
     })
 
-    data.forEach((t) => {
+    chartData.forEach((t) => {
       const dateKey = t.date
       if (daysMap[dateKey] !== undefined) {
         daysMap[dateKey] += t.amount
@@ -82,14 +86,13 @@ export function TransactionChart({ data, filterOffset, onDayClick, loading = fal
         amount: parseFloat(amount.toFixed(2)),
       }))
       .sort((a, b) => a.date.localeCompare(b.date))
-  }, [data, filterOffset])
+  }, [chartData, filterOffset])
 
   const pieChartData = React.useMemo(() => {
     const categoriesMap: Record<string, number> = {}
     let totalAbsolute = 0
     
-    data.forEach((t) => {
-      if (t.category === 'chain-transaction') return
+    chartData.forEach((t) => {
       const cat = t.category || "Uncategorized"
       const absAmount = Math.abs(t.amount)
       categoriesMap[cat] = (categoriesMap[cat] || 0) + absAmount
@@ -104,7 +107,7 @@ export function TransactionChart({ data, filterOffset, onDayClick, loading = fal
         fill: COLORS[index % COLORS.length]
       }))
       .sort((a, b) => b.value - a.value)
-  }, [data])
+  }, [chartData])
 
   // Create dynamic config for the pie chart to support the Legend content
   const pieChartConfig = React.useMemo(() => {
@@ -119,8 +122,8 @@ export function TransactionChart({ data, filterOffset, onDayClick, loading = fal
   }, [pieChartData])
 
   const totalAmount = React.useMemo(() => {
-    return data.reduce((sum, t) => sum + t.amount, 0)
-  }, [data])
+    return chartData.reduce((sum, t) => sum + t.amount, 0)
+  }, [chartData])
 
   const formattedTotal = formatCurrency(totalAmount)
 

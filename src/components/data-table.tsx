@@ -43,7 +43,6 @@ interface DataTableProps<TData, TValue> {
   stickyHeader?: boolean
   headerOffset?: number
   meta?: any
-  loading?: boolean
 }
 
 export function DataTable<TData, TValue>({
@@ -60,7 +59,6 @@ export function DataTable<TData, TValue>({
   stickyHeader = false,
   headerOffset = 0,
   meta,
-  loading = false,
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = React.useState<SortingState>([])
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
@@ -126,14 +124,6 @@ export function DataTable<TData, TValue>({
         </div>
       )}
       <div className={cn("rounded-md border relative", !stickyHeader && "overflow-hidden")}>
-        {loading && (
-          <div className="absolute inset-x-0 top-0 z-50 flex justify-center bg-background/50 backdrop-blur-[1px] transition-all">
-            <div className="flex flex-col items-center gap-2 bg-background p-3 rounded-b-lg shadow-lg border-x border-b animate-in fade-in slide-in-from-top-2 duration-200">
-              <Loader2 className="h-5 w-5 animate-spin text-indigo-600" />
-              <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Processing...</span>
-            </div>
-          </div>
-        )}
         <Table containerClassName={stickyHeader ? "overflow-visible" : ""}>
           <TableHeader className={stickyHeader ? "z-20" : ""}>
             {table.getHeaderGroups().map((headerGroup) => (

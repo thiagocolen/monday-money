@@ -52,7 +52,8 @@ export const PARSERS: FileParser[] = [
         const dateParts = item.Data.split('/');
         const formattedDate = `${dateParts[2]}-${dateParts[1]}-${dateParts[0]}`;
         const descCol = Object.keys(item).find(k => k.startsWith('Descri'));
-        return { date: formattedDate, description: item[descCol!], amount: normalizeAmount(item.Valor), owner };
+        const amount = parseFloat(normalizeAmount(item.Valor)) * -1;
+        return { date: formattedDate, description: item[descCol!], amount: amount.toString(), owner };
       });
       return { destFile: 'monthly-transactions.csv', rows };
     }
@@ -62,9 +63,10 @@ export const PARSERS: FileParser[] = [
     match: (f) => f.startsWith('Nubank_'),
     parse: (_f, content, owner) => {
       const parsed = Papa.parse<any>(content, { header: true, delimiter: ',', skipEmptyLines: true }).data;
-      const rows = parsed.filter(item => item.date && item.amount).map(item => ({
-        date: item.date, description: item.title, amount: normalizeAmount(item.amount), owner
-      }));
+      const rows = parsed.filter(item => item.date && item.amount).map(item => {
+        const amount = parseFloat(normalizeAmount(item.amount)) * -1;
+        return { date: item.date, description: item.title, amount: amount.toString(), owner };
+      });
       return { destFile: 'monthly-transactions.csv', rows };
     }
   },
