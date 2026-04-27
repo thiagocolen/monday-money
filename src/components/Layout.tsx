@@ -12,10 +12,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     const preventDefault = (e: DragEvent) => {
       // If we are on the import page, we want to let the specific drop zone handle it
       // but if the drop happens elsewhere on the window, we prevent it.
-      // However, it's safer to just prevent it globally and let the specific 
-      // handlers call e.stopPropagation() if they handle it.
       e.preventDefault();
-      e.stopPropagation();
     };
 
     window.addEventListener('dragover', preventDefault);

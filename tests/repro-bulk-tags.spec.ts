@@ -20,16 +20,18 @@ test.afterEach(async ({ page }) => {
   await deleteImportedRawCSV(page);
 });
 
-test("is allowed to remove/add a tag, from/to multiple transactions, in a bulk operation", async ({ page }) => {
+test("is allowed to remove/add a tag, from/to multiple transactions, in a bulk operation", async ({
+  page,
+}) => {
   const tag1 = `BULK-TAG-${Date.now()}`;
-  
+
   // 1. Create the tag
   await createMetadata(page, "Tags", tag1);
 
   // 2. Select multiple transactions
   const rows = page.locator("tbody tr");
   await expect(rows.first()).toBeVisible();
-  
+
   // Select first 3 transactions
   for (let i = 0; i < 3; i++) {
     const checkbox = rows.nth(i).locator(".peer");
@@ -37,15 +39,15 @@ test("is allowed to remove/add a tag, from/to multiple transactions, in a bulk o
       await checkbox.click();
     }
   }
-  
+
   // 3. Open bulk edit and apply tag
   await page.getByRole("button", { name: /Bulk Edit \(3\)/ }).click();
   const dialog = page.getByRole("dialog", { name: "Bulk Edit Transactions" });
   await page.getByRole("tab", { name: "Tags" }).click();
-  
+
   const itemRow = dialog.locator("div.group").filter({ hasText: tag1 });
   await itemRow.getByRole("button", { name: "Add" }).click();
-  
+
   // Wait for success toast to ensure backend processing is done
   const successToast = page.getByText("Updated 3 transactions");
   await expect(successToast.first()).toBeVisible();
@@ -59,13 +61,13 @@ test("is allowed to remove/add a tag, from/to multiple transactions, in a bulk o
   }
 
   // 5. Select them again if needed (they should remain selected)
-  
+
   // 6. Bulk remove the tag
   await page.getByRole("button", { name: /Bulk Edit \(3\)/ }).click();
   await page.getByRole("tab", { name: "Tags" }).click();
   const itemRowRemove = dialog.locator("div.group").filter({ hasText: tag1 });
   await itemRowRemove.getByRole("button", { name: "Remove" }).click();
-  
+
   // Wait for success toast
   await expect(page.getByText("Updated 3 transactions").first()).toBeVisible();
   await dialog.getByRole("button", { name: "Done" }).click();

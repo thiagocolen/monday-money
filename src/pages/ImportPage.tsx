@@ -26,6 +26,7 @@ export function ImportPage() {
   const [reprocessingLogs, setReprocessingLogs] = useState("")
   const [isLoading, setIsLoading] = useState(true)
   const [isDragging, setIsDragging] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
   const dragCounter = useRef(0)
 
   const hasOwner = useMemo(() => {
@@ -72,10 +73,10 @@ export function ImportPage() {
     dragCounter.current++
     
     // In Electron/Chrome, items/files might be empty during dragenter from OS
-    // but types will contain 'Files'
-    const hasFiles = e.dataTransfer.types && (
-      Array.from(e.dataTransfer.types).includes('Files') || 
-      e.dataTransfer.types.includes('Files')
+    // but types will contain 'Files'. We check for both cases for maximum compatibility.
+    const types = e.dataTransfer.types
+    const hasFiles = types && Array.from(types).some(type => 
+      type === 'Files' || type === 'files' || type === 'application/x-moz-file'
     )
     
     if (hasFiles) {
@@ -96,12 +97,16 @@ export function ImportPage() {
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault()
     e.stopPropagation()
-    e.dataTransfer.dropEffect = "copy"
+    
+    // Always set dropEffect to copy to enable drop
+    if (e.dataTransfer) {
+      e.dataTransfer.dropEffect = "copy"
+    }
     
     if (!isDragging) {
-      const hasFiles = e.dataTransfer.types && (
-        Array.from(e.dataTransfer.types).includes('Files') || 
-        e.dataTransfer.types.includes('Files')
+      const types = e.dataTransfer.types
+      const hasFiles = types && Array.from(types).some(type => 
+        type === 'Files' || type === 'files' || type === 'application/x-moz-file'
       )
       if (hasFiles) setIsDragging(true)
     }
@@ -118,12 +123,24 @@ export function ImportPage() {
       return
     }
 
-    const files = e.dataTransfer.files
-    console.log("Dropped files:", files?.length)
+    // Extract files from dataTransfer
+    let files: File[] = []
+    
+    if (e.dataTransfer.items) {
+      // Use DataTransferItemList interface to access the file(s)
+      for (let i = 0; i < e.dataTransfer.items.length; i++) {
+        if (e.dataTransfer.items[i].kind === 'file') {
+          const file = e.dataTransfer.items[i].getAsFile()
+          if (file) files.push(file)
+        }
+      }
+    } else if (e.dataTransfer.files) {
+      // Fallback to DataTransfer.files
+      files = Array.from(e.dataTransfer.files)
+    }
 
-    if (files && files.length > 0) {
-      const fileArray = Array.from(files)
-      const csvFiles = fileArray.filter(file => file.name.toLowerCase().endsWith('.csv'))
+    if (files.length > 0) {
+      const csvFiles = files.filter(file => file.name.toLowerCase().endsWith('.csv'))
       
       if (csvFiles.length === 0) {
         toast.error("Please drop only CSV files")
@@ -141,9 +158,9 @@ export function ImportPage() {
       const fileInput = document.getElementById('file-upload') as HTMLInputElement
       if (fileInput) {
         try {
-          const dataTransfer = new DataTransfer()
-          csvFiles.forEach(file => dataTransfer.items.add(file))
-          fileInput.files = dataTransfer.files
+          const dt = new DataTransfer()
+          csvFiles.forEach(file => dt.items.add(file))
+          fileInput.files = dt.files
         } catch (err) {
           // This can fail in some restricted environments but we already have files in state
           console.error("Could not set files on input", err)
@@ -159,10 +176,18 @@ export function ImportPage() {
     setIsDeleteOpen(true)
   }
 
+  const handleCancelDelete = () => {
+    setIsDeleteOpen(false)
+    if (!isDeleting) {
+      setDeletingFile(null)
+    }
+  }
+
   const handleConfirmDelete = async () => {
     if (!deletingFile) return
 
     const { owner, fileName } = deletingFile
+    setIsDeleting(true)
     setIsDeleteOpen(false)
     setReprocessingLogs("Initiating reprocessing...\n")
     setIsLogsModalOpen(true)
@@ -181,6 +206,7 @@ export function ImportPage() {
       setReprocessingLogs(prev => prev + `\nFATAL ERROR: ${String(error)}`)
       toast.error("An error occurred during deletion.")
     } finally {
+      setIsDeleting(false)
       setDeletingFile(null)
     }
   }
@@ -484,9 +510,9 @@ export function ImportPage() {
                         size="icon"
                         className="h-7 w-7 text-muted-foreground hover:text-destructive"
                         onClick={() => handleDeleteClick(item)}
-                        disabled={!!deletingFile}
+                        disabled={isDeleting || (isDeleteDialogOpen && deletingFile?.fileName !== item.fileName)}
                       >
-                        {deletingFile?.fileName === item.fileName ? (
+                        {deletingFile?.fileName === item.fileName && isDeleting ? (
                           <Loader2 className="h-3.5 w-3.5 animate-spin" />
                         ) : (
                           <Trash2 className="h-3.5 w-3.5" />
@@ -502,17 +528,7 @@ export function ImportPage() {
       </Card>
 
       <Dialog open={isDeleteDialogOpen} onOpenChange={(open) => {
-        setIsDeleteOpen(open);
-        if (!open) {
-          // If the dialog is closed without confirming, reset the deleting file state
-          // A small delay helps prevent UI flicker while the dialog animates out
-          setTimeout(() => {
-            const logsModalStillOpen = !!document.querySelector('[data-slot="dialog-content"]');
-            if (!isLogsModalOpen && !logsModalStillOpen) {
-              setDeletingFile(null);
-            }
-          }, 150);
-        }
+        if (!open) handleCancelDelete();
       }}>
         <DialogContent>
           <DialogHeader>
@@ -523,7 +539,7 @@ export function ImportPage() {
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsDeleteOpen(false)}>Cancel</Button>
+            <Button variant="outline" onClick={handleCancelDelete}>Cancel</Button>
             <Button variant="destructive" onClick={handleConfirmDelete}>Remove and Reprocess</Button>
           </DialogFooter>
         </DialogContent>
