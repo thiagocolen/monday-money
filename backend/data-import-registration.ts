@@ -52,7 +52,7 @@ export const PARSERS: FileParser[] = [
         const dateParts = item.Data.split('/');
         const formattedDate = `${dateParts[2]}-${dateParts[1]}-${dateParts[0]}`;
         const descCol = Object.keys(item).find(k => k.startsWith('Descri'));
-        const amount = parseFloat(normalizeAmount(item.Valor)) * -1;
+        const amount = parseFloat(normalizeAmount(item.Valor));
         return { date: formattedDate, description: item[descCol!], amount: amount.toString(), owner };
       });
       return { destFile: 'monthly-transactions.csv', rows };

@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useCallback, useTransition } from 'react'
+import { useEffect, useState, useMemo, useCallback, useTransition, Fragment } from 'react'
 import { 
   fetchTransactions, 
   backupCategories, 
@@ -12,10 +12,11 @@ import { columns } from '../components/columns'
 import { DataTable } from '../components/data-table'
 import { cn } from "@/lib/utils"
 import { TransactionChart } from '../components/transaction-chart'
+import { YearlyTransactionChart } from '../components/yearly-transaction-chart'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { addMonths, startOfMonth, endOfMonth, format, parseISO } from 'date-fns'
-import { ChevronLeft, ChevronRight, Edit3, Trash2, Database, Info, History, Plus, X, Check, Search, Loader2 } from 'lucide-react'
+import { addMonths, startOfMonth, endOfMonth, format, parseISO, addYears, startOfYear, endOfYear } from 'date-fns'
+import { ChevronLeft, ChevronRight, Edit3, Trash2, Database, Info, History, Plus, X, Check, Search, Loader2, CalendarDays, CalendarRange } from 'lucide-react'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -65,7 +66,9 @@ export function TransactionsPage() {
   const [isVisualPending, setIsVisualPending] = useState(false)
   const [data, setData] = useState<Transaction[]>([])
   const [loading, setLoading] = useState(true)
+  const [viewMode, setViewMode] = useState<'monthly' | 'yearly'>('monthly')
   const [filterOffset, setFilterOffset] = useState<number>(0)
+  const [yearOffset, setYearOffset] = useState<number>(0)
   const [rowSelection, setRowSelection] = useState<Record<string, boolean>>({})
   const [isSaving, setIsSaving] = useState(false)
   const [isBulkEditDialogOpen, setIsBulkEditDialogOpen] = useState(false)
@@ -81,7 +84,7 @@ export function TransactionsPage() {
 
   const [isBackingUp, setIsBackingUp] = useState(false)
   const [backupInfo, setBackupInfo] = useState<{ count: number; latestDate: string | null }>({ count: 0, latestDate: null })
-  const [isMonthHovered, setIsMonthHovered] = useState(false)
+  const [isPeriodHovered, setIsPeriodHovered] = useState(false)
 
   // Filter states
   const [globalSearch, setGlobalSearch] = useState("")
@@ -141,18 +144,22 @@ export function TransactionsPage() {
     if (!isPending) setIsVisualPending(false)
   }, [isPending])
 
-  // 1. First, filter by month
-  const monthData = useMemo(() => {
+  // 1. First, filter by period (month or year)
+  const periodData = useMemo(() => {
     const now = new Date()
-    const targetDate = addMonths(now, filterOffset)
-    const startStr = format(startOfMonth(targetDate), 'yyyy-MM-dd')
-    const endStr = format(endOfMonth(targetDate), 'yyyy-MM-dd')
-
-    return data.filter((item) => {
-      // High-performance string date comparison
-      return item.date >= startStr && item.date <= endStr
-    })
-  }, [data, filterOffset])
+    
+    if (viewMode === 'monthly') {
+      const targetDate = addMonths(now, filterOffset)
+      const startStr = format(startOfMonth(targetDate), 'yyyy-MM-dd')
+      const endStr = format(endOfMonth(targetDate), 'yyyy-MM-dd')
+      return data.filter((item) => item.date >= startStr && item.date <= endStr)
+    } else {
+      const targetDate = addYears(now, yearOffset)
+      const startStr = format(startOfYear(targetDate), 'yyyy-MM-dd')
+      const endStr = format(endOfYear(targetDate), 'yyyy-MM-dd')
+      return data.filter((item) => item.date >= startStr && item.date <= endStr)
+    }
+  }, [data, filterOffset, yearOffset, viewMode])
 
   // 2. Get unique categories, owners, and tags from all transactions + metadata
   const categories = useMemo(() => {
@@ -195,7 +202,7 @@ export function TransactionsPage() {
   const filteredData = useMemo(() => {
     const searchTerms = globalSearch.toLowerCase().split(/\s+/).filter(Boolean);
 
-    return monthData.filter((item) => {
+    return periodData.filter((item) => {
       // Hide system reserved rows
       if (item.category === 'chain-transaction') return false;
       if (item.owner === 'seed-transaction') return false;
@@ -266,7 +273,7 @@ export function TransactionsPage() {
       
       return matchesSearch && matchOwner && matchCat && matchTag && matchDay
     })
-  }, [monthData, globalSearch, ownerFilter, categoryFilter, tagFilter, dayFilter])
+  }, [periodData, globalSearch, ownerFilter, categoryFilter, tagFilter, dayFilter])
 
   const selectedRows = useMemo(() => {
     return filteredData.filter(row => rowSelection[row.id])
@@ -338,11 +345,16 @@ export function TransactionsPage() {
     setIsSaving(false)
   }
 
-  const currentMonthLabel = useMemo(() => {
+  const currentPeriodLabel = useMemo(() => {
     const now = new Date()
-    const targetDate = addMonths(now, filterOffset)
-    return format(targetDate, 'MMMM yyyy')
-  }, [filterOffset])
+    if (viewMode === 'monthly') {
+      const targetDate = addMonths(now, filterOffset)
+      return format(targetDate, 'MMMM yyyy')
+    } else {
+      const targetDate = addYears(now, yearOffset)
+      return format(targetDate, 'yyyy')
+    }
+  }, [filterOffset, yearOffset, viewMode])
 
   const handleEditCategory = (transaction: Transaction) => {
     if (transaction.category === 'chain-transaction') return;
@@ -432,15 +444,34 @@ export function TransactionsPage() {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [filteredData, selectedRows.length, resetFilters, isBulkEditDialogOpen, rowSelection, ownerFilter, categoryFilter, tagFilter, globalSearch, dayFilter])
 
-  const handleMonthChange = (offsetUpdate: number | ((prev: number) => number)) => {
+  const handlePeriodChange = (offsetUpdate: number | ((prev: number) => number)) => {
     setIsVisualPending(true)
     requestAnimationFrame(() => {
       startTransition(() => {
-        if (typeof offsetUpdate === 'function') {
-          setFilterOffset(offsetUpdate)
+        if (viewMode === 'monthly') {
+          if (typeof offsetUpdate === 'function') {
+            setFilterOffset(offsetUpdate)
+          } else {
+            setFilterOffset(offsetUpdate)
+          }
         } else {
-          setFilterOffset(offsetUpdate)
+          if (typeof offsetUpdate === 'function') {
+            setYearOffset(offsetUpdate)
+          } else {
+            setYearOffset(offsetUpdate)
+          }
         }
+        setDayFilter(null)
+      })
+    })
+  }
+
+  const handleToggleViewMode = (mode: 'monthly' | 'yearly') => {
+    if (mode === viewMode) return
+    setIsVisualPending(true)
+    requestAnimationFrame(() => {
+      startTransition(() => {
+        setViewMode(mode)
         setDayFilter(null)
       })
     })
@@ -459,13 +490,34 @@ export function TransactionsPage() {
       <div className="flex flex-col space-y-4">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <h2 className="text-2xl font-bold tracking-tight">Monthly Transactions</h2>
+            <h2 className="text-2xl font-bold tracking-tight">Transactions</h2>
             <p className="text-muted-foreground">
-              Visualize and categorize your monthly spending.
+              Visualize and categorize your spending by {viewMode}.
             </p>
           </div>
           
           <div className="flex items-center space-x-4">
+            <div className="flex items-center p-1 bg-muted/50 rounded-lg border shadow-sm">
+              <Button
+                variant={viewMode === 'monthly' ? "default" : "ghost"}
+                size="sm"
+                className={cn("h-8 text-xs px-3", viewMode === 'monthly' && "bg-indigo-600 hover:bg-indigo-700 shadow-sm")}
+                onClick={() => handleToggleViewMode('monthly')}
+              >
+                <CalendarDays className="mr-2 h-3.5 w-3.5" />
+                Monthly
+              </Button>
+              <Button
+                variant={viewMode === 'yearly' ? "default" : "ghost"}
+                size="sm"
+                className={cn("h-8 text-xs px-3", viewMode === 'yearly' && "bg-indigo-600 hover:bg-indigo-700 shadow-sm")}
+                onClick={() => handleToggleViewMode('yearly')}
+              >
+                <CalendarRange className="mr-2 h-3.5 w-3.5" />
+                Yearly
+              </Button>
+            </div>
+
             <div className="flex items-center space-x-2 bg-indigo-50/30 dark:bg-indigo-950/20 p-1.5 rounded-lg border border-indigo-100/50 dark:border-indigo-900/50 shadow-sm">
               <Button
                 variant="default"
@@ -516,8 +568,8 @@ export function TransactionsPage() {
                 variant="ghost" 
                 size="icon"
                 className="h-8 w-8 hover:bg-indigo-600 hover:text-white transition-all duration-200"
-                onClick={() => handleMonthChange(prev => prev - 1)}
-                aria-label="Previous Month"
+                onClick={() => handlePeriodChange(prev => prev - 1)}
+                aria-label={viewMode === 'monthly' ? "Previous Month" : "Previous Year"}
               >
                 <ChevronLeft className="h-4 w-4" />
               </Button>
@@ -525,21 +577,21 @@ export function TransactionsPage() {
               <span 
                 className={cn(
                   "text-xs font-mono font-bold min-w-[120px] text-center uppercase tracking-tighter cursor-pointer transition-all duration-200 rounded px-2 py-1",
-                  isMonthHovered ? "bg-indigo-600 text-white scale-105" : "text-foreground hover:bg-muted/50"
+                  isPeriodHovered ? "bg-indigo-600 text-white scale-105" : "text-foreground hover:bg-muted/50"
                 )}
-                onMouseEnter={() => setIsMonthHovered(true)}
-                onMouseLeave={() => setIsMonthHovered(false)}
-                onClick={() => handleMonthChange(0)}
+                onMouseEnter={() => setIsPeriodHovered(true)}
+                onMouseLeave={() => setIsPeriodHovered(false)}
+                onClick={() => handlePeriodChange(0)}
               >
-                {isMonthHovered ? "Current Month" : currentMonthLabel}
+                {isPeriodHovered ? (viewMode === 'monthly' ? "Current Month" : "Current Year") : currentPeriodLabel}
               </span>
 
               <Button 
                 variant="ghost" 
                 size="icon"
                 className="h-8 w-8 hover:bg-indigo-600 hover:text-white transition-all duration-200"
-                onClick={() => handleMonthChange(prev => prev + 1)}
-                aria-label="Next Month"
+                onClick={() => handlePeriodChange(prev => prev + 1)}
+                aria-label={viewMode === 'monthly' ? "Next Month" : "Next Year"}
               >
                 <ChevronRight className="h-4 w-4" />
               </Button>
@@ -548,12 +600,22 @@ export function TransactionsPage() {
         </div>
       </div>
 
-      <TransactionChart 
-        data={filteredData} 
-        filterOffset={filterOffset} 
-        onDayClick={(day) => setDayFilter(day === dayFilter ? null : day)}
-        loading={loading}
-      />
+      {viewMode === 'monthly' ? (
+        <TransactionChart 
+          data={filteredData} 
+          filterOffset={filterOffset} 
+          onDayClick={(day) => setDayFilter(day === dayFilter ? null : day)}
+          loading={loading}
+          categoriesMeta={metaCategories}
+        />
+      ) : (
+        <YearlyTransactionChart
+          data={filteredData}
+          yearOffset={yearOffset}
+          loading={loading}
+          categoriesMeta={metaCategories}
+        />
+      )}
 
       <div className="sticky top-14 z-30 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 py-4 -mx-4 px-4 border-b mb-4 shadow-sm">
         <div className="flex flex-wrap items-center gap-2">
@@ -602,6 +664,13 @@ export function TransactionsPage() {
               Clear
             </Button>
           )}
+
+          <div className="flex items-center gap-1.5 px-2 border-l ml-1">
+            <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-tight">Total:</span>
+            <Badge variant="secondary" className="h-5 px-1.5 text-[10px] font-mono font-bold bg-muted/50 border-none">
+              {filteredData.length}
+            </Badge>
+          </div>
 
           <div className="ml-auto flex items-center gap-2">
             {selectedRows.length > 0 && (
@@ -676,17 +745,25 @@ export function TransactionsPage() {
                     <TooltipContent side="right" className="max-w-[300px] p-3 z-[100]">
                       <div className="space-y-2 text-[10px] leading-relaxed">
                         <p className="font-bold border-b pb-1 mb-1">Category Explanations</p>
-                        <div className="grid grid-cols-[80px_1fr] gap-x-2 gap-y-1">
-                          <span className="font-bold text-indigo-600">NULLED</span> <span>TRANSAÇÕES IGNORADAS</span>
-                          <span className="font-bold text-indigo-600">INCOME</span> <span>TRANSAÇÕES POSITIVAS</span>
-                          <span className="font-bold text-indigo-600">HOUSING</span> <span>ALUGUEL, CONDOMÍNIO, IPTU, INTERNET, LUZ, GÁS</span>
-                          <span className="font-bold text-indigo-600">HEALTH</span> <span>PLANO DE SAÚDE, FARMÁCIA, MÉDICO, ACADEMIA, NATAÇÃO</span>
-                          <span className="font-bold text-indigo-600">FOOD</span> <span>SUPERMERCADO, HORTFRUTI, AÇOUGUE</span>
-                          <span className="font-bold text-indigo-600">ONLINE_SERVICES</span> <span>NETFLIX, SPOTIFY, OUTROS</span>
-                          <span className="font-bold text-indigo-600">TRANSPORT</span> <span>UBER, BILHETE ÚNICO, COMBUSTÍVEL</span>
-                          <span className="font-bold text-indigo-600">STREET FOOD</span> <span>DELIVERY, RESTAURANTE, BAR, BALADA</span>
-                          <span className="font-bold text-indigo-600">INVESTMENTS</span> <span>INVESTIMENTOS</span>
-                          <span className="font-bold text-indigo-600">OTHER</span> <span>OUTROS</span>
+                        <div className="grid grid-cols-[100px_1fr] gap-x-2 gap-y-1">
+                          {metaCategories.map(cat => (
+                            <Fragment key={cat.name}>
+                              <span className="font-bold" style={{ color: cat.color }}>{cat.name}</span>
+                              <span className="text-[9px] opacity-80">
+                                {cat.name === 'NULLED' && 'Ignored transactions'}
+                                {cat.name === 'INCOME' && 'Positive transactions / Salary'}
+                                {cat.name === 'HOUSE' && 'Rent, Condo, Taxes, Internet, Utilities'}
+                                {cat.name === 'HEALTH' && 'Insurance, Pharmacy, Doctor, Gym'}
+                                {cat.name === 'SUPERMARKET' && 'Groceries, Market, Butcher'}
+                                {cat.name === 'FOOD' && 'Restaurants, Delivery, Bars'}
+                                {cat.name === 'ONLINE_SERVICES' && 'Subscriptions, SaaS'}
+                                {cat.name === 'TRANSPORTATION' && 'Uber, Public Transit, Fuel'}
+                                {cat.name === 'INVESTMENTS' && 'Stocks, Crypto, Savings'}
+                                {cat.name === 'OTHERS' && 'Everything else'}
+                                {!['NULLED', 'INCOME', 'HOUSE', 'HEALTH', 'SUPERMARKET', 'FOOD', 'ONLINE_SERVICES', 'TRANSPORTATION', 'INVESTMENTS', 'OTHERS'].includes(cat.name) && 'Custom category'}
+                              </span>
+                            </Fragment>
+                          ))}
                         </div>
                       </div>
                     </TooltipContent>

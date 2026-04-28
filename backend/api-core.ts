@@ -289,16 +289,19 @@ export async function handleGetMetadata(): Promise<{ tags: any[], categories: an
     try {
       categories = JSON.parse(fs.readFileSync(catsPath, 'utf8'));
       
-      // Ensure all default categories exist
+      // Ensure all default categories exist and have correct colors
       let changed = false;
       DEFAULT_CATEGORIES.forEach(defCat => {
-        const existing = categories.find((c: any) => c.name === defCat.name);
-        if (!existing) {
+        const index = categories.findIndex((c: any) => c.name === defCat.name);
+        if (index === -1) {
           categories.push(defCat);
           changed = true;
-        } else if (!existing.isDefault) {
-          existing.isDefault = true;
-          changed = true;
+        } else {
+          // Check if color or isDefault has changed
+          if (categories[index].color !== defCat.color || !categories[index].isDefault) {
+            categories[index] = { ...categories[index], color: defCat.color, isDefault: true };
+            changed = true;
+          }
         }
       });
       
