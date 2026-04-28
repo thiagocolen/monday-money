@@ -28,6 +28,7 @@ interface TransactionChartProps {
   filterOffset: number
   onDayClick?: (day: string) => void
   loading?: boolean
+  categoriesMeta: { name: string, color: string }[]
 }
 
 const chartConfig = {
@@ -57,7 +58,7 @@ const formatCurrency = (value: number) => {
   }).format(value)
 }
 
-export function TransactionChart({ data, filterOffset, onDayClick, loading = false }: TransactionChartProps) {
+export function TransactionChart({ data, filterOffset, onDayClick, loading = false, categoriesMeta }: TransactionChartProps) {
   const [isMinimized, setIsMinimized] = React.useState(() => {
     const saved = localStorage.getItem("transaction-chart-minimized")
     return saved === "true"
@@ -112,14 +113,18 @@ export function TransactionChart({ data, filterOffset, onDayClick, loading = fal
     })
 
     return Object.entries(categoriesMap)
-      .map(([name, value], index) => ({
-        name,
-        value: parseFloat(value.toFixed(2)),
-        percentage: totalAbsolute > 0 ? (Math.abs(value) / totalAbsolute * 100).toFixed(1) : "0",
-        fill: COLORS[index % COLORS.length]
-      }))
+      .map(([name, value], index) => {
+        const catMeta = categoriesMeta.find(c => c.name === name)
+        const othersMeta = categoriesMeta.find(c => c.name === "OTHERS")
+        return {
+          name,
+          value: parseFloat(value.toFixed(2)),
+          percentage: totalAbsolute > 0 ? (Math.abs(value) / totalAbsolute * 100).toFixed(1) : "0",
+          fill: catMeta?.color || (name === "Uncategorized" ? othersMeta?.color : null) || COLORS[index % COLORS.length]
+        }
+      })
       .sort((a, b) => b.value - a.value)
-  }, [chartData])
+  }, [chartData, categoriesMeta])
 
   // Create dynamic config for the pie chart to support the Legend content
   const pieChartConfig = React.useMemo(() => {
