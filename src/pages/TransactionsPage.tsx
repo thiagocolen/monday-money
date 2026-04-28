@@ -1,9 +1,6 @@
 import { useEffect, useState, useMemo, useCallback, useTransition } from 'react'
 import { 
   fetchTransactions, 
-  saveCategory, 
-  saveTags, 
-  saveBulkCategories, 
   backupCategories, 
   fetchBackupInfo,
   fetchMetadata,
@@ -17,8 +14,8 @@ import { cn } from "@/lib/utils"
 import { TransactionChart } from '../components/transaction-chart'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { addMonths, startOfMonth, endOfMonth, isWithinInterval, format, parseISO } from 'date-fns'
-import { ChevronLeft, ChevronRight, Edit3, Trash2, Database, Info, Tags as TagsIcon, History, Plus, X, Check, Search, Loader2 } from 'lucide-react'
+import { addMonths, startOfMonth, endOfMonth, format, parseISO } from 'date-fns'
+import { ChevronLeft, ChevronRight, Edit3, Trash2, Database, Info, History, Plus, X, Check, Search, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -31,22 +28,15 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogFooter,
   DialogDescription,
 } from "@/components/ui/dialog"
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-import {
   Tabs,
-  TabsContent,
   TabsList,
   TabsTrigger,
 } from "@/components/ui/tabs"
+
+import { DataTableFacetedFilter } from '../components/ui/faceted-filter'
 
 const PRESET_COLORS = [
   { name: 'Slate', color: '#64748b' },
@@ -96,9 +86,9 @@ export function TransactionsPage() {
   // Filter states
   const [globalSearch, setGlobalSearch] = useState("")
   const [localSearch, setLocalSearch] = useState("")
-  const [ownerFilter, setOwnerFilter] = useState("all")
-  const [categoryFilter, setCategoryFilter] = useState("all")
-  const [tagFilter, setTagFilter] = useState("all")
+  const [ownerFilter, setOwnerFilter] = useState<Record<string, 'include' | 'exclude'>>({})
+  const [categoryFilter, setCategoryFilter] = useState<Record<string, 'include' | 'exclude'>>({})
+  const [tagFilter, setTagFilter] = useState<Record<string, 'include' | 'exclude'>>({})
   const [dayFilter, setDayFilter] = useState<string | null>(null)
 
   // Debounce search input
@@ -164,28 +154,33 @@ export function TransactionsPage() {
     })
   }, [data, filterOffset])
 
-  // 2. Get unique categories, owners, and tags from the current month
+  // 2. Get unique categories, owners, and tags from all transactions + metadata
   const categories = useMemo(() => {
     const set = new Set(
-      monthData
+      data
         .map((item) => item.category || "Uncategorized")
         .filter((cat) => cat !== "chain-transaction")
     )
+    // Add categories from metadata to ensure they always show up
+    metaCategories.forEach(cat => set.add(cat.name))
     return Array.from(set).sort()
-  }, [monthData])
+  }, [data, metaCategories])
 
   const owners = useMemo(() => {
     const set = new Set(
-      monthData
+      data
         .map((item) => (item.owner || "No owner"))
         .filter((owner) => owner !== "seed-transaction")
     )
     return Array.from(set).sort()
-  }, [monthData])
+  }, [data])
 
   const allTags = useMemo(() => {
     const set = new Set<string>()
-    monthData.forEach(item => {
+    // Add tags from metadata
+    metaTags.forEach(tag => set.add(tag.name))
+    // Add tags from all transactions
+    data.forEach(item => {
       if (item.tags) {
         item.tags.split(',').forEach(tag => {
           const trimmed = tag.trim()
@@ -194,7 +189,7 @@ export function TransactionsPage() {
       }
     })
     return Array.from(set).sort()
-  }, [monthData])
+  }, [data, metaTags])
 
   // 3. Apply the remaining filters
   const filteredData = useMemo(() => {
@@ -231,9 +226,42 @@ export function TransactionsPage() {
           formattedAmount.includes(term)
         );
       });
-      const matchOwner = ownerFilter === "all" || (item.owner || "No owner") === ownerFilter
-      const matchCat = categoryFilter === "all" || (item.category || "Uncategorized") === categoryFilter
-      const matchTag = tagFilter === "all" || (item.tags || "").split(',').some(t => t.trim() === tagFilter)
+
+      // Filter logic with Include/Exclude
+      const applyFilter = (val: string, filter: Record<string, 'include' | 'exclude'>) => {
+        const keys = Object.keys(filter)
+        if (keys.length === 0) return true
+        
+        const includes = keys.filter(k => filter[k] === 'include')
+        const excludes = keys.filter(k => filter[k] === 'exclude')
+
+        // If there are 'include' filters, the value must be one of them
+        if (includes.length > 0 && !includes.includes(val)) return false
+        
+        // If there are 'exclude' filters, the value must not be one of them
+        if (excludes.includes(val)) return false
+        
+        return true
+      }
+
+      // Tags need special multi-value logic
+      const applyTagFilter = (tagsStr: string, filter: Record<string, 'include' | 'exclude'>) => {
+        const keys = Object.keys(filter)
+        if (keys.length === 0) return true
+        
+        const currentTags = tagsStr.split(',').map(t => t.trim())
+        const includes = keys.filter(k => filter[k] === 'include')
+        const excludes = keys.filter(k => filter[k] === 'exclude')
+
+        if (includes.length > 0 && !includes.some(t => currentTags.includes(t))) return false
+        if (excludes.some(t => currentTags.includes(t))) return false
+        
+        return true
+      }
+
+      const matchOwner = applyFilter(item.owner || "No owner", ownerFilter)
+      const matchCat = applyFilter(item.category || "Uncategorized", categoryFilter)
+      const matchTag = applyTagFilter(item.tags || "", tagFilter)
       const matchDay = !dayFilter || item.date === dayFilter
       
       return matchesSearch && matchOwner && matchCat && matchTag && matchDay
@@ -350,19 +378,59 @@ export function TransactionsPage() {
     }
   }
 
-  const resetFilters = () => {
+  const resetFilters = useCallback(() => {
     setIsVisualPending(true)
     requestAnimationFrame(() => {
       startTransition(() => {
         setLocalSearch("")
         setGlobalSearch("")
-        setOwnerFilter("all")
-        setCategoryFilter("all")
-        setTagFilter("all")
+        setOwnerFilter({})
+        setCategoryFilter({})
+        setTagFilter({})
         setDayFilter(null)
       })
     })
-  }
+  }, [])
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't trigger shortcuts if user is typing in an input
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        if (e.key === 'Escape') {
+          (e.target as HTMLElement).blur()
+        }
+        return
+      }
+
+      if (e.key === 'Escape') {
+        if (isBulkEditDialogOpen) {
+          setIsBulkEditDialogOpen(false)
+        } else if (Object.keys(rowSelection).length > 0) {
+          setRowSelection({})
+        } else if (Object.keys(ownerFilter).length > 0 || Object.keys(categoryFilter).length > 0 || Object.keys(tagFilter).length > 0 || globalSearch || dayFilter) {
+          resetFilters()
+        }
+      } else if (e.key.toLowerCase() === 'a') {
+        e.preventDefault() // Prevent scroll or other browser defaults
+        const allSelection: Record<string, boolean> = {}
+        filteredData.forEach(row => {
+          allSelection[row.id] = true
+        })
+        setRowSelection(allSelection)
+      } else if (e.key.toLowerCase() === 'b') {
+        e.preventDefault()
+        if (selectedRows.length > 0) {
+          setIsBulkEditDialogOpen(true)
+        } else {
+          toast.error("Select transactions first to bulk edit (or press 'A' to select all)", { duration: 2000 })
+        }
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [filteredData, selectedRows.length, resetFilters, isBulkEditDialogOpen, rowSelection, ownerFilter, categoryFilter, tagFilter, globalSearch, dayFilter])
 
   const handleMonthChange = (offsetUpdate: number | ((prev: number) => number)) => {
     setIsVisualPending(true)
@@ -496,41 +564,26 @@ export function TransactionsPage() {
             className="max-w-xs h-8 text-xs font-mono"
           />
           
-          <Select value={categoryFilter} onValueChange={(v) => startTransition(() => setCategoryFilter(v))}>
-            <SelectTrigger className="h-8 w-[140px] text-xs">
-              <SelectValue placeholder="Category" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Categories</SelectItem>
-              {categories.map((cat) => (
-                <SelectItem key={cat} value={cat} className="text-xs">{cat}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <DataTableFacetedFilter
+            title="Category"
+            options={categories.map(cat => ({ label: cat, value: cat }))}
+            selectedValues={categoryFilter}
+            onSelect={(v) => startTransition(() => setCategoryFilter(v))}
+          />
 
-          <Select value={tagFilter} onValueChange={(v) => startTransition(() => setTagFilter(v))}>
-            <SelectTrigger className="h-8 w-[140px] text-xs">
-              <SelectValue placeholder="Tag" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Tags</SelectItem>
-              {allTags.map((tag) => (
-                <SelectItem key={tag} value={tag} className="text-xs">{tag}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <DataTableFacetedFilter
+            title="Tag"
+            options={allTags.map(tag => ({ label: tag, value: tag }))}
+            selectedValues={tagFilter}
+            onSelect={(v) => startTransition(() => setTagFilter(v))}
+          />
 
-          <Select value={ownerFilter} onValueChange={(v) => startTransition(() => setOwnerFilter(v))}>
-            <SelectTrigger className="h-8 w-[140px] text-xs">
-              <SelectValue placeholder="Owner" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Owners</SelectItem>
-              {owners.map((owner) => (
-                <SelectItem key={owner} value={owner} className="text-xs">{owner}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <DataTableFacetedFilter
+            title="Owner"
+            options={owners.map(owner => ({ label: owner, value: owner }))}
+            selectedValues={ownerFilter}
+            onSelect={(v) => startTransition(() => setOwnerFilter(v))}
+          />
 
           {dayFilter && (
             <div className="flex items-center bg-primary/10 border border-primary/20 rounded-md px-2 py-1 h-8">
@@ -539,7 +592,7 @@ export function TransactionsPage() {
             </div>
           )}
 
-          {(globalSearch || ownerFilter !== "all" || categoryFilter !== "all" || tagFilter !== "all" || dayFilter) && (
+          {(globalSearch || Object.keys(ownerFilter).length > 0 || Object.keys(categoryFilter).length > 0 || Object.keys(tagFilter).length > 0 || dayFilter) && (
             <Button
               variant="ghost"
               size="sm"
@@ -568,7 +621,7 @@ export function TransactionsPage() {
 
       <div className="relative">
         {(isPending || isSaving || isVisualPending) && (
-          <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-background/60 backdrop-blur-[1px] animate-in fade-in duration-200 rounded-lg">
+          <div className="absolute inset-0 z-50 flex flex-col items-center justify-start pt-32 bg-background/60 backdrop-blur-[1px] animate-in fade-in duration-200 rounded-lg">
             <div className="flex flex-col items-center p-6 bg-background/90 rounded-xl shadow-xl border border-indigo-100 dark:border-indigo-900 scale-90">
               <Loader2 className="h-8 w-8 animate-spin text-indigo-600 mb-3" />
               <p className="text-xs font-bold uppercase tracking-[0.2em] text-indigo-900 dark:text-indigo-400">Processing</p>
@@ -594,7 +647,7 @@ export function TransactionsPage() {
 
       {/* Bulk Edit Tags and Categories Dialog */}
       <Dialog open={isBulkEditDialogOpen} onOpenChange={setIsBulkEditDialogOpen}>
-        <DialogContent className="sm:max-w-[500px] p-0 overflow-hidden relative">
+        <DialogContent className="sm:max-w-[500px] p-0 overflow-hidden">
           <div className="p-6 border-b bg-muted/20">
             <DialogHeader>
               <DialogTitle className="text-xl font-bold flex items-center gap-2 text-indigo-600">
@@ -610,7 +663,35 @@ export function TransactionsPage() {
           <Tabs value={bulkActiveTab} onValueChange={setBulkActiveTab} className="w-full">
             <div className="px-6 pt-4">
               <TabsList className="grid w-full grid-cols-2 h-9">
-                <TabsTrigger value="categories" className="text-xs">Categories</TabsTrigger>
+                <div className="flex items-center justify-center gap-2">
+                  <TabsTrigger value="categories" className="text-xs flex-1">
+                    Categories
+                  </TabsTrigger>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div className="p-1 cursor-help">
+                        <Info className="h-3 w-3 text-muted-foreground hover:text-indigo-600 transition-colors" />
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent side="right" className="max-w-[300px] p-3 z-[100]">
+                      <div className="space-y-2 text-[10px] leading-relaxed">
+                        <p className="font-bold border-b pb-1 mb-1">Category Explanations</p>
+                        <div className="grid grid-cols-[80px_1fr] gap-x-2 gap-y-1">
+                          <span className="font-bold text-indigo-600">NULLED</span> <span>TRANSAÇÕES IGNORADAS</span>
+                          <span className="font-bold text-indigo-600">INCOME</span> <span>TRANSAÇÕES POSITIVAS</span>
+                          <span className="font-bold text-indigo-600">HOUSING</span> <span>ALUGUEL, CONDOMÍNIO, IPTU, INTERNET, LUZ, GÁS</span>
+                          <span className="font-bold text-indigo-600">HEALTH</span> <span>PLANO DE SAÚDE, FARMÁCIA, MÉDICO, ACADEMIA, NATAÇÃO</span>
+                          <span className="font-bold text-indigo-600">FOOD</span> <span>SUPERMERCADO, HORTFRUTI, AÇOUGUE</span>
+                          <span className="font-bold text-indigo-600">ONLINE_SERVICES</span> <span>NETFLIX, SPOTIFY, OUTROS</span>
+                          <span className="font-bold text-indigo-600">TRANSPORT</span> <span>UBER, BILHETE ÚNICO, COMBUSTÍVEL</span>
+                          <span className="font-bold text-indigo-600">STREET FOOD</span> <span>DELIVERY, RESTAURANTE, BAR, BALADA</span>
+                          <span className="font-bold text-indigo-600">INVESTMENTS</span> <span>INVESTIMENTOS</span>
+                          <span className="font-bold text-indigo-600">OTHER</span> <span>OUTROS</span>
+                        </div>
+                      </div>
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
                 <TabsTrigger value="tags" className="text-xs">Tags</TabsTrigger>
               </TabsList>
             </div>
@@ -683,102 +764,64 @@ export function TransactionsPage() {
               <div className="space-y-1.5 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
                 {(bulkActiveTab === 'categories' ? metaCategories : metaTags)
                   .filter(item => item.name.toLowerCase().includes(bulkSearch.toLowerCase()))
-                  .map(item => (
-                    <div key={item.name} className="flex items-center justify-between p-2 rounded-md hover:bg-muted/50 transition-colors group">
-                      <div className="flex items-center gap-2">
-                        <div className="h-3 w-3 rounded-full" style={{ backgroundColor: item.color }} />
-                        <span className="text-xs font-medium">{item.name}</span>
-                        {item.isDefault && <Badge variant="outline" className="text-[8px] h-3.5 px-1 py-0 uppercase tracking-tighter opacity-50">Default</Badge>}
-                      </div>
-                      
-                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        {bulkActiveTab === 'categories' ? (
-                          <>
-                            {selectedRows.length === 1 && selectedRows[0].category === item.name ? (
-                              <Badge variant="secondary" className="h-7 text-[10px] bg-emerald-100 text-emerald-700 border-emerald-200">Selected</Badge>
-                            ) : (
-                              <Button 
-                                variant="ghost" 
-                                size="sm" 
-                                className="h-7 text-[10px] text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 px-2"
-                                onClick={() => handleBulkApply('categories', item.name, 'set')}
-                              >
-                                Set
-                              </Button>
-                            )}
-                          </>
-                        ) : (
-                          <>
-                            {selectedRows.length > 1 ? (
-                              <div className="flex gap-1">
-                                <Button 
-                                  variant="ghost" 
-                                  size="sm" 
-                                  className="h-7 text-[10px] text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 px-2"
-                                  onClick={() => handleBulkApply('tags', item.name, 'add')}
-                                >
-                                  Add
-                                </Button>
-                                <Button 
-                                  variant="ghost" 
-                                  size="sm" 
-                                  className="h-7 text-[10px] text-rose-600 hover:text-rose-700 hover:bg-rose-50 px-2"
-                                  onClick={() => handleBulkApply('tags', item.name, 'remove')}
-                                >
-                                  Remove
-                                </Button>
-                              </div>
-                            ) : selectedRows[0]?.tags?.split(',').map(t => t.trim()).includes(item.name) ? (
-                              <Button 
-                                variant="ghost" 
-                                size="sm" 
-                                className="h-7 text-[10px] text-rose-600 hover:text-rose-700 hover:bg-rose-50 px-2"
-                                onClick={() => handleBulkApply('tags', item.name, 'remove')}
-                              >
-                                Remove
-                              </Button>
-                            ) : (
-                              <Button 
-                                variant="ghost" 
-                                size="sm" 
-                                className="h-7 text-[10px] text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 px-2"
-                                onClick={() => handleBulkApply('tags', item.name, 'add')}
-                              >
-                                Add
-                              </Button>
-                            )}
-                          </>
+                  .map(item => {
+                    const isFullySelected = bulkActiveTab === 'categories' 
+                      ? selectedRows.length === 1 && selectedRows[0].category === item.name
+                      : selectedRows.every(r => r.tags?.split(',').map(t => t.trim()).includes(item.name));
+                    
+                    const isPartiallySelected = bulkActiveTab === 'tags' && !isFullySelected && selectedRows.some(r => r.tags?.split(',').map(t => t.trim()).includes(item.name));
+
+                    return (
+                      <div 
+                        key={item.name} 
+                        className={cn(
+                          "flex items-center justify-between p-2 rounded-md transition-colors group cursor-pointer border border-transparent",
+                          isFullySelected ? "bg-indigo-50 dark:bg-indigo-950/40 border-indigo-100 dark:border-indigo-900" : "hover:bg-muted/50"
                         )}
-                        {!item.isDefault && (
-                          <>
-                            <Button 
-                              variant="ghost" 
-                              size="icon" 
-                              className="h-7 w-7 rounded-full"
-                              onClick={() => setEditingItem({ ...item, isNew: false })}
-                            >
-                              <Edit3 className="h-3 w-3 text-muted-foreground" />
-                            </Button>
-                            <Button 
-                              variant="ghost" 
-                              size="icon" 
-                              className="h-7 w-7 rounded-full hover:text-destructive"
-                              onClick={() => handleDeleteMetaItem(bulkActiveTab as 'tags' | 'categories', item.name)}
-                            >
-                              <Trash2 className="h-3 w-3" />
-                            </Button>
-                          </>
-                        )}
+                        onClick={() => {
+                          if (bulkActiveTab === 'categories') {
+                            handleBulkApply('categories', item.name, 'set')
+                          } else {
+                            handleBulkApply('tags', item.name, isFullySelected ? 'remove' : 'add')
+                          }
+                        }}
+                      >
+                        <div className="flex items-center gap-2">
+                          <div className="h-3 w-3 rounded-full" style={{ backgroundColor: item.color }} />
+                          <span className={cn("text-xs font-medium", isFullySelected && "text-indigo-600 dark:text-indigo-400 font-bold")}>{item.name}</span>
+                          {item.isDefault && <Badge variant="outline" className="text-[8px] h-3.5 px-1 py-0 uppercase tracking-tighter opacity-50">Default</Badge>}
+                          {isFullySelected && <Check className="h-3 w-3 text-indigo-600 animate-in zoom-in" />}
+                          {isPartiallySelected && <div className="h-1 w-2 bg-indigo-400 rounded-full" title="Partially applied" />}
+                        </div>
+                        
+                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
+                          {!item.isDefault && (
+                            <>
+                              <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                className="h-7 w-7 rounded-full"
+                                onClick={() => setEditingItem({ ...item, isNew: false })}
+                              >
+                                <Edit3 className="h-3 w-3 text-muted-foreground" />
+                              </Button>
+                              <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                className="h-7 w-7 rounded-full hover:text-destructive"
+                                onClick={() => handleDeleteMetaItem(bulkActiveTab as 'tags' | 'categories', item.name)}
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </Button>
+                            </>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
               </div>
             </div>
           </Tabs>
-
-          <DialogFooter className="bg-muted/20 p-6 border-t mt-0">
-            <Button variant="outline" size="sm" onClick={() => setIsBulkEditDialogOpen(false)}>Done</Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
