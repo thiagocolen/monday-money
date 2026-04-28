@@ -33,5 +33,8 @@ release
 /playwright/.auth/
 
 /_gitignore-folder/*
-# Ignore core folder and all its contents (files and subfolders)
-core/*
+/core/*
+/core/data/*
+
+# Real Task temporary files
+real-task-*.*
