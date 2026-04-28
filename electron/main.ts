@@ -8,6 +8,9 @@ import {
   handleDeleteImport,
   handleGetImportHistory,
   handleSaveCategory,
+  handleBulkSaveMetadata,
+  handleGetMetadata,
+  handleSaveMetadata,
   handleBackupCategories,
   handleGetBackupInfo
 } from '../backend/index.js';
@@ -27,6 +30,8 @@ function createWindow() {
 
   if (process.env.VITE_DEV_SERVER_URL) {
     win.loadURL(process.env.VITE_DEV_SERVER_URL);
+    win.maximize();
+    win.webContents.openDevTools();
   } else {
     win.loadFile(path.join(currentDir, '../dist/index.html'));
   }
@@ -72,4 +77,16 @@ ipcMain.handle('backup-categories', async () => {
 
 ipcMain.handle('get-backup-info', async () => {
   return handleGetBackupInfo();
+});
+
+ipcMain.handle('bulk-save-metadata', async (event, updates) => {
+  return handleBulkSaveMetadata(updates);
+});
+
+ipcMain.handle('get-metadata', async () => {
+  return handleGetMetadata();
+});
+
+ipcMain.handle('save-metadata', async (event, { type, data }) => {
+  return handleSaveMetadata(type, data);
 });

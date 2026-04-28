@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { getSha256, getCoreDir } from './utils.js';
+import { getSha256, getCoreDir, DEFAULT_CATEGORIES } from './utils.js';
 
 export function createSeedTransaction() {
   const coreDir = getCoreDir();
@@ -54,6 +54,23 @@ export function createSeedTransaction() {
           fs.copyFileSync(path.join(backupDir, latestBackup), target.Path);
           fs.chmodSync(target.Path, 0o644);
           restoreFromBackup = true;
+
+          // Also restore meta files if they exist in backup
+          const timestampMatch = latestBackup.match(/monthly-transactions-category-(\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2})-bkp\.csv/);
+          if (timestampMatch) {
+            const timestamp = timestampMatch[1];
+            const metaCatsBkp = path.join(backupDir, `meta-categories-${timestamp}-bkp.json`);
+            const metaTagsBkp = path.join(backupDir, `meta-tags-${timestamp}-bkp.json`);
+            
+            if (fs.existsSync(metaCatsBkp)) {
+              console.log(`Restoring meta-categories from backup: ${path.basename(metaCatsBkp)}...`);
+              fs.copyFileSync(metaCatsBkp, path.join(dataDir, 'meta-categories.json'));
+            }
+            if (fs.existsSync(metaTagsBkp)) {
+              console.log(`Restoring meta-tags from backup: ${path.basename(metaTagsBkp)}...`);
+              fs.copyFileSync(metaTagsBkp, path.join(dataDir, 'meta-tags.json'));
+            }
+          }
         }
       }
     }
@@ -114,6 +131,20 @@ export function createSeedTransaction() {
         }
       }
     }
+  }
+
+  // Generate meta files if they don't exist
+  const metaCatsPath = path.join(dataDir, 'meta-categories.json');
+  const metaTagsPath = path.join(dataDir, 'meta-tags.json');
+
+  if (!fs.existsSync(metaCatsPath)) {
+    console.log('Initializing meta-categories.json...');
+    fs.writeFileSync(metaCatsPath, JSON.stringify(DEFAULT_CATEGORIES, null, 2), 'utf8');
+  }
+
+  if (!fs.existsSync(metaTagsPath)) {
+    console.log('Initializing meta-tags.json...');
+    fs.writeFileSync(metaTagsPath, JSON.stringify([], null, 2), 'utf8');
   }
 
   console.log('Seed transactions created successfully.');

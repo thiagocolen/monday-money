@@ -34,3 +34,7 @@ release
 
 /_gitignore-folder/*
 /core/*
+/core/data/*
+
+# Real Task temporary files
+real-task-*.*

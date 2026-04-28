@@ -26,7 +26,7 @@ import {
 } from "@/components/ui/table"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
-import { ChevronDown, ChevronUp, ChevronsUpDown, X, Loader2 } from "lucide-react"
+import { ChevronDown, ChevronUp, ChevronsUpDown, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 interface DataTableProps<TData, TValue> {
@@ -34,13 +34,15 @@ interface DataTableProps<TData, TValue> {
   data: TData[]
   onRowClick?: (row: TData) => void
   onSelectionChange?: (selectedRows: TData[]) => void
+  rowSelection?: Record<string, boolean>
+  onRowSelectionChange?: React.Dispatch<React.SetStateAction<Record<string, boolean>>>
+  getRowId?: (row: TData) => string
   filterable?: boolean
   paginated?: boolean
   pageSize?: number
   stickyHeader?: boolean
   headerOffset?: number
   meta?: any
-  loading?: boolean
 }
 
 export function DataTable<TData, TValue>({
@@ -48,18 +50,23 @@ export function DataTable<TData, TValue>({
   data,
   onRowClick,
   onSelectionChange,
+  rowSelection: controlledRowSelection,
+  onRowSelectionChange: controlledOnRowSelectionChange,
+  getRowId,
   filterable = false,
   paginated = false,
   pageSize = 50,
   stickyHeader = false,
   headerOffset = 0,
   meta,
-  loading = false,
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = React.useState<SortingState>([])
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
   const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({})
-  const [rowSelection, setRowSelection] = React.useState({})
+  const [internalRowSelection, setInternalRowSelection] = React.useState({})
+
+  const rowSelection = controlledRowSelection !== undefined ? controlledRowSelection : internalRowSelection
+  const setRowSelection = controlledOnRowSelectionChange !== undefined ? controlledOnRowSelectionChange : setInternalRowSelection
 
   const table = useReactTable({
     data,
@@ -71,7 +78,8 @@ export function DataTable<TData, TValue>({
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
     onColumnVisibilityChange: setColumnVisibility,
-    onRowSelectionChange: setRowSelection,
+    onRowSelectionChange: setRowSelection as any,
+    getRowId: getRowId as any,
     meta,
     state: {
       sorting,
@@ -116,14 +124,6 @@ export function DataTable<TData, TValue>({
         </div>
       )}
       <div className={cn("rounded-md border relative", !stickyHeader && "overflow-hidden")}>
-        {loading && (
-          <div className="absolute inset-x-0 top-0 z-50 flex justify-center bg-background/50 backdrop-blur-[1px] transition-all">
-            <div className="flex flex-col items-center gap-2 bg-background p-3 rounded-b-lg shadow-lg border-x border-b animate-in fade-in slide-in-from-top-2 duration-200">
-              <Loader2 className="h-5 w-5 animate-spin text-indigo-600" />
-              <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Processing...</span>
-            </div>
-          </div>
-        )}
         <Table containerClassName={stickyHeader ? "overflow-visible" : ""}>
           <TableHeader className={stickyHeader ? "z-20" : ""}>
             {table.getHeaderGroups().map((headerGroup) => (

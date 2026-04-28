@@ -12,6 +12,9 @@ import {
   handleDeleteImport,
   handleGetImportHistory,
   handleSaveCategory,
+  handleBulkSaveMetadata,
+  handleGetMetadata,
+  handleSaveMetadata,
   handleBackupCategories,
   handleGetBackupInfo
 } from "./backend/index.js"
@@ -19,31 +22,34 @@ import {
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
 
 // https://vite.dev/config/
-export default defineConfig({
-  base: './',
-  optimizeDeps: {
-    include: ["@phosphor-icons/react"],
-  },
-  server: {
-    watch: {
-      ignored: ["**/core/**"],
+export default defineConfig(({ mode }) => {
+  const isWeb = mode === 'web'
+
+  return {
+    base: './',
+    optimizeDeps: {
+      include: ["@phosphor-icons/react"],
     },
-  },
-  plugins: [
-    react(),
-    babel({ presets: [reactCompilerPreset()] }),
-    tailwindcss(),
-    electron({
-      main: {
-        entry: "electron/main.ts",
+    server: {
+      watch: {
+        ignored: ["**/core/**"],
       },
-      preload: {
-        input: "electron/preload.ts",
-      },
-    }),
-    {
-      name: "csv-api",
-      configureServer(server) {
+    },
+    plugins: [
+      react(),
+      babel({ presets: [reactCompilerPreset()] }),
+      tailwindcss(),
+      !isWeb && electron({
+        main: {
+          entry: "electron/main.ts",
+        },
+        preload: {
+          input: "electron/preload.ts",
+        },
+      }),
+      {
+        name: "csv-api",
+        configureServer(server) {
         server.middlewares.use(async (req, res, next) => {
           try {
             if (req.url?.startsWith("/api/data/")) {
@@ -127,6 +133,50 @@ export default defineConfig({
               return
             }
 
+            if (req.url === "/api/bulk-save-metadata" && req.method === "POST") {
+              let body = ""
+              req.on("data", (chunk) => { body += chunk.toString() })
+              req.on("end", async () => {
+                try {
+                  const updates = JSON.parse(body)
+                  const result = await handleBulkSaveMetadata(updates)
+                  res.statusCode = 200
+                  res.setHeader("Content-Type", "application/json")
+                  res.end(JSON.stringify(result))
+                } catch (e: any) {
+                  res.statusCode = 400
+                  res.end(JSON.stringify({ success: false, error: e.message }))
+                }
+              })
+              return
+            }
+
+            if (req.url === "/api/metadata" && req.method === "GET") {
+              const metadata = await handleGetMetadata()
+              res.statusCode = 200
+              res.setHeader("Content-Type", "application/json")
+              res.end(JSON.stringify(metadata))
+              return
+            }
+
+            if (req.url === "/api/metadata" && req.method === "POST") {
+              let body = ""
+              req.on("data", (chunk) => { body += chunk.toString() })
+              req.on("end", async () => {
+                try {
+                  const { type, data } = JSON.parse(body)
+                  const result = await handleSaveMetadata(type, data)
+                  res.statusCode = 200
+                  res.setHeader("Content-Type", "application/json")
+                  res.end(JSON.stringify(result))
+                } catch (e: any) {
+                  res.statusCode = 400
+                  res.end(JSON.stringify({ success: false, error: e.message }))
+                }
+              })
+              return
+            }
+
             if (req.url === "/api/backup-categories" && req.method === "POST") {
               try {
                 const result = await handleBackupCategories()
@@ -156,11 +206,12 @@ export default defineConfig({
           next()
         })
       }
-    }
-  ],
-  resolve: {
-    alias: {
-      "@": path.resolve(currentDir, "./src"),
     },
-  },
+    ].filter(Boolean) as any[],
+    resolve: {
+      alias: {
+        "@": path.resolve(currentDir, "./src"),
+      },
+    },
+  }
 })

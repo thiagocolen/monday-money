@@ -1,14 +1,22 @@
-import { useEffect, useState, useMemo, useCallback } from 'react'
-import { fetchTransactions, saveCategory, saveTags, saveBulkCategories, backupCategories, fetchBackupInfo } from '../lib/api'
+import { useEffect, useState, useMemo, useCallback, useTransition, Fragment } from 'react'
+import { 
+  fetchTransactions, 
+  backupCategories, 
+  fetchBackupInfo,
+  fetchMetadata,
+  saveMetadataConfig,
+  bulkSaveMetadata
+} from '../lib/api'
 import type { Transaction } from '../lib/api'
 import { columns } from '../components/columns'
 import { DataTable } from '../components/data-table'
 import { cn } from "@/lib/utils"
 import { TransactionChart } from '../components/transaction-chart'
+import { YearlyTransactionChart } from '../components/yearly-transaction-chart'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { addMonths, startOfMonth, endOfMonth, isWithinInterval, format, parseISO } from 'date-fns'
-import { ChevronLeft, ChevronRight, Edit3, Trash2, Database, Info, Tags as TagsIcon, History } from 'lucide-react'
+import { addMonths, startOfMonth, endOfMonth, format, parseISO, addYears, startOfYear, endOfYear } from 'date-fns'
+import { ChevronLeft, ChevronRight, Edit3, Trash2, Database, Info, History, Plus, X, Check, Search, Loader2, CalendarDays, CalendarRange } from 'lucide-react'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -21,51 +29,86 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogFooter,
   DialogDescription,
 } from "@/components/ui/dialog"
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
+  Tabs,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs"
 
-const CATEGORIES = [
-  "INCOME",
-  "HOUSE",
-  "ONLINE_SERVICES",
-  "HEALTH",
-  "SUPERMARKET",
-  "FOOD",
-  "TRANSPORTATION",
-  "INVESTMENTS",
-  "OTHERS"
+import { DataTableFacetedFilter } from '../components/ui/faceted-filter'
+
+const PRESET_COLORS = [
+  { name: 'Slate', color: '#64748b' },
+  { name: 'Red', color: '#ef4444' },
+  { name: 'Orange', color: '#f97316' },
+  { name: 'Amber', color: '#f59e0b' },
+  { name: 'Yellow', color: '#eab308' },
+  { name: 'Lime', color: '#84cc16' },
+  { name: 'Green', color: '#22c55e' },
+  { name: 'Emerald', color: '#10b981' },
+  { name: 'Teal', color: '#14b8a6' },
+  { name: 'Cyan', color: '#06b6d4' },
+  { name: 'Sky', color: '#0ea5e9' },
+  { name: 'Blue', color: '#3b82f6' },
+  { name: 'Indigo', color: '#6366f1' },
+  { name: 'Violet', color: '#8b5cf6' },
+  { name: 'Purple', color: '#a855f7' },
+  { name: 'Fuchsia', color: '#d946ef' },
+  { name: 'Pink', color: '#ec4899' },
+  { name: 'Rose', color: '#f43f5e' },
 ];
 
+
 export function TransactionsPage() {
+  const [isPending, startTransition] = useTransition()
+  const [isVisualPending, setIsVisualPending] = useState(false)
   const [data, setData] = useState<Transaction[]>([])
   const [loading, setLoading] = useState(true)
+  const [viewMode, setViewMode] = useState<'monthly' | 'yearly'>('monthly')
   const [filterOffset, setFilterOffset] = useState<number>(0)
-  const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null)
-  const [selectedTagsTransaction, setSelectedTagsTransaction] = useState<Transaction | null>(null)
-  const [selectedRows, setSelectedRows] = useState<Transaction[]>([])
-  const [newCategory, setNewCategory] = useState<string>("")
-  const [newTags, setNewTags] = useState<string>("")
+  const [yearOffset, setYearOffset] = useState<number>(0)
+  const [rowSelection, setRowSelection] = useState<Record<string, boolean>>({})
   const [isSaving, setIsSaving] = useState(false)
   const [isBulkEditDialogOpen, setIsBulkEditDialogOpen] = useState(false)
-  const [bulkCategory, setBulkCategory] = useState<string>("")
+  
+  // Metadata state
+  const [metaTags, setMetaTags] = useState<{ name: string, color: string, isDefault?: boolean }[]>([])
+  const [metaCategories, setMetaCategories] = useState<{ name: string, color: string, isDefault?: boolean }[]>([])
+  
+  // Bulk Edit state
+  const [bulkActiveTab, setBulkActiveTab] = useState<string>("categories")
+  const [bulkSearch, setBulkSearch] = useState("")
+  const [editingItem, setEditingItem] = useState<{ name: string, color: string, isNew?: boolean, isDefault?: boolean } | null>(null)
+
   const [isBackingUp, setIsBackingUp] = useState(false)
   const [backupInfo, setBackupInfo] = useState<{ count: number; latestDate: string | null }>({ count: 0, latestDate: null })
-  const [isMonthHovered, setIsMonthHovered] = useState(false)
+  const [isPeriodHovered, setIsPeriodHovered] = useState(false)
 
   // Filter states
   const [globalSearch, setGlobalSearch] = useState("")
-  const [ownerFilter, setOwnerFilter] = useState("all")
-  const [categoryFilter, setCategoryFilter] = useState("all")
-  const [tagFilter, setTagFilter] = useState("all")
+  const [localSearch, setLocalSearch] = useState("")
+  const [ownerFilter, setOwnerFilter] = useState<Record<string, 'include' | 'exclude'>>({})
+  const [categoryFilter, setCategoryFilter] = useState<Record<string, 'include' | 'exclude'>>({})
+  const [tagFilter, setTagFilter] = useState<Record<string, 'include' | 'exclude'>>({})
   const [dayFilter, setDayFilter] = useState<string | null>(null)
+
+  // Debounce search input
+  useEffect(() => {
+    if (localSearch === globalSearch) return
+
+    const timer = setTimeout(() => {
+      setIsVisualPending(true)
+      requestAnimationFrame(() => {
+        startTransition(() => {
+          setGlobalSearch(localSearch)
+        })
+      })
+    }, 400) // 400ms debounce
+
+    return () => clearTimeout(timer)
+  }, [localSearch, globalSearch])
 
   const loadBackupInfo = useCallback(async () => {
     const info = await fetchBackupInfo()
@@ -84,46 +127,67 @@ export function TransactionsPage() {
     }
   }, [])
 
+  const loadMetadata = useCallback(async () => {
+    const meta = await fetchMetadata()
+    setMetaTags(meta.tags || [])
+    setMetaCategories(meta.categories || [])
+  }, [])
+
   useEffect(() => {
     loadData()
     loadBackupInfo()
-  }, [loadData, loadBackupInfo])
+    loadMetadata()
+  }, [loadData, loadBackupInfo, loadMetadata])
 
-  // 1. First, filter by month
-  const monthData = useMemo(() => {
+  // Sync isVisualPending with isPending
+  useEffect(() => {
+    if (!isPending) setIsVisualPending(false)
+  }, [isPending])
+
+  // 1. First, filter by period (month or year)
+  const periodData = useMemo(() => {
     const now = new Date()
-    const targetDate = addMonths(now, filterOffset)
-    const start = startOfMonth(targetDate)
-    const end = endOfMonth(targetDate)
+    
+    if (viewMode === 'monthly') {
+      const targetDate = addMonths(now, filterOffset)
+      const startStr = format(startOfMonth(targetDate), 'yyyy-MM-dd')
+      const endStr = format(endOfMonth(targetDate), 'yyyy-MM-dd')
+      return data.filter((item) => item.date >= startStr && item.date <= endStr)
+    } else {
+      const targetDate = addYears(now, yearOffset)
+      const startStr = format(startOfYear(targetDate), 'yyyy-MM-dd')
+      const endStr = format(endOfYear(targetDate), 'yyyy-MM-dd')
+      return data.filter((item) => item.date >= startStr && item.date <= endStr)
+    }
+  }, [data, filterOffset, yearOffset, viewMode])
 
-    return data.filter((item) => {
-      const itemDate = parseISO(item.date)
-      return isWithinInterval(itemDate, { start, end })
-    })
-  }, [data, filterOffset])
-
-  // 2. Get unique categories, owners, and tags from the current month
+  // 2. Get unique categories, owners, and tags from all transactions + metadata
   const categories = useMemo(() => {
     const set = new Set(
-      monthData
+      data
         .map((item) => item.category || "Uncategorized")
         .filter((cat) => cat !== "chain-transaction")
     )
+    // Add categories from metadata to ensure they always show up
+    metaCategories.forEach(cat => set.add(cat.name))
     return Array.from(set).sort()
-  }, [monthData])
+  }, [data, metaCategories])
 
   const owners = useMemo(() => {
     const set = new Set(
-      monthData
+      data
         .map((item) => (item.owner || "No owner"))
         .filter((owner) => owner !== "seed-transaction")
     )
     return Array.from(set).sort()
-  }, [monthData])
+  }, [data])
 
   const allTags = useMemo(() => {
     const set = new Set<string>()
-    monthData.forEach(item => {
+    // Add tags from metadata
+    metaTags.forEach(tag => set.add(tag.name))
+    // Add tags from all transactions
+    data.forEach(item => {
       if (item.tags) {
         item.tags.split(',').forEach(tag => {
           const trimmed = tag.trim()
@@ -132,13 +196,13 @@ export function TransactionsPage() {
       }
     })
     return Array.from(set).sort()
-  }, [monthData])
+  }, [data, metaTags])
 
   // 3. Apply the remaining filters
   const filteredData = useMemo(() => {
     const searchTerms = globalSearch.toLowerCase().split(/\s+/).filter(Boolean);
 
-    return monthData.filter((item) => {
+    return periodData.filter((item) => {
       // Hide system reserved rows
       if (item.category === 'chain-transaction') return false;
       if (item.owner === 'seed-transaction') return false;
@@ -147,7 +211,18 @@ export function TransactionsPage() {
       const matchesSearch = searchTerms.every(term => {
         const amountStr = item.amount.toString();
         const formattedAmount = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(item.amount).toLowerCase();
-        
+
+        // Numeric comparisons (e.g., >100, <50, >=200, <=-10)
+        const numericMatch = term.match(/^([<>]=?)(-?\d+(?:\.\d+)?)$/);
+        if (numericMatch) {
+          const [, operator, valueStr] = numericMatch;
+          const value = parseFloat(valueStr);
+          if (operator === ">") return item.amount > value;
+          if (operator === "<") return item.amount < value;
+          if (operator === ">=") return item.amount >= value;
+          if (operator === "<=") return item.amount <= value;
+        }
+
         return (
           item.description.toLowerCase().includes(term) ||
           (item.category || "Uncategorized").toLowerCase().includes(term) ||
@@ -159,99 +234,143 @@ export function TransactionsPage() {
         );
       });
 
-      const matchOwner = ownerFilter === "all" || (item.owner || "No owner") === ownerFilter
-      const matchCat = categoryFilter === "all" || (item.category || "Uncategorized") === categoryFilter
-      const matchTag = tagFilter === "all" || (item.tags || "").split(',').some(t => t.trim() === tagFilter)
+      // Filter logic with Include/Exclude
+      const applyFilter = (val: string, filter: Record<string, 'include' | 'exclude'>) => {
+        const keys = Object.keys(filter)
+        if (keys.length === 0) return true
+        
+        const includes = keys.filter(k => filter[k] === 'include')
+        const excludes = keys.filter(k => filter[k] === 'exclude')
+
+        // If there are 'include' filters, the value must be one of them
+        if (includes.length > 0 && !includes.includes(val)) return false
+        
+        // If there are 'exclude' filters, the value must not be one of them
+        if (excludes.includes(val)) return false
+        
+        return true
+      }
+
+      // Tags need special multi-value logic
+      const applyTagFilter = (tagsStr: string, filter: Record<string, 'include' | 'exclude'>) => {
+        const keys = Object.keys(filter)
+        if (keys.length === 0) return true
+        
+        const currentTags = tagsStr.split(',').map(t => t.trim())
+        const includes = keys.filter(k => filter[k] === 'include')
+        const excludes = keys.filter(k => filter[k] === 'exclude')
+
+        if (includes.length > 0 && !includes.some(t => currentTags.includes(t))) return false
+        if (excludes.some(t => currentTags.includes(t))) return false
+        
+        return true
+      }
+
+      const matchOwner = applyFilter(item.owner || "No owner", ownerFilter)
+      const matchCat = applyFilter(item.category || "Uncategorized", categoryFilter)
+      const matchTag = applyTagFilter(item.tags || "", tagFilter)
       const matchDay = !dayFilter || item.date === dayFilter
       
       return matchesSearch && matchOwner && matchCat && matchTag && matchDay
     })
-  }, [monthData, globalSearch, ownerFilter, categoryFilter, tagFilter, dayFilter])
+  }, [periodData, globalSearch, ownerFilter, categoryFilter, tagFilter, dayFilter])
 
-  const currentMonthLabel = useMemo(() => {
+  const selectedRows = useMemo(() => {
+    return filteredData.filter(row => rowSelection[row.id])
+  }, [filteredData, rowSelection])
+
+  const handleSaveMetaItem = async (type: 'tags' | 'categories', item: { name: string, color: string }) => {
+    const current = type === 'tags' ? [...metaTags] : [...metaCategories]
+    const index = current.findIndex(i => i.name.toLowerCase() === item.name.toLowerCase())
+    
+    if (index > -1) {
+      if (current[index].isDefault) {
+        toast.error(`Cannot modify default ${type === 'tags' ? 'tag' : 'category'}`)
+        return
+      }
+      current[index] = { ...current[index], ...item }
+    } else {
+      current.push(item)
+    }
+    
+    const success = await saveMetadataConfig(type, current)
+    if (success) {
+      if (type === 'tags') setMetaTags(current)
+      else setMetaCategories(current)
+      setEditingItem(null)
+      toast.success(`${type === 'tags' ? 'Tag' : 'Category'} saved`)
+    }
+  }
+
+  const handleDeleteMetaItem = async (type: 'tags' | 'categories', name: string) => {
+    const current = type === 'tags' ? metaTags.filter(i => i.name !== name) : metaCategories.filter(i => i.name !== name)
+    const success = await saveMetadataConfig(type, current)
+    if (success) {
+      if (type === 'tags') setMetaTags(current)
+      else setMetaCategories(current)
+      toast.success(`${type === 'tags' ? 'Tag' : 'Category'} deleted`)
+    }
+  }
+
+  const handleBulkApply = async (type: 'tags' | 'categories', value: string, action: 'add' | 'remove' | 'set') => {
+    if (selectedRows.length === 0) return
+    setIsSaving(true)
+
+    const updates = selectedRows.map(row => {
+      const update: any = { transactionHash: row.rowHash }
+      if (type === 'categories') {
+        update.category = action === 'remove' ? '' : value
+      } else {
+        const currentTags = row.tags ? row.tags.split(',').map(t => t.trim()).filter(Boolean) : []
+        if (action === 'add') {
+          if (!currentTags.includes(value)) currentTags.push(value)
+        } else if (action === 'remove') {
+          const index = currentTags.indexOf(value)
+          if (index > -1) currentTags.splice(index, 1)
+        } else {
+          // 'set' is not usually used for tags in bulk but we could
+        }
+        update.tags = currentTags.join(',')
+      }
+      return update
+    })
+
+    const success = await bulkSaveMetadata(updates)
+    if (success) {
+      toast.success(`Updated ${selectedRows.length} transactions`)
+      loadData(false)
+    } else {
+      toast.error("Failed to update transactions")
+    }
+    setIsSaving(false)
+  }
+
+  const currentPeriodLabel = useMemo(() => {
     const now = new Date()
-    const targetDate = addMonths(now, filterOffset)
-    return format(targetDate, 'MMMM yyyy')
-  }, [filterOffset])
+    if (viewMode === 'monthly') {
+      const targetDate = addMonths(now, filterOffset)
+      return format(targetDate, 'MMMM yyyy')
+    } else {
+      const targetDate = addYears(now, yearOffset)
+      return format(targetDate, 'yyyy')
+    }
+  }, [filterOffset, yearOffset, viewMode])
 
-  const handleRowClick = (transaction: Transaction) => {
+  const handleEditCategory = (transaction: Transaction) => {
     if (transaction.category === 'chain-transaction') return;
-    setSelectedTransaction(transaction)
-    setNewCategory(transaction.category || "")
+    if (!rowSelection[transaction.id]) {
+      setRowSelection({ [transaction.id]: true })
+    }
+    setBulkActiveTab("categories")
+    setIsBulkEditDialogOpen(true)
   }
 
   const handleEditTags = (transaction: Transaction) => {
-    setSelectedTagsTransaction(transaction)
-    setNewTags(transaction.tags || "")
-  }
-
-  const handleSaveCategory = async () => {
-    if (!selectedTransaction) return
-    setIsSaving(true)
-    
-    // Optimistic UI update
-    const previousData = [...data]
-    setData(prev => prev.map(item => 
-      item.rowHash === selectedTransaction.rowHash 
-        ? { ...item, category: newCategory } 
-        : item
-    ))
-
-    const success = await saveCategory(selectedTransaction.rowHash, newCategory)
-    if (success) {
-      toast.success("Category updated")
-      setSelectedTransaction(null)
-      loadData(false) // Background refresh
-    } else {
-      toast.error("Failed to save category")
-      setData(previousData) // Revert on failure
+    if (!rowSelection[transaction.id]) {
+      setRowSelection({ [transaction.id]: true })
     }
-    setIsSaving(false)
-  }
-
-  const handleSaveTags = async () => {
-    if (!selectedTagsTransaction) return
-    setIsSaving(true)
-    
-    // Optimistic UI update
-    const previousData = [...data]
-    setData(prev => prev.map(item => 
-      item.rowHash === selectedTagsTransaction.rowHash 
-        ? { ...item, tags: newTags } 
-        : item
-    ))
-
-    const success = await saveTags(selectedTagsTransaction.rowHash, newTags)
-    if (success) {
-      toast.success("Tags updated")
-      setSelectedTagsTransaction(null)
-      loadData(false) // Background refresh
-    } else {
-      toast.error("Failed to save tags")
-      setData(previousData) // Revert on failure
-    }
-    setIsSaving(false)
-  }
-
-  const handleBulkSave = async () => {
-    if (selectedRows.length === 0 || !bulkCategory) return
-    setIsSaving(true)
-    
-    const updates = selectedRows.map(row => ({
-      transactionHash: row.rowHash,
-      category: bulkCategory
-    }))
-
-    const success = await saveBulkCategories(updates)
-    if (success) {
-      toast.success(`Updated ${selectedRows.length} transactions`)
-      setIsBulkEditDialogOpen(false)
-      setBulkCategory("")
-      loadData(false)
-    } else {
-      toast.error("Failed to update some transactions")
-    }
-    setIsSaving(false)
+    setBulkActiveTab("tags")
+    setIsBulkEditDialogOpen(true)
   }
 
   const handleBackup = async () => {
@@ -271,21 +390,91 @@ export function TransactionsPage() {
     }
   }
 
-  const resetFilters = () => {
-    setGlobalSearch("")
-    setOwnerFilter("all")
-    setCategoryFilter("all")
-    setTagFilter("all")
-    setDayFilter(null)
+  const resetFilters = useCallback(() => {
+    setIsVisualPending(true)
+    requestAnimationFrame(() => {
+      startTransition(() => {
+        setLocalSearch("")
+        setGlobalSearch("")
+        setOwnerFilter({})
+        setCategoryFilter({})
+        setTagFilter({})
+        setDayFilter(null)
+      })
+    })
+  }, [])
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't trigger shortcuts if user is typing in an input
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        if (e.key === 'Escape') {
+          (e.target as HTMLElement).blur()
+        }
+        return
+      }
+
+      if (e.key === 'Escape') {
+        if (isBulkEditDialogOpen) {
+          setIsBulkEditDialogOpen(false)
+        } else if (Object.keys(rowSelection).length > 0) {
+          setRowSelection({})
+        } else if (Object.keys(ownerFilter).length > 0 || Object.keys(categoryFilter).length > 0 || Object.keys(tagFilter).length > 0 || globalSearch || dayFilter) {
+          resetFilters()
+        }
+      } else if (e.key.toLowerCase() === 'a') {
+        e.preventDefault() // Prevent scroll or other browser defaults
+        const allSelection: Record<string, boolean> = {}
+        filteredData.forEach(row => {
+          allSelection[row.id] = true
+        })
+        setRowSelection(allSelection)
+      } else if (e.key.toLowerCase() === 'b') {
+        e.preventDefault()
+        if (selectedRows.length > 0) {
+          setIsBulkEditDialogOpen(true)
+        } else {
+          toast.error("Select transactions first to bulk edit (or press 'A' to select all)", { duration: 2000 })
+        }
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [filteredData, selectedRows.length, resetFilters, isBulkEditDialogOpen, rowSelection, ownerFilter, categoryFilter, tagFilter, globalSearch, dayFilter])
+
+  const handlePeriodChange = (offsetUpdate: number | ((prev: number) => number)) => {
+    setIsVisualPending(true)
+    requestAnimationFrame(() => {
+      startTransition(() => {
+        if (viewMode === 'monthly') {
+          if (typeof offsetUpdate === 'function') {
+            setFilterOffset(offsetUpdate)
+          } else {
+            setFilterOffset(offsetUpdate)
+          }
+        } else {
+          if (typeof offsetUpdate === 'function') {
+            setYearOffset(offsetUpdate)
+          } else {
+            setYearOffset(offsetUpdate)
+          }
+        }
+        setDayFilter(null)
+      })
+    })
   }
 
-  const handleMonthChange = (offsetUpdate: number | ((prev: number) => number)) => {
-    if (typeof offsetUpdate === 'function') {
-      setFilterOffset(offsetUpdate)
-    } else {
-      setFilterOffset(offsetUpdate)
-    }
-    setDayFilter(null)
+  const handleToggleViewMode = (mode: 'monthly' | 'yearly') => {
+    if (mode === viewMode) return
+    setIsVisualPending(true)
+    requestAnimationFrame(() => {
+      startTransition(() => {
+        setViewMode(mode)
+        setDayFilter(null)
+      })
+    })
   }
 
   if (loading && data.length === 0) {
@@ -301,13 +490,34 @@ export function TransactionsPage() {
       <div className="flex flex-col space-y-4">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <h2 className="text-2xl font-bold tracking-tight">Monthly Transactions</h2>
+            <h2 className="text-2xl font-bold tracking-tight">Transactions</h2>
             <p className="text-muted-foreground">
-              Visualize and categorize your monthly spending.
+              Visualize and categorize your spending by {viewMode}.
             </p>
           </div>
           
           <div className="flex items-center space-x-4">
+            <div className="flex items-center p-1 bg-muted/50 rounded-lg border shadow-sm">
+              <Button
+                variant={viewMode === 'monthly' ? "default" : "ghost"}
+                size="sm"
+                className={cn("h-8 text-xs px-3", viewMode === 'monthly' && "bg-indigo-600 hover:bg-indigo-700 shadow-sm")}
+                onClick={() => handleToggleViewMode('monthly')}
+              >
+                <CalendarDays className="mr-2 h-3.5 w-3.5" />
+                Monthly
+              </Button>
+              <Button
+                variant={viewMode === 'yearly' ? "default" : "ghost"}
+                size="sm"
+                className={cn("h-8 text-xs px-3", viewMode === 'yearly' && "bg-indigo-600 hover:bg-indigo-700 shadow-sm")}
+                onClick={() => handleToggleViewMode('yearly')}
+              >
+                <CalendarRange className="mr-2 h-3.5 w-3.5" />
+                Yearly
+              </Button>
+            </div>
+
             <div className="flex items-center space-x-2 bg-indigo-50/30 dark:bg-indigo-950/20 p-1.5 rounded-lg border border-indigo-100/50 dark:border-indigo-900/50 shadow-sm">
               <Button
                 variant="default"
@@ -353,13 +563,13 @@ export function TransactionsPage() {
               </div>
             </div>
 
-            <div className="flex items-center space-x-2 border rounded-md p-1 bg-background shadow-sm">
+            <div className="flex items-center space-x-2 border rounded-md p-1 bg-indigo-50/30 dark:bg-indigo-950/20 shadow-sm border-indigo-100/50 dark:border-indigo-900/50">
               <Button 
                 variant="ghost" 
                 size="icon"
-                className="h-8 w-8"
-                onClick={() => handleMonthChange(prev => prev - 1)}
-                aria-label="Previous Month"
+                className="h-8 w-8 hover:bg-indigo-600 hover:text-white transition-all duration-200"
+                onClick={() => handlePeriodChange(prev => prev - 1)}
+                aria-label={viewMode === 'monthly' ? "Previous Month" : "Previous Year"}
               >
                 <ChevronLeft className="h-4 w-4" />
               </Button>
@@ -367,21 +577,21 @@ export function TransactionsPage() {
               <span 
                 className={cn(
                   "text-xs font-mono font-bold min-w-[120px] text-center uppercase tracking-tighter cursor-pointer transition-all duration-200 rounded px-2 py-1",
-                  isMonthHovered ? "bg-indigo-600 text-white scale-105" : "text-foreground"
+                  isPeriodHovered ? "bg-indigo-600 text-white scale-105" : "text-foreground hover:bg-muted/50"
                 )}
-                onMouseEnter={() => setIsMonthHovered(true)}
-                onMouseLeave={() => setIsMonthHovered(false)}
-                onClick={() => handleMonthChange(0)}
+                onMouseEnter={() => setIsPeriodHovered(true)}
+                onMouseLeave={() => setIsPeriodHovered(false)}
+                onClick={() => handlePeriodChange(0)}
               >
-                {isMonthHovered ? "Current Month" : currentMonthLabel}
+                {isPeriodHovered ? (viewMode === 'monthly' ? "Current Month" : "Current Year") : currentPeriodLabel}
               </span>
 
               <Button 
                 variant="ghost" 
                 size="icon"
-                className="h-8 w-8"
-                onClick={() => handleMonthChange(prev => prev + 1)}
-                aria-label="Next Month"
+                className="h-8 w-8 hover:bg-indigo-600 hover:text-white transition-all duration-200"
+                onClick={() => handlePeriodChange(prev => prev + 1)}
+                aria-label={viewMode === 'monthly' ? "Next Month" : "Next Year"}
               >
                 <ChevronRight className="h-4 w-4" />
               </Button>
@@ -390,57 +600,52 @@ export function TransactionsPage() {
         </div>
       </div>
 
-      <TransactionChart 
-        data={filteredData} 
-        filterOffset={filterOffset} 
-        onDayClick={(day) => setDayFilter(day === dayFilter ? null : day)}
-        loading={loading}
-      />
+      {viewMode === 'monthly' ? (
+        <TransactionChart 
+          data={filteredData} 
+          filterOffset={filterOffset} 
+          onDayClick={(day) => setDayFilter(day === dayFilter ? null : day)}
+          loading={loading}
+          categoriesMeta={metaCategories}
+        />
+      ) : (
+        <YearlyTransactionChart
+          data={filteredData}
+          yearOffset={yearOffset}
+          loading={loading}
+          categoriesMeta={metaCategories}
+        />
+      )}
 
       <div className="sticky top-14 z-30 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 py-4 -mx-4 px-4 border-b mb-4 shadow-sm">
         <div className="flex flex-wrap items-center gap-2">
           <Input
             placeholder="Search all columns..."
-            value={globalSearch}
-            onChange={(e) => setGlobalSearch(e.target.value)}
+            value={localSearch}
+            onChange={(e) => setLocalSearch(e.target.value)}
             className="max-w-xs h-8 text-xs font-mono"
           />
           
-          <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-            <SelectTrigger className="h-8 w-[140px] text-xs">
-              <SelectValue placeholder="Category" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Categories</SelectItem>
-              {categories.map((cat) => (
-                <SelectItem key={cat} value={cat} className="text-xs">{cat}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <DataTableFacetedFilter
+            title="Category"
+            options={categories.map(cat => ({ label: cat, value: cat }))}
+            selectedValues={categoryFilter}
+            onSelect={(v) => startTransition(() => setCategoryFilter(v))}
+          />
 
-          <Select value={tagFilter} onValueChange={setTagFilter}>
-            <SelectTrigger className="h-8 w-[140px] text-xs">
-              <SelectValue placeholder="Tag" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Tags</SelectItem>
-              {allTags.map((tag) => (
-                <SelectItem key={tag} value={tag} className="text-xs">{tag}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <DataTableFacetedFilter
+            title="Tag"
+            options={allTags.map(tag => ({ label: tag, value: tag }))}
+            selectedValues={tagFilter}
+            onSelect={(v) => startTransition(() => setTagFilter(v))}
+          />
 
-          <Select value={ownerFilter} onValueChange={setOwnerFilter}>
-            <SelectTrigger className="h-8 w-[140px] text-xs">
-              <SelectValue placeholder="Owner" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Owners</SelectItem>
-              {owners.map((owner) => (
-                <SelectItem key={owner} value={owner} className="text-xs">{owner}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <DataTableFacetedFilter
+            title="Owner"
+            options={owners.map(owner => ({ label: owner, value: owner }))}
+            selectedValues={ownerFilter}
+            onSelect={(v) => startTransition(() => setOwnerFilter(v))}
+          />
 
           {dayFilter && (
             <div className="flex items-center bg-primary/10 border border-primary/20 rounded-md px-2 py-1 h-8">
@@ -449,7 +654,7 @@ export function TransactionsPage() {
             </div>
           )}
 
-          {(globalSearch || ownerFilter !== "all" || categoryFilter !== "all" || tagFilter !== "all" || dayFilter) && (
+          {(globalSearch || Object.keys(ownerFilter).length > 0 || Object.keys(categoryFilter).length > 0 || Object.keys(tagFilter).length > 0 || dayFilter) && (
             <Button
               variant="ghost"
               size="sm"
@@ -459,6 +664,13 @@ export function TransactionsPage() {
               Clear
             </Button>
           )}
+
+          <div className="flex items-center gap-1.5 px-2 border-l ml-1">
+            <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-tight">Total:</span>
+            <Badge variant="secondary" className="h-5 px-1.5 text-[10px] font-mono font-bold bg-muted/50 border-none">
+              {filteredData.length}
+            </Badge>
+          </div>
 
           <div className="ml-auto flex items-center gap-2">
             {selectedRows.length > 0 && (
@@ -476,164 +688,217 @@ export function TransactionsPage() {
         </div>
       </div>
 
-      <DataTable 
-        columns={columns} 
-        data={filteredData} 
-        onSelectionChange={setSelectedRows}
-        paginated={false}
-        stickyHeader
-        headerOffset={121}
-        loading={loading}
-        meta={{
-          onEditTags: handleEditTags,
-          onEditCategory: handleRowClick
-        }}
-      />
-
-      {/* Individual Category Edit Dialog */}
-      <Dialog open={!!selectedTransaction} onOpenChange={(open) => !open && setSelectedTransaction(null)}>
-        <DialogContent className="sm:max-w-[425px]">
-          <DialogHeader>
-            <DialogTitle className="text-lg font-bold">Edit Category</DialogTitle>
-            <DialogDescription className="text-xs">
-              Update the category for this specific transaction.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-4 space-y-4">
-            <div className="grid grid-cols-4 items-start gap-4">
-              <span className="text-[10px] font-bold text-muted-foreground uppercase pt-1">Description</span>
-              <span className="col-span-3 text-sm font-medium">{selectedTransaction?.description}</span>
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <span className="text-[10px] font-bold text-muted-foreground uppercase">Amount</span>
-              <span className={`col-span-3 text-sm font-mono font-bold ${selectedTransaction && selectedTransaction.amount < 0 ? "text-destructive" : "text-emerald-600"}`}>
-                {selectedTransaction && new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(selectedTransaction.amount)}
-              </span>
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <div className="flex items-center gap-1.5">
-                <span className="text-[10px] font-bold text-muted-foreground uppercase">Category</span>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Info className="h-3 w-3 text-muted-foreground hover:text-foreground cursor-help" />
-                  </TooltipTrigger>
-                  <TooltipContent side="right" className="max-w-[300px] p-3">
-                    <div className="space-y-2 text-[10px]">
-                      <p><strong>INCOME</strong> (TRANSAÇÕES POSITIVAS)</p>
-                      <p><strong>HOUSE</strong> (ALUGUEL, CONDOMÍNIO, IPTU, INTERNET, LUZ, GÁS)</p>
-                      <p><strong>ONLINE_SERVICES</strong> (NETFLIX, SPOTIFY, OUTROS)</p>
-                      <p><strong>HEALTH</strong> (PLANO DE SAÚDE, FARMÁCIA, MÉDICO, ACADEMIA, NATAÇÃO)</p>
-                      <p><strong>SUPERMARKET</strong> (SUPERMERCADO, HORTFRUTI, AÇOUGUE)</p>
-                      <p><strong>FOOD</strong> (DELIVERY, RESTAURANTE, BAR, BALADA)</p>
-                      <p><strong>TRANSPORTATION</strong> (UBER, BILHETE ÚNICO, COMBUSTÍVEL)</p>
-                      <p><strong>INVESTMENTS</strong> (INVESTIMENTOS)</p>
-                      <p><strong>OTHERS</strong> (OUTROS)</p>
-                      <p><strong>chain-transaction</strong> (SYSTEM RESERVED)</p>
-                    </div>
-                  </TooltipContent>
-                </Tooltip>
-              </div>
-              <div className="col-span-3">
-                <Select value={newCategory} onValueChange={setNewCategory}>
-                  <SelectTrigger className="h-9 text-xs">
-                    <SelectValue placeholder="Select a category" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {CATEGORIES.map(cat => (
-                      <SelectItem key={cat} value={cat} className="text-xs">{cat}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+      <div className="relative">
+        {(isPending || isSaving || isVisualPending) && (
+          <div className="absolute inset-0 z-50 flex flex-col items-center justify-start pt-32 bg-background/60 backdrop-blur-[1px] animate-in fade-in duration-200 rounded-lg">
+            <div className="flex flex-col items-center p-6 bg-background/90 rounded-xl shadow-xl border border-indigo-100 dark:border-indigo-900 scale-90">
+              <Loader2 className="h-8 w-8 animate-spin text-indigo-600 mb-3" />
+              <p className="text-xs font-bold uppercase tracking-[0.2em] text-indigo-900 dark:text-indigo-400">Processing</p>
             </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" size="sm" onClick={() => setSelectedTransaction(null)} disabled={isSaving}>Cancel</Button>
-            <Button size="sm" onClick={handleSaveCategory} disabled={isSaving}>{isSaving ? "Saving..." : "Save Changes"}</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        )}
+        <DataTable 
+          columns={columns} 
+          data={filteredData} 
+          rowSelection={rowSelection}
+          onRowSelectionChange={setRowSelection}
+          getRowId={(row) => row.id}
+          paginated={false}
+          stickyHeader
+          headerOffset={121}
+          meta={{
+            onEditTags: handleEditTags,
+            onEditCategory: handleEditCategory,
+            tagsMeta: metaTags,
+            categoriesMeta: metaCategories
+          }}
+          />      </div>
 
-      {/* Individual Tags Edit Dialog */}
-      <Dialog open={!!selectedTagsTransaction} onOpenChange={(open) => !open && setSelectedTagsTransaction(null)}>
-        <DialogContent className="sm:max-w-[425px]">
-          <DialogHeader>
-            <DialogTitle className="text-lg font-bold flex items-center gap-2">
-              <TagsIcon className="h-5 w-5 text-indigo-600" />
-              Edit Tags
-            </DialogTitle>
-            <DialogDescription className="text-xs">
-              Manage tags for this transaction. Separate multiple tags with commas.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-4 space-y-4">
-            <div className="grid grid-cols-4 items-start gap-4">
-              <span className="text-[10px] font-bold text-muted-foreground uppercase pt-1">Description</span>
-              <span className="col-span-3 text-sm font-medium">{selectedTagsTransaction?.description}</span>
-            </div>
-            <div className="space-y-2">
-              <span className="text-[10px] font-bold text-muted-foreground uppercase">Tags (comma separated)</span>
-              <Input 
-                value={newTags} 
-                onChange={(e) => setNewTags(e.target.value)}
-                placeholder="e.g. travel, urgent, recurring"
-                className="h-10 text-sm font-mono"
-                autoFocus
-              />
-            </div>
-            {newTags && (
-              <div className="flex flex-wrap gap-1.5 pt-2">
-                {newTags.split(',').map((t, i) => {
-                  const tag = t.trim()
-                  if (!tag) return null
-                  return (
-                    <div key={i} className="text-[9px] px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-100 font-bold uppercase tracking-wider">
-                      {tag}
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" size="sm" onClick={() => setSelectedTagsTransaction(null)} disabled={isSaving}>Cancel</Button>
-            <Button className="bg-indigo-600 hover:bg-indigo-700 text-white" size="sm" onClick={handleSaveTags} disabled={isSaving}>
-              {isSaving ? "Saving..." : "Update Tags"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Bulk Edit Dialog */}
+      {/* Bulk Edit Tags and Categories Dialog */}
       <Dialog open={isBulkEditDialogOpen} onOpenChange={setIsBulkEditDialogOpen}>
-        <DialogContent className="sm:max-w-[425px]">
-          <DialogHeader>
-            <DialogTitle className="text-lg font-bold text-indigo-600">Bulk Edit Categories</DialogTitle>
-            <DialogDescription className="text-xs">
-              Changing category for <strong>{selectedRows.length}</strong> selected transactions.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-6">
-            <div className="space-y-3">
-              <p className="text-[10px] font-bold text-muted-foreground uppercase">New Category</p>
-              <Select value={bulkCategory} onValueChange={setBulkCategory}>
-                <SelectTrigger className="h-10">
-                  <SelectValue placeholder="Select category for all..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {CATEGORIES.map(cat => (
-                    <SelectItem key={cat} value={cat} className="text-sm">{cat}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+        <DialogContent className="sm:max-w-[500px] p-0 overflow-hidden">
+          <div className="p-6 border-b bg-muted/20">
+            <DialogHeader>
+              <DialogTitle className="text-xl font-bold flex items-center gap-2 text-indigo-600">
+                <Edit3 className="h-5 w-5" />
+                Bulk Edit Transactions
+              </DialogTitle>
+              <DialogDescription className="text-xs">
+                Applying changes to <strong>{selectedRows.length}</strong> selected records.
+              </DialogDescription>
+            </DialogHeader>
           </div>
-          <DialogFooter>
-            <Button variant="outline" size="sm" onClick={() => setIsBulkEditDialogOpen(false)} disabled={isSaving}>Cancel</Button>
-            <Button className="bg-indigo-600 hover:bg-indigo-700" size="sm" onClick={handleBulkSave} disabled={isSaving || !bulkCategory}>
-              {isSaving ? "Updating..." : `Update ${selectedRows.length} Records`}
-            </Button>
-          </DialogFooter>
+
+          <Tabs value={bulkActiveTab} onValueChange={setBulkActiveTab} className="w-full">
+            <div className="px-6 pt-4">
+              <TabsList className="grid w-full grid-cols-2 h-9">
+                <div className="flex items-center justify-center gap-2">
+                  <TabsTrigger value="categories" className="text-xs flex-1">
+                    Categories
+                  </TabsTrigger>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div className="p-1 cursor-help">
+                        <Info className="h-3 w-3 text-muted-foreground hover:text-indigo-600 transition-colors" />
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent side="right" className="max-w-[300px] p-3 z-[100]">
+                      <div className="space-y-2 text-[10px] leading-relaxed">
+                        <p className="font-bold border-b pb-1 mb-1">Category Explanations</p>
+                        <div className="grid grid-cols-[100px_1fr] gap-x-2 gap-y-1">
+                          {metaCategories.map(cat => (
+                            <Fragment key={cat.name}>
+                              <span className="font-bold" style={{ color: cat.color }}>{cat.name}</span>
+                              <span className="text-[9px] opacity-80">
+                                {cat.name === 'NULLED' && 'Ignored transactions'}
+                                {cat.name === 'INCOME' && 'Positive transactions / Salary'}
+                                {cat.name === 'HOUSE' && 'Rent, Condo, Taxes, Internet, Utilities'}
+                                {cat.name === 'HEALTH' && 'Insurance, Pharmacy, Doctor, Gym'}
+                                {cat.name === 'SUPERMARKET' && 'Groceries, Market, Butcher'}
+                                {cat.name === 'FOOD' && 'Restaurants, Delivery, Bars'}
+                                {cat.name === 'ONLINE_SERVICES' && 'Subscriptions, SaaS'}
+                                {cat.name === 'TRANSPORTATION' && 'Uber, Public Transit, Fuel'}
+                                {cat.name === 'INVESTMENTS' && 'Stocks, Crypto, Savings'}
+                                {cat.name === 'OTHERS' && 'Everything else'}
+                                {!['NULLED', 'INCOME', 'HOUSE', 'HEALTH', 'SUPERMARKET', 'FOOD', 'ONLINE_SERVICES', 'TRANSPORTATION', 'INVESTMENTS', 'OTHERS'].includes(cat.name) && 'Custom category'}
+                              </span>
+                            </Fragment>
+                          ))}
+                        </div>
+                      </div>
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+                <TabsTrigger value="tags" className="text-xs">Tags</TabsTrigger>
+              </TabsList>
+            </div>
+
+            <div className="p-6">
+              <div className="flex items-center gap-2 mb-4 bg-muted/50 rounded-md px-2.5 py-1.5 border">
+                <Search className="h-3.5 w-3.5 text-muted-foreground" />
+                <Input 
+                  placeholder={`Search ${bulkActiveTab}...`} 
+                  className="h-6 border-none bg-transparent shadow-none focus-visible:ring-0 text-xs p-0"
+                  value={bulkSearch}
+                  onChange={(e) => setBulkSearch(e.target.value)}
+                />
+                <Button 
+                  size="sm" 
+                  variant="ghost" 
+                  aria-label="add-button"
+                  className="h-6 w-6 p-0 hover:bg-indigo-100 hover:text-indigo-600 rounded-full"
+                  onClick={() => setEditingItem({ name: '', color: PRESET_COLORS[0].color, isNew: true })}
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+
+              {editingItem && (
+                <div className="mb-6 p-4 rounded-lg border border-indigo-100 bg-indigo-50/30 space-y-3 animate-in fade-in slide-in-from-top-2 duration-200">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-indigo-600 uppercase tracking-wider">
+                      {editingItem.isNew ? `New ${bulkActiveTab === 'categories' ? 'category' : 'tag'}` : `Edit ${editingItem.name}`}
+                    </span>
+                    <Button size="icon" variant="ghost" className="h-5 w-5 rounded-full" onClick={() => setEditingItem(null)}>
+                      <X className="h-3 w-3" />
+                    </Button>
+                  </div>
+                  
+                  <div className="flex gap-2">
+                    <Input 
+                      placeholder="Name" 
+                      className="h-8 text-xs font-medium" 
+                      value={editingItem.name}
+                      onChange={(e) => setEditingItem({ ...editingItem, name: e.target.value })}
+                    />
+                    <div className="flex flex-wrap gap-1 max-w-[200px]">
+                      {PRESET_COLORS.map(c => (
+                        <button
+                          key={c.color}
+                          className={cn(
+                            "h-4 w-4 rounded-full border border-white shadow-sm transition-transform hover:scale-125",
+                            editingItem.color === c.color && "ring-2 ring-indigo-400 ring-offset-1"
+                          )}
+                          style={{ backgroundColor: c.color }}
+                          onClick={() => setEditingItem({ ...editingItem, color: c.color })}
+                          title={c.name}
+                        />
+                      ))}
+                    </div>
+                  </div>
+
+                  <Button 
+                    className="w-full h-8 text-xs bg-indigo-600 hover:bg-indigo-700"
+                    onClick={() => handleSaveMetaItem(bulkActiveTab as 'tags' | 'categories', { name: editingItem.name, color: editingItem.color })}
+                    disabled={!editingItem.name}
+                  >
+                    <Check className="mr-2 h-3.5 w-3.5" />
+                    Save {bulkActiveTab === 'categories' ? 'category' : 'tag'}
+                  </Button>
+                </div>
+              )}
+
+              <div className="space-y-1.5 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
+                {(bulkActiveTab === 'categories' ? metaCategories : metaTags)
+                  .filter(item => item.name.toLowerCase().includes(bulkSearch.toLowerCase()))
+                  .map(item => {
+                    const isFullySelected = bulkActiveTab === 'categories' 
+                      ? selectedRows.length === 1 && selectedRows[0].category === item.name
+                      : selectedRows.every(r => r.tags?.split(',').map(t => t.trim()).includes(item.name));
+                    
+                    const isPartiallySelected = bulkActiveTab === 'tags' && !isFullySelected && selectedRows.some(r => r.tags?.split(',').map(t => t.trim()).includes(item.name));
+
+                    return (
+                      <div 
+                        key={item.name} 
+                        className={cn(
+                          "flex items-center justify-between p-2 rounded-md transition-colors group cursor-pointer border border-transparent",
+                          isFullySelected ? "bg-indigo-50 dark:bg-indigo-950/40 border-indigo-100 dark:border-indigo-900" : "hover:bg-muted/50"
+                        )}
+                        onClick={() => {
+                          if (bulkActiveTab === 'categories') {
+                            handleBulkApply('categories', item.name, 'set')
+                          } else {
+                            handleBulkApply('tags', item.name, isFullySelected ? 'remove' : 'add')
+                          }
+                        }}
+                      >
+                        <div className="flex items-center gap-2">
+                          <div className="h-3 w-3 rounded-full" style={{ backgroundColor: item.color }} />
+                          <span className={cn("text-xs font-medium", isFullySelected && "text-indigo-600 dark:text-indigo-400 font-bold")}>{item.name}</span>
+                          {item.isDefault && <Badge variant="outline" className="text-[8px] h-3.5 px-1 py-0 uppercase tracking-tighter opacity-50">Default</Badge>}
+                          {isFullySelected && <Check className="h-3 w-3 text-indigo-600 animate-in zoom-in" />}
+                          {isPartiallySelected && <div className="h-1 w-2 bg-indigo-400 rounded-full" title="Partially applied" />}
+                        </div>
+                        
+                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
+                          {!item.isDefault && (
+                            <>
+                              <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                className="h-7 w-7 rounded-full"
+                                onClick={() => setEditingItem({ ...item, isNew: false })}
+                              >
+                                <Edit3 className="h-3 w-3 text-muted-foreground" />
+                              </Button>
+                              <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                className="h-7 w-7 rounded-full hover:text-destructive"
+                                onClick={() => handleDeleteMetaItem(bulkActiveTab as 'tags' | 'categories', item.name)}
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </Button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+            </div>
+          </Tabs>
         </DialogContent>
       </Dialog>
     </div>

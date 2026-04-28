@@ -6,6 +6,7 @@ import { format, parseISO } from "date-fns"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Badge } from "@/components/ui/badge"
 import { Tag } from "lucide-react"
+import { getAlphaColor } from "@/lib/utils"
 
 export const columns: ColumnDef<Transaction>[] = [
   {
@@ -77,9 +78,18 @@ export const columns: ColumnDef<Transaction>[] = [
     cell: ({ row, table }) => {
       const category = row.getValue("category") as string
       const meta = table.options.meta as any
+      const categoryMeta = meta?.categoriesMeta?.find((c: any) => c.name === category)
+      const othersMeta = meta?.categoriesMeta?.find((c: any) => c.name === "OTHERS")
+      const color = categoryMeta?.color || othersMeta?.color || "#94a3b8" // Use OTHERS or Default slate-400
+
       return (
         <div 
-          className="capitalize text-[10px] bg-muted px-1.5 py-0.5 rounded-sm inline-block cursor-pointer hover:bg-muted/80 hover:text-indigo-600 transition-colors font-medium border border-transparent hover:border-indigo-100"
+          className="capitalize text-[10px] px-1.5 py-0.5 rounded-sm inline-block cursor-pointer hover:opacity-80 transition-opacity font-bold border"
+          style={{ 
+            backgroundColor: getAlphaColor(color, "15"), 
+            color: getAlphaColor(color, "ff"),
+            borderColor: getAlphaColor(color, "30")
+          }}
           onClick={(e) => {
             e.stopPropagation()
             meta?.onEditCategory?.(row.original)
@@ -117,18 +127,27 @@ export const columns: ColumnDef<Transaction>[] = [
       
       return (
         <div 
-          className="flex flex-wrap gap-1 max-w-[150px] cursor-pointer"
+          className="flex flex-wrap gap-1 max-w-[150px] cursor-pointer hover:bg-muted/50 rounded-sm transition-colors"
           onClick={handleClick}
         >
-          {tags.map((tag, i) => (
-            <Badge 
-              key={i} 
-              variant="secondary" 
-              className="text-[9px] px-1.5 py-0 h-4 bg-indigo-50 text-indigo-700 border-indigo-100 hover:bg-indigo-100 transition-colors"
-            >
-              {tag}
-            </Badge>
-          ))}
+          {tags.map((tag, i) => {
+            const tagMeta = meta?.tagsMeta?.find((t: any) => t.name === tag)
+            const color = tagMeta?.color || "#6366f1" // Default indigo-500
+            return (
+              <Badge 
+                key={i} 
+                variant="secondary" 
+                className="text-[9px] px-1.5 py-0 h-4 border transition-colors font-bold uppercase"
+                style={{ 
+                  backgroundColor: getAlphaColor(color, "15"), 
+                  color: getAlphaColor(color, "ff"),
+                  borderColor: getAlphaColor(color, "30")
+                }}
+              >
+                {tag}
+              </Badge>
+            )
+          })}
         </div>
       )
     }

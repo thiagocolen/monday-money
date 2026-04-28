@@ -8,7 +8,8 @@ import {
   getSha256,
   resolveSafePath,
   getCoreDir,
-  PARSERS
+  PARSERS,
+  DEFAULT_CATEGORIES
 } from './index.js';
 
 function getPaths() {
@@ -205,9 +206,147 @@ export async function handleSaveCategory(transactionHash: string, category?: str
   return { success: true };
 }
 
+export async function handleBulkSaveMetadata(updates: { transactionHash: string, category?: string, tags?: string }[]): Promise<{ success: boolean }> {
+  const { dataDir } = getPaths();
+  const categoryCsvPath = path.join(dataDir, 'monthly-transactions-category.csv');
+  
+  let lines: string[] = [];
+  if (fs.existsSync(categoryCsvPath)) {
+    lines = fs.readFileSync(categoryCsvPath, 'utf8').split(/\r?\n/).filter(l => l.trim());
+  } else {
+    lines = ['transaction-hash,category,tags,row-hash'];
+  }
+
+  const header = lines[0];
+  const dataLines = lines.slice(1);
+  
+  const parseCsvLine = (line: string) => {
+    const parts = [];
+    let current = '';
+    let inQuotes = false;
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i];
+      if (char === '"') inQuotes = !inQuotes;
+      else if (char === ',' && !inQuotes) {
+        parts.push(current);
+        current = '';
+      } else current += char;
+    }
+    parts.push(current);
+    return parts;
+  };
+
+  const rowsMap = new Map();
+  dataLines.forEach(line => {
+    const parts = parseCsvLine(line);
+    rowsMap.set(parts[0], { category: parts[1], tags: parts[2] });
+  });
+
+  for (const update of updates) {
+    const existing = rowsMap.get(update.transactionHash) || { category: '', tags: '' };
+    rowsMap.set(update.transactionHash, {
+      category: update.category !== undefined ? update.category : existing.category,
+      tags: update.tags !== undefined ? update.tags : existing.tags
+    });
+  }
+  
+  const escapeCsvField = (field: string) => {
+    const f = field || '';
+    if (f.includes(',') || f.includes('"') || f.includes('\n')) {
+      return `"${f.replace(/"/g, '""')}"`;
+    }
+    return f;
+  };
+
+  const newRows = Array.from(rowsMap.entries()).map(([hash, meta]) => {
+    const rowContentForHash = `${hash},${meta.category || ''},${meta.tags || ''}`;
+    const rowHash = getSha256(rowContentForHash);
+    return `${escapeCsvField(hash)},${escapeCsvField(meta.category)},${escapeCsvField(meta.tags)},${rowHash}`;
+  });
+  
+  const newContent = [header, ...newRows].join('\n') + '\n';
+  fs.writeFileSync(categoryCsvPath, newContent, 'utf8');
+  return { success: true };
+}
+
+export async function handleGetMetadata(): Promise<{ tags: any[], categories: any[] }> {
+  const { dataDir } = getPaths();
+  const tagsPath = path.join(dataDir, 'meta-tags.json');
+  const catsPath = path.join(dataDir, 'meta-categories.json');
+
+  let tags = [];
+  let categories = [];
+
+  if (fs.existsSync(tagsPath)) {
+    try {
+      tags = JSON.parse(fs.readFileSync(tagsPath, 'utf8'));
+    } catch (e) { console.error('Error parsing tags meta', e); }
+  } else {
+    fs.writeFileSync(tagsPath, JSON.stringify([], null, 2), 'utf8');
+  }
+  
+  if (fs.existsSync(catsPath)) {
+    try {
+      categories = JSON.parse(fs.readFileSync(catsPath, 'utf8'));
+      
+      // Ensure all default categories exist and have correct colors
+      let changed = false;
+      DEFAULT_CATEGORIES.forEach(defCat => {
+        const index = categories.findIndex((c: any) => c.name === defCat.name);
+        if (index === -1) {
+          categories.push(defCat);
+          changed = true;
+        } else {
+          // Check if color or isDefault has changed
+          if (categories[index].color !== defCat.color || !categories[index].isDefault) {
+            categories[index] = { ...categories[index], color: defCat.color, isDefault: true };
+            changed = true;
+          }
+        }
+      });
+      
+      if (changed) {
+        fs.writeFileSync(catsPath, JSON.stringify(categories, null, 2), 'utf8');
+      }
+    } catch (e) { console.error('Error parsing categories meta', e); }
+  } else {
+    categories = [...DEFAULT_CATEGORIES];
+    fs.writeFileSync(catsPath, JSON.stringify(categories, null, 2), 'utf8');
+  }
+
+  return { tags, categories };
+}
+
+export async function handleSaveMetadata(type: 'tags' | 'categories', data: any[]): Promise<{ success: boolean }> {
+  const { dataDir } = getPaths();
+  const filePath = path.join(dataDir, type === 'tags' ? 'meta-tags.json' : 'meta-categories.json');
+  
+  let finalData = data;
+  
+  if (type === 'categories') {
+    // Ensure all defaults are present and unmodified
+    const newData = [...data];
+    DEFAULT_CATEGORIES.forEach(defCat => {
+      const index = newData.findIndex(c => c.name === defCat.name);
+      if (index === -1) {
+        newData.push(defCat);
+      } else {
+        // Force default values
+        newData[index] = { ...newData[index], ...defCat };
+      }
+    });
+    finalData = newData;
+  }
+
+  fs.writeFileSync(filePath, JSON.stringify(finalData, null, 2), 'utf8');
+  return { success: true };
+}
+
 export async function handleBackupCategories(): Promise<{ success: boolean; fileName?: string; error?: string }> {
   const { dataDir, protectedDir } = getPaths();
   const categoryCsvPath = path.join(dataDir, 'monthly-transactions-category.csv');
+  const tagsJsonPath = path.join(dataDir, 'meta-tags.json');
+  const catsJsonPath = path.join(dataDir, 'meta-categories.json');
   const backupDir = path.join(protectedDir, 'monthly-transactions-category-bkp');
 
   if (!fs.existsSync(backupDir)) {
@@ -218,9 +357,24 @@ export async function handleBackupCategories(): Promise<{ success: boolean; file
     const now = new Date();
     const pad = (n: number) => n.toString().padStart(2, '0');
     const timestamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}-${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`;
-    const backupPath = path.join(backupDir, `monthly-transactions-category-${timestamp}-bkp.csv`);
-    fs.copyFileSync(categoryCsvPath, backupPath);
-    return { success: true, fileName: path.basename(backupPath) };
+    
+    // Backup CSV
+    const backupCsvPath = path.join(backupDir, `monthly-transactions-category-${timestamp}-bkp.csv`);
+    fs.copyFileSync(categoryCsvPath, backupCsvPath);
+
+    // Backup Meta Tags
+    if (fs.existsSync(tagsJsonPath)) {
+      const backupTagsPath = path.join(backupDir, `meta-tags-${timestamp}-bkp.json`);
+      fs.copyFileSync(tagsJsonPath, backupTagsPath);
+    }
+
+    // Backup Meta Categories
+    if (fs.existsSync(catsJsonPath)) {
+      const backupCatsPath = path.join(backupDir, `meta-categories-${timestamp}-bkp.json`);
+      fs.copyFileSync(catsJsonPath, backupCatsPath);
+    }
+
+    return { success: true, fileName: path.basename(backupCsvPath) };
   }
   throw new Error('Category file not found');
 }

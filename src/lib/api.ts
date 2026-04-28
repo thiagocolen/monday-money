@@ -16,6 +16,7 @@ async function invoke<T>(channel: string, ...args: any[]): Promise<T> {
 }
 
 export interface Transaction {
+  id: string;
   date: string;
   description: string;
   amount: number;
@@ -26,6 +27,7 @@ export interface Transaction {
 }
 
 export interface BinanceTransaction {
+  id: string;
   'User ID': string;
   Time: string;
   Account: string;
@@ -37,6 +39,7 @@ export interface BinanceTransaction {
 }
 
 export interface BinanceDepositWithdraw {
+  id: string;
   Time: string;
   Coin: string;
   Network: string;
@@ -50,6 +53,7 @@ export interface BinanceDepositWithdraw {
 }
 
 export interface BinanceFiatDepositWithdraw {
+  id: string;
   Time: string;
   Method: string;
   Amount: number;
@@ -125,6 +129,7 @@ export async function fetchTransactions(): Promise<Transaction[]> {
           const transactions = results.data.map((row): Transaction => {
             const meta = metadataMap[row['row-hash']] || { category: '', tags: '' };
             return {
+              id: '', // Placeholder
               date: row.date,
               description: row.description,
               amount: row.amount,
@@ -136,7 +141,14 @@ export async function fetchTransactions(): Promise<Transaction[]> {
           });
           
           transactions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-          resolve(transactions);
+          
+          // Assign unique IDs after sorting to ensure stability
+          const transactionsWithId = transactions.map((t, index) => ({
+            ...t,
+            id: `${t.rowHash}-${index}`
+          }));
+          
+          resolve(transactionsWithId);
         },
         error: (error: Error) => reject(error)
       });
@@ -174,12 +186,16 @@ async function fetchCsvData<T>(url: string): Promise<T[]> {
     }
 
     return new Promise((resolve, reject) => {
-      Papa.parse<T>(csvData, {
+      Papa.parse<any>(csvData, {
         header: true,
         dynamicTyping: true,
         skipEmptyLines: true,
         complete: (results) => {
-          resolve(results.data);
+          const dataWithIds = results.data.map((row: any, index: number) => ({
+            ...row,
+            id: `${row['row-hash'] || 'no-hash'}-${index}`
+          }));
+          resolve(dataWithIds);
         },
         error: (error: Error) => reject(error)
       });
@@ -190,7 +206,7 @@ async function fetchCsvData<T>(url: string): Promise<T[]> {
   }
 }
 
-export async function saveMetadata(transactionHash: string, category: string, tags: string): Promise<boolean> {
+export async function saveTransactionMetadata(transactionHash: string, category: string, tags: string): Promise<boolean> {
   try {
     if (window.electron) {
       const result = await invoke<{ success: boolean }>('save-category', { transactionHash, category, tags });
@@ -246,12 +262,70 @@ export async function saveTags(transactionHash: string, tags: string): Promise<b
 
 export async function saveBulkCategories(updates: { transactionHash: string, category: string }[]): Promise<boolean> {
   try {
-    const results = await Promise.all(
-      updates.map(u => saveCategory(u.transactionHash, u.category))
-    );
-    return results.every(r => r === true);
+    if (window.electron) {
+      const result = await invoke<{ success: boolean }>('bulk-save-metadata', updates);
+      return result.success;
+    }
+    const response = await fetch('/api/bulk-save-metadata', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updates),
+    });
+    const result = await response.json();
+    return result.success;
   } catch (error) {
     console.error('Error saving bulk categories:', error);
+    return false;
+  }
+}
+
+export async function bulkSaveMetadata(updates: { transactionHash: string, category?: string, tags?: string }[]): Promise<boolean> {
+  try {
+    if (window.electron) {
+      const result = await invoke<{ success: boolean }>('bulk-save-metadata', updates);
+      return result.success;
+    }
+    const response = await fetch('/api/bulk-save-metadata', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updates),
+    });
+    const result = await response.json();
+    return result.success;
+  } catch (error) {
+    console.error('Error bulk saving metadata:', error);
+    return false;
+  }
+}
+
+export async function fetchMetadata(): Promise<{ tags: any[], categories: any[] }> {
+  try {
+    if (window.electron) {
+      return await invoke('get-metadata');
+    }
+    const response = await fetch('/api/metadata');
+    return await response.json();
+  } catch (error) {
+    console.error('Error fetching metadata:', error);
+    return { tags: [], categories: [] };
+  }
+}
+
+export async function saveMetadataConfig(type: 'tags' | 'categories', data: any[]): Promise<boolean> {
+  try {
+    if (window.electron) {
+      const result = await invoke<{ success: boolean }>('save-metadata', { type, data });
+      return result.success;
+    }
+    const response = await fetch('/api/metadata', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type, data }),
+    });
+    const result = await response.json();
+    return result.success;
+  } catch (error) {
+    console.error('Error saving metadata config:', error);
     return false;
   }
 }
