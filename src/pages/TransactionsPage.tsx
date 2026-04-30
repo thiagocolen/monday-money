@@ -5,7 +5,8 @@ import {
   fetchBackupInfo,
   fetchMetadata,
   saveMetadataConfig,
-  bulkSaveMetadata
+  bulkSaveMetadata,
+  getEffectiveMonth
 } from '../lib/api'
 import type { Transaction } from '../lib/api'
 import { columns } from '../components/columns'
@@ -150,14 +151,12 @@ export function TransactionsPage() {
     
     if (viewMode === 'monthly') {
       const targetDate = addMonths(now, filterOffset)
-      const startStr = format(startOfMonth(targetDate), 'yyyy-MM-dd')
-      const endStr = format(endOfMonth(targetDate), 'yyyy-MM-dd')
-      return data.filter((item) => item.date >= startStr && item.date <= endStr)
+      const targetMonth = format(targetDate, 'yyyy-MM')
+      return data.filter((item) => getEffectiveMonth(item) === targetMonth)
     } else {
       const targetDate = addYears(now, yearOffset)
-      const startStr = format(startOfYear(targetDate), 'yyyy-MM-dd')
-      const endStr = format(endOfYear(targetDate), 'yyyy-MM-dd')
-      return data.filter((item) => item.date >= startStr && item.date <= endStr)
+      const targetYear = format(targetDate, 'yyyy')
+      return data.filter((item) => getEffectiveMonth(item).startsWith(targetYear))
     }
   }, [data, filterOffset, yearOffset, viewMode])
 

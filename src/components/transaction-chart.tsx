@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis, Pie, PieChart, Cell, Cell as RechartsCell } from "recharts"
-import type { Transaction } from "@/lib/api"
+import { type Transaction, getEffectiveMonth } from "@/lib/api"
 import { format, parseISO, startOfMonth, endOfMonth, eachDayOfInterval } from "date-fns"
 import {
   Card,
@@ -71,7 +71,7 @@ export function TransactionChart({ data, filterOffset, onDayClick, loading = fal
   }
 
   const chartData = React.useMemo(() => {
-    return data.filter(t => t.category !== 'NULLED' && t.category !== 'chain-transaction')
+    return data.filter(t => t.category !== 'chain-transaction')
   }, [data])
 
   const barChartData = React.useMemo(() => {
@@ -80,13 +80,22 @@ export function TransactionChart({ data, filterOffset, onDayClick, loading = fal
     const start = startOfMonth(targetDate)
     const end = endOfMonth(targetDate)
 
+    const targetMonth = format(targetDate, "yyyy-MM")
     const daysMap: Record<string, number> = {}
     eachDayOfInterval({ start, end }).forEach((day) => {
       daysMap[format(day, "yyyy-MM-dd")] = 0
     })
 
     chartData.forEach((t) => {
-      const dateKey = t.date
+      let dateKey = t.date
+      const effMonth = getEffectiveMonth(t)
+
+      // If it belongs to this month but the date is from another month,
+      // map it to the 1st day of the selected month for the bar chart.
+      if (effMonth === targetMonth && !t.date.startsWith(targetMonth)) {
+        dateKey = `${targetMonth}-01`
+      }
+
       if (daysMap[dateKey] !== undefined) {
         daysMap[dateKey] += t.amount
       }

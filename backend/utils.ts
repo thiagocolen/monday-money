@@ -79,7 +79,20 @@ export function getCoreDir(): string {
   }
 
   // Dev mode
-  return path.resolve(currentDirname, "../core");
+  // Strategy 1: Relative to this file (works in direct node execution)
+  const relPath = path.resolve(currentDirname, "../core");
+  if (fs.existsSync(relPath)) {
+    return relPath;
+  }
+
+  // Strategy 2: Relative to CWD (works when bundled by Vite)
+  const cwdPath = path.resolve(process.cwd(), "core");
+  if (fs.existsSync(cwdPath)) {
+    return cwdPath;
+  }
+
+  // Fallback to Strategy 1 even if it doesn't exist yet (e.g. first run)
+  return relPath;
 }
 
 function copyRecursiveSync(src: string, dest: string) {
