@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>User Guide | MondayMoney</title>
+    <!-- Inter Font -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fira+Code:wght@400;500&display=swap"
+        rel="stylesheet">
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="icon" type="image/png" href="./assets/favicon.ico">
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+    <header>
+        <div class="logo-container">
+            <img src="../public/favicon.svg" alt="MondayMoney Logo">
+            <h1>MONDAYMONEY</h1>
+        </div>
+        <nav>
+            <a href="index.html"><i class="fas fa-home"></i> Home</a>
+            <a href="features.html"><i class="fas fa-star"></i> Features</a>
+            <a href="technical.html"><i class="fas fa-code"></i> Technical</a>
+            <a href="guide.html" class="active"><i class="fas fa-book"></i> User Guide</a>
+            <a href="developer.html"><i class="fas fa-terminal"></i> Dev Guide</a>
+        </nav>
+    </header>
+
+    <div class="container">
+        <section>
+            <h2><i class="fas fa-book"></i> Getting Started</h2>
+            <p>MondayMoney is currently distributed as a <strong>Portable Windows Application</strong>.</p>
+
+            <h3>Installation</h3>
+            <ol>
+                <li>Download the latest <code>MondayMoney.exe</code> from the <a href="https://github.com/thiagocolen/monday-money/releases">Releases</a> page.</li>
+                <li>Move it to a dedicated folder (e.g., <code>Documents/MondayMoney</code>).</li>
+                <li>Run the executable.</li>
+            </ol>
+
+            <h3>Importing Data</h3>
+            <p>To bring your financial history into MondayMoney:</p>
+            <ul>
+                <li>Navigate to the <strong>Import</strong> page.</li>
+                <li>Select your bank source (Nubank, Binance, etc.).</li>
+                <li>Drag and drop your CSV file.</li>
+                <li>Confirm the detected transactions to add them to your ledger.</li>
+            </ul>
+
+            <h3>Managing Your Data</h3>
+            <p>Your data is stored in the <code>core/</code> folder created next to the executable. Simply back up this folder to keep your data safe.</p>
+        </section>
+    </div>
+
+    <footer>
+        <small>Made with 💰 by Thiago Colen. Data belongs to the universe, but your CSVs belong to you.</small>
+    </footer>
+</body>
+
+</html>

@@ -1,5 +1,6 @@
 # MondayMoney 💰
 
+[![Documentation](https://img.shields.io/badge/docs-GitHub%20Pages-blue)](https://thiagocolen.github.io/monday-money/)
 [![Version](https://img.shields.io/badge/version-0.4.0-blue.svg)](package.json)
 [![License: Existential](https://img.shields.io/badge/License-Existential-purple.svg)](#-license)
 
