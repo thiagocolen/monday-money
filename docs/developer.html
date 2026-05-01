@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Developer Guide | MondayMoney</title>
+    <!-- Inter Font -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fira+Code:wght@400;500&display=swap"
+        rel="stylesheet">
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="icon" type="image/png" href="./assets/favicon.ico">
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+    <header>
+        <div class="logo-container">
+            <img src="../public/favicon.svg" alt="MondayMoney Logo">
+            <h1>MONDAYMONEY</h1>
+        </div>
+        <nav>
+            <a href="index.html"><i class="fas fa-home"></i> Home</a>
+            <a href="features.html"><i class="fas fa-star"></i> Features</a>
+            <a href="technical.html"><i class="fas fa-code"></i> Technical</a>
+            <a href="guide.html"><i class="fas fa-book"></i> User Guide</a>
+            <a href="developer.html" class="active"><i class="fas fa-terminal"></i> Dev Guide</a>
+        </nav>
+    </header>
+
+    <div class="container">
+        <section>
+            <h2><i class="fas fa-terminal"></i> Developer Guide</h2>
+            <p>Welcome! Follow these steps to set up MondayMoney for development.</p>
+
+            <h3>Setup</h3>
+            <pre><code>git clone https://github.com/thiagocolen/monday-money.git
+cd monday-money
+npm install
+npm run data-reset
+npm run dev</code></pre>
+
+            <h3>Testing</h3>
+            <p>We use <strong>Playwright</strong> for E2E testing. Run the full suite with:</p>
+            <pre><code>npm run test</code></pre>
+            <p>Or run a specific test file:</p>
+            <pre><code>npm run test:file tests/categories-tags.spec.ts</code></pre>
+
+            <h3>Building</h3>
+            <p>To create a portable build for Windows:</p>
+            <pre><code>npm run build</code></pre>
+            <p>The output will be in <code>release/${version}/</code>.</p>
+        </section>
+    </div>
+
+    <footer>
+        <small>Made with 💰 by Thiago Colen. Data belongs to the universe, but your CSVs belong to you.</small>
+    </footer>
+</body>
+
+</html>
