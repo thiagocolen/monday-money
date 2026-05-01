@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Features | MondayMoney</title>
+    <!-- Inter Font -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fira+Code:wght@400;500&display=swap"
+        rel="stylesheet">
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="icon" type="image/png" href="./assets/favicon.ico">
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+    <header>
+        <div class="logo-container">
+            <img src="../public/favicon.svg" alt="MondayMoney Logo">
+            <h1>MONDAYMONEY</h1>
+        </div>
+        <nav>
+            <a href="index.html"><i class="fas fa-home"></i> Home</a>
+            <a href="features.html" class="active"><i class="fas fa-star"></i> Features</a>
+            <a href="technical.html"><i class="fas fa-code"></i> Technical</a>
+            <a href="guide.html"><i class="fas fa-book"></i> User Guide</a>
+            <a href="developer.html"><i class="fas fa-terminal"></i> Dev Guide</a>
+        </nav>
+    </header>
+
+    <div class="container">
+        <section>
+            <h2><i class="fas fa-star"></i> Core Features</h2>
+            <p>MondayMoney provides a comprehensive set of features to manage your personal finances without compromising your privacy.</p>
+
+            <h3><i class="fas fa-chart-line"></i> Data Visualization</h3>
+            <p>Interactive charts powered by <strong>Recharts</strong> allow you to understand your spending habits at a glance. You can view monthly spending trends, category breakdowns, and yearly comparisons.</p>
+
+            <h3><i class="fas fa-file-csv"></i> CSV Integration</h3>
+            <p>Easily import and manage transaction history using standard formats. We support various bank formats like Nubank and Binance, and provide tools to map generic CSVs to the MondayMoney ledger.</p>
+
+            <h3><i class="fas fa-tags"></i> Category & Tag Management</h3>
+            <p>Organize your transactions with customizable categories and tags. Use smart rules for auto-categorization and bulk tagging to manage large numbers of transactions efficiently.</p>
+
+            <h3><i class="fas fa-shield-alt"></i> Privacy & Security</h3>
+            <p>All data is stored locally in <code>core/data/</code> as CSV files. The application makes no external network calls, ensuring your financial information never leaves your machine.</p>
+
+            <h3><i class="fas fa-check-double"></i> Integrity Checks</h3>
+            <p>Built-in validation tools ensure your ledger remains consistent, checking for duplicate transactions or data corruption automatically.</p>
+        </section>
+    </div>
+
+    <footer>
+        <small>Made with 💰 by Thiago Colen. Data belongs to the universe, but your CSVs belong to you.</small>
+    </footer>
+</body>
+
+</html>
