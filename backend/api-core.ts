@@ -274,8 +274,8 @@ export async function handleGetMetadata(): Promise<{ tags: any[], categories: an
   const tagsPath = path.join(dataDir, 'meta-tags.json');
   const catsPath = path.join(dataDir, 'meta-categories.json');
 
-  let tags = [];
-  let categories = [];
+  let tags: { name: string; color: string }[] = [];
+  let categories: { name: string; color: string; isDefault?: boolean }[] = [];
 
   if (fs.existsSync(tagsPath)) {
     try {

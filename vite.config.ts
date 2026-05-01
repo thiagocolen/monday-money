@@ -1,7 +1,9 @@
 import path from "path"
 import { fileURLToPath } from "url"
-import { defineConfig } from "vite"
-import react, { reactCompilerPreset } from "@vitejs/plugin-react"
+import { defineConfig, type ViteDevServer, type Connect } from "vite"
+import type { ServerResponse } from "node:http"
+import react from "@vitejs/plugin-react"
+import { reactCompilerPreset } from "@vitejs/plugin-react"
 import babel from "@rolldown/plugin-babel"
 import tailwindcss from "@tailwindcss/vite"
 import electron from "vite-plugin-electron/simple"
@@ -49,8 +51,8 @@ export default defineConfig(({ mode }) => {
       }),
       {
         name: "csv-api",
-        configureServer(server) {
-        server.middlewares.use(async (req, res, next) => {
+        configureServer(server: ViteDevServer) {
+        server.middlewares.use(async (req: Connect.IncomingMessage, res: ServerResponse, next: Connect.NextFunction) => {
           try {
             if (req.url?.startsWith("/api/data/")) {
               const fileName = req.url.replace("/api/data/", "").split("?")[0]
@@ -73,7 +75,7 @@ export default defineConfig(({ mode }) => {
 
             if (req.url === "/api/import-file" && req.method === "POST") {
               let body = ""
-              req.on("data", (chunk) => { body += chunk.toString() })
+              req.on("data", (chunk: Buffer) => { body += chunk.toString() })
               req.on("end", async () => {
                 try {
                   const { owner, fileName, fileContent } = JSON.parse(body)
@@ -91,7 +93,7 @@ export default defineConfig(({ mode }) => {
 
             if (req.url === "/api/delete-import" && req.method === "POST") {
               let body = ""
-              req.on("data", (chunk) => { body += chunk.toString() })
+              req.on("data", (chunk: Buffer) => { body += chunk.toString() })
               req.on("end", async () => {
                 try {
                   const { owner, fileName } = JSON.parse(body)
@@ -117,7 +119,7 @@ export default defineConfig(({ mode }) => {
 
             if (req.url === "/api/save-category" && req.method === "POST") {
               let body = ""
-              req.on("data", (chunk) => { body += chunk.toString() })
+              req.on("data", (chunk: Buffer) => { body += chunk.toString() })
               req.on("end", async () => {
                 try {
                   const { transactionHash, category, tags } = JSON.parse(body)
@@ -135,7 +137,7 @@ export default defineConfig(({ mode }) => {
 
             if (req.url === "/api/bulk-save-metadata" && req.method === "POST") {
               let body = ""
-              req.on("data", (chunk) => { body += chunk.toString() })
+              req.on("data", (chunk: Buffer) => { body += chunk.toString() })
               req.on("end", async () => {
                 try {
                   const updates = JSON.parse(body)
@@ -161,7 +163,7 @@ export default defineConfig(({ mode }) => {
 
             if (req.url === "/api/metadata" && req.method === "POST") {
               let body = ""
-              req.on("data", (chunk) => { body += chunk.toString() })
+              req.on("data", (chunk: Buffer) => { body += chunk.toString() })
               req.on("end", async () => {
                 try {
                   const { type, data } = JSON.parse(body)
