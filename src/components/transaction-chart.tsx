@@ -111,34 +111,69 @@ export function TransactionChart({ data, filterOffset, onDayClick, loading = fal
   }, [chartData, filterOffset])
 
   const pieChartData = React.useMemo(() => {
-    const categoriesMap: Record<string, number> = {}
-    let totalAbsolute = 0
+    const positiveCategories: Record<string, number> = {}
+    const negativeCategories: Record<string, number> = {}
+    let totalPositive = 0
+    let totalNegative = 0
     
     chartData.forEach((t) => {
       const cat = t.category || "Uncategorized"
-      const absAmount = Math.abs(t.amount)
-      categoriesMap[cat] = (categoriesMap[cat] || 0) + absAmount
-      totalAbsolute += absAmount
+      const amount = t.amount
+      if (amount >= 0) {
+        positiveCategories[cat] = (positiveCategories[cat] || 0) + amount
+        totalPositive += amount
+      } else {
+        const absAmount = Math.abs(amount)
+        negativeCategories[cat] = (negativeCategories[cat] || 0) + absAmount
+        totalNegative += absAmount
+      }
     })
 
-    return Object.entries(categoriesMap)
-      .map(([name, value], index) => {
+    const innerData = [
+      { name: 'Income', value: parseFloat(totalPositive.toFixed(2)), fill: '#10b981' },
+      { name: 'Expenses', value: parseFloat(totalNegative.toFixed(2)), fill: '#ef4444' }
+    ].filter(d => d.value > 0)
+
+    const outerData = [
+      ...Object.entries(positiveCategories).map(([name, value], index) => {
         const catMeta = categoriesMeta.find(c => c.name === name)
         const othersMeta = categoriesMeta.find(c => c.name === "OTHERS")
         return {
           name,
+          group: 'Income',
           value: parseFloat(value.toFixed(2)),
-          percentage: totalAbsolute > 0 ? (Math.abs(value) / totalAbsolute * 100).toFixed(1) : "0",
+          fill: catMeta?.color || (name === "Uncategorized" ? othersMeta?.color : null) || COLORS[index % COLORS.length]
+        }
+      }),
+      ...Object.entries(negativeCategories).map(([name, value], index) => {
+        const catMeta = categoriesMeta.find(c => c.name === name)
+        const othersMeta = categoriesMeta.find(c => c.name === "OTHERS")
+        return {
+          name,
+          group: 'Expenses',
+          value: parseFloat(value.toFixed(2)),
           fill: catMeta?.color || (name === "Uncategorized" ? othersMeta?.color : null) || COLORS[index % COLORS.length]
         }
       })
-      .sort((a, b) => b.value - a.value)
+    ].sort((a, b) => b.value - a.value)
+
+    const totalAbsolute = totalPositive + totalNegative
+
+    return {
+      inner: innerData,
+      outer: outerData.map(d => ({
+        ...d,
+        percentage: totalAbsolute > 0 ? (d.value / totalAbsolute * 100).toFixed(1) : "0"
+      })),
+      totalPositive,
+      totalNegative
+    }
   }, [chartData, categoriesMeta])
 
   // Create dynamic config for the pie chart to support the Legend content
   const pieChartConfig = React.useMemo(() => {
     const config: ChartConfig = {}
-    pieChartData.forEach((item) => {
+    pieChartData.outer.forEach((item) => {
       config[item.name] = {
         label: `${item.name} (${item.percentage}%)`,
         color: item.fill,
@@ -173,11 +208,25 @@ export function TransactionChart({ data, filterOffset, onDayClick, loading = fal
             </CardDescription>
           </div>
         </div>
-        <div className="text-right">
-          <p className="text-sm font-medium text-muted-foreground uppercase">Monthly Total</p>
-          <p className={`text-2xl font-bold ${totalAmount < 0 ? "text-destructive" : "text-emerald-600"}`}>
-            {formattedTotal}
-          </p>
+        <div className="flex gap-8">
+          <div className="text-right">
+            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Income</p>
+            <p className="text-lg font-bold text-emerald-600">
+              {formatCurrency(pieChartData.totalPositive)}
+            </p>
+          </div>
+          <div className="text-right">
+            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Expenses</p>
+            <p className="text-lg font-bold text-destructive">
+              {formatCurrency(pieChartData.totalNegative)}
+            </p>
+          </div>
+          <div className="text-right border-l pl-8">
+            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Net Total</p>
+            <p className={`text-2xl font-bold ${totalAmount < 0 ? "text-destructive" : "text-emerald-600"}`}>
+              {formattedTotal}
+            </p>
+          </div>
         </div>
       </CardHeader>
       {!isMinimized && (
@@ -190,90 +239,56 @@ export function TransactionChart({ data, filterOffset, onDayClick, loading = fal
               </div>
             </div>
           )}
-          <Tabs defaultValue="categories" className="w-full">
-            <div className="flex justify-end mb-4">
-              <TabsList>
-                <TabsTrigger value="activity">Daily Activity</TabsTrigger>
-                <TabsTrigger value="categories">Categories</TabsTrigger>
-              </TabsList>
-            </div>
-            
-            <TabsContent value="activity">
-              <ChartContainer config={chartConfig} className="h-[350px] w-full">
-                <BarChart data={barChartData}>
-                  <CartesianGrid vertical={false} strokeDasharray="3 3" opacity={0.3} />
-                  <XAxis
-                    dataKey="day"
-                    tickLine={false}
-                    tickMargin={10}
-                    axisLine={false}
-                  />
-                  <YAxis 
-                    tickLine={false}
-                    axisLine={false}
-                    tickFormatter={(value) => `R$${value}`}
-                  />
-                  <ChartTooltip
-                    cursor={false}
-                    content={<ChartTooltipContent 
-                      hideLabel 
-                      formatter={(value) => formatCurrency(Number(value))}
-                    />}
-                  />
-                  <Bar dataKey="amount" onClick={(data: any) => onDayClick?.(data.date)}>
-                    {barChartData.map((entry, index) => (
-                      <RechartsCell 
-                        key={`cell-${index}`} 
-                        className="cursor-pointer transition-opacity hover:opacity-80"
-                        fill={entry.amount >= 0 ? "var(--color-emerald-500, #10b981)" : "var(--color-red-500, #ef4444)"} 
-                      />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ChartContainer>
-            </TabsContent>
-            
-            <TabsContent value="categories">
-              <div className="h-[350px] w-full">
-                <ChartContainer config={pieChartConfig} className="h-full w-full">
-                  <PieChart>
-                    <ChartTooltip
-                      cursor={false}
-                      content={<ChartTooltipContent 
-                        hideLabel 
-                        formatter={(value: any, name: any, props: any) => [
-                          `${formatCurrency(Number(value))} (${props.payload.percentage}%)`, 
-                          name
-                        ]}
-                      />}
-                    />
-                    <Pie
-                      data={pieChartData}
-                      dataKey="value"
-                      nameKey="name"
-                      innerRadius={60}
-                      outerRadius={100}
-                      paddingAngle={5}
-                      stroke="none"
-                      labelLine={true}
-                      label={({ name, value, payload }: any) => `${name}: ${formatCurrency(value)} (${payload.percentage}%)`}
-                    >
-                      {pieChartData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.fill} />
-                      ))}
-                    </Pie>
-                    <ChartLegend 
-                      content={<ChartLegendContent nameKey="name" />} 
-                      layout="vertical"
-                      align="right"
-                      verticalAlign="middle"
-                      className="flex-col items-start gap-2 ml-4 overflow-y-auto max-h-[300px] custom-scrollbar" 
-                    />
-                  </PieChart>
-                </ChartContainer>
-              </div>
-            </TabsContent>
-          </Tabs>
+          
+          <div className="h-[400px] w-full pt-4">
+            <ChartContainer config={pieChartConfig} className="h-full w-full">
+              <PieChart>
+                <ChartTooltip
+                  cursor={false}
+                  content={<ChartTooltipContent 
+                    hideLabel 
+                    formatter={(value: any, name: any, props: any) => [
+                      `${formatCurrency(Number(value))} (${props.payload.percentage}%)`, 
+                      name
+                    ]}
+                  />}
+                />
+                <Pie
+                  data={pieChartData.inner}
+                  dataKey="value"
+                  nameKey="name"
+                  outerRadius={60}
+                  stroke="none"
+                >
+                  {pieChartData.inner.map((entry, index) => (
+                    <Cell key={`inner-cell-${index}`} fill={entry.fill} />
+                  ))}
+                </Pie>
+                <Pie
+                  data={pieChartData.outer}
+                  dataKey="value"
+                  nameKey="name"
+                  innerRadius={70}
+                  outerRadius={110}
+                  paddingAngle={2}
+                  stroke="none"
+                  labelLine={true}
+                  label={({ name, value, payload }: any) => `${name}: ${formatCurrency(value)} (${payload.percentage}%)`}
+                >
+                  {pieChartData.outer.map((entry, index) => (
+                    <Cell key={`outer-cell-${index}`} fill={entry.fill} />
+                  ))}
+                </Pie>
+                <ChartLegend 
+                  content={<ChartLegendContent nameKey="name" />} 
+                  layout="vertical"
+                  align="right"
+                  verticalAlign="middle"
+                  className="flex-col items-start gap-2 ml-4 overflow-y-auto max-h-[350px] custom-scrollbar" 
+                />
+              </PieChart>
+            </ChartContainer>
+          </div>
         </CardContent>
       )}
     </Card>

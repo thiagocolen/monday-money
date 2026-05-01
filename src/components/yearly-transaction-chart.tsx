@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts"
+import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts"
 import { type Transaction, getEffectiveMonth } from "@/lib/api"
 import { format, parseISO, startOfYear, endOfYear, eachMonthOfInterval, addYears } from "date-fns"
 import {
@@ -140,7 +140,7 @@ export function YearlyTransactionChart({ data, yearOffset, loading = false, cate
         )}
         
         <ChartContainer config={chartConfig} className="h-[400px] w-full">
-          <AreaChart
+          <BarChart
             data={chartData}
             margin={{
               left: 12,
@@ -178,20 +178,19 @@ export function YearlyTransactionChart({ data, yearOffset, loading = false, cate
               />}
             />
             {Object.keys(chartConfig).map((key) => (
-              <Area
+              <Bar
                 key={key}
-                type="monotone"
                 dataKey={key}
-                stackId="1"
-                stroke={chartConfig[key].color as string}
+                stackId="a"
                 fill={chartConfig[key].color as string}
-                fillOpacity={0.4}
+                radius={[0, 0, 0, 0]}
               />
             ))}
             <ChartLegend content={<ChartLegendContent />} className="mt-8" />
-          </AreaChart>
+          </BarChart>
         </ChartContainer>
       </CardContent>
     </Card>
   )
 }
+

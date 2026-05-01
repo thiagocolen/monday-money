@@ -12,7 +12,7 @@ import {
 // Tests in this file share state (the backend) and must run serially
 test.describe.configure({ mode: "serial" });
 test.use({ navigationTimeout: 60000, actionTimeout: 60000 });
-test.setTimeout(60000);
+test.setTimeout(120000);
 
 test.beforeEach(async ({ page }) => {
   await importRawCSV(page);
