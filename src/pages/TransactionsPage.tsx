@@ -5,7 +5,8 @@ import {
   fetchBackupInfo,
   fetchMetadata,
   saveMetadataConfig,
-  bulkSaveMetadata
+  bulkSaveMetadata,
+  getEffectiveMonth
 } from '../lib/api'
 import type { Transaction } from '../lib/api'
 import { columns } from '../components/columns'
@@ -87,28 +88,46 @@ export function TransactionsPage() {
   const [isPeriodHovered, setIsPeriodHovered] = useState(false)
 
   // Filter states
-  const [globalSearch, setGlobalSearch] = useState("")
-  const [localSearch, setLocalSearch] = useState("")
-  const [ownerFilter, setOwnerFilter] = useState<Record<string, 'include' | 'exclude'>>({})
-  const [categoryFilter, setCategoryFilter] = useState<Record<string, 'include' | 'exclude'>>({})
-  const [tagFilter, setTagFilter] = useState<Record<string, 'include' | 'exclude'>>({})
+  const [filterLayers, setFilterLayers] = useState<{
+    id: string;
+    logic: 'AND' | 'OR';
+    localSearch: string;
+    globalSearch: string;
+    ownerFilter: Record<string, 'include' | 'exclude'>;
+    categoryFilter: Record<string, 'include' | 'exclude'>;
+    tagFilter: Record<string, 'include' | 'exclude'>;
+  }[]>([{
+    id: crypto.randomUUID(),
+    logic: 'AND',
+    localSearch: "",
+    globalSearch: "",
+    ownerFilter: {},
+    categoryFilter: {},
+    tagFilter: {},
+  }])
   const [dayFilter, setDayFilter] = useState<string | null>(null)
 
-  // Debounce search input
+  // Debounce search input for each layer
   useEffect(() => {
-    if (localSearch === globalSearch) return
+    const timers = filterLayers.map((layer, index) => {
+      if (layer.localSearch === layer.globalSearch) return null
 
-    const timer = setTimeout(() => {
-      setIsVisualPending(true)
-      requestAnimationFrame(() => {
-        startTransition(() => {
-          setGlobalSearch(localSearch)
+      return setTimeout(() => {
+        setIsVisualPending(true)
+        requestAnimationFrame(() => {
+          startTransition(() => {
+            setFilterLayers(prev => {
+              const next = [...prev]
+              next[index] = { ...next[index], globalSearch: layer.localSearch }
+              return next
+            })
+          })
         })
-      })
-    }, 400) // 400ms debounce
+      }, 400)
+    })
 
-    return () => clearTimeout(timer)
-  }, [localSearch, globalSearch])
+    return () => timers.forEach(t => t && clearTimeout(t))
+  }, [filterLayers])
 
   const loadBackupInfo = useCallback(async () => {
     const info = await fetchBackupInfo()
@@ -150,14 +169,12 @@ export function TransactionsPage() {
     
     if (viewMode === 'monthly') {
       const targetDate = addMonths(now, filterOffset)
-      const startStr = format(startOfMonth(targetDate), 'yyyy-MM-dd')
-      const endStr = format(endOfMonth(targetDate), 'yyyy-MM-dd')
-      return data.filter((item) => item.date >= startStr && item.date <= endStr)
+      const targetMonth = format(targetDate, 'yyyy-MM')
+      return data.filter((item) => getEffectiveMonth(item) === targetMonth)
     } else {
       const targetDate = addYears(now, yearOffset)
-      const startStr = format(startOfYear(targetDate), 'yyyy-MM-dd')
-      const endStr = format(endOfYear(targetDate), 'yyyy-MM-dd')
-      return data.filter((item) => item.date >= startStr && item.date <= endStr)
+      const targetYear = format(targetDate, 'yyyy')
+      return data.filter((item) => getEffectiveMonth(item).startsWith(targetYear))
     }
   }, [data, filterOffset, yearOffset, viewMode])
 
@@ -198,86 +215,98 @@ export function TransactionsPage() {
     return Array.from(set).sort()
   }, [data, metaTags])
 
-  // 3. Apply the remaining filters
+  // 3. Apply the multi-layer filters
   const filteredData = useMemo(() => {
-    const searchTerms = globalSearch.toLowerCase().split(/\s+/).filter(Boolean);
-
-    return periodData.filter((item) => {
-      // Hide system reserved rows
+    // Hide system reserved rows first
+    const baseData = periodData.filter(item => {
       if (item.category === 'chain-transaction') return false;
       if (item.owner === 'seed-transaction') return false;
+      if (dayFilter && item.date !== dayFilter) return false;
+      return true;
+    });
 
-      // Global multi-column search
-      const matchesSearch = searchTerms.every(term => {
-        const amountStr = item.amount.toString();
-        const formattedAmount = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(item.amount).toLowerCase();
+    return baseData.filter((item) => {
+      let result = true; // For the first layer, it's effectively AND with true
 
-        // Numeric comparisons (e.g., >100, <50, >=200, <=-10)
-        const numericMatch = term.match(/^([<>]=?)(-?\d+(?:\.\d+)?)$/);
-        if (numericMatch) {
-          const [, operator, valueStr] = numericMatch;
-          const value = parseFloat(valueStr);
-          if (operator === ">") return item.amount > value;
-          if (operator === "<") return item.amount < value;
-          if (operator === ">=") return item.amount >= value;
-          if (operator === "<=") return item.amount <= value;
+      filterLayers.forEach((layer, index) => {
+        const searchTerms = layer.globalSearch.toLowerCase().split(/\s+/).filter(Boolean);
+
+        // Check if item matches this layer's criteria
+        const matchesSearch = searchTerms.every(term => {
+          const amountStr = item.amount.toString();
+          const formattedAmount = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(item.amount).toLowerCase();
+
+          const numericMatch = term.match(/^([<>]=?)(-?\d+(?:\.\d+)?)$/);
+          if (numericMatch) {
+            const [, operator, valueStr] = numericMatch;
+            const value = parseFloat(valueStr);
+            if (operator === ">") return item.amount > value;
+            if (operator === "<") return item.amount < value;
+            if (operator === ">=") return item.amount >= value;
+            if (operator === "<=") return item.amount <= value;
+          }
+
+          return (
+            item.description.toLowerCase().includes(term) ||
+            (item.category || "Uncategorized").toLowerCase().includes(term) ||
+            (item.tags || "").toLowerCase().includes(term) ||
+            (item.owner || "No owner").toLowerCase().includes(term) ||
+            item.date.includes(term) ||
+            amountStr.includes(term) ||
+            formattedAmount.includes(term)
+          );
+        });
+
+        const applyFilter = (val: string, filter: Record<string, 'include' | 'exclude'>) => {
+          const keys = Object.keys(filter)
+          if (keys.length === 0) return true
+          const includes = keys.filter(k => filter[k] === 'include')
+          const excludes = keys.filter(k => filter[k] === 'exclude')
+          if (includes.length > 0 && !includes.includes(val)) return false
+          if (excludes.includes(val)) return false
+          return true
         }
 
-        return (
-          item.description.toLowerCase().includes(term) ||
-          (item.category || "Uncategorized").toLowerCase().includes(term) ||
-          (item.tags || "").toLowerCase().includes(term) ||
-          (item.owner || "No owner").toLowerCase().includes(term) ||
-          item.date.includes(term) ||
-          amountStr.includes(term) ||
-          formattedAmount.includes(term)
-        );
+        const applyTagFilter = (tagsStr: string, filter: Record<string, 'include' | 'exclude'>) => {
+          const keys = Object.keys(filter)
+          if (keys.length === 0) return true
+          const currentTags = tagsStr.split(',').map(t => t.trim())
+          const includes = keys.filter(k => filter[k] === 'include')
+          const excludes = keys.filter(k => filter[k] === 'exclude')
+          if (includes.length > 0 && !includes.some(t => currentTags.includes(t))) return false
+          if (excludes.some(t => currentTags.includes(t))) return false
+          return true
+        }
+
+        const matchOwner = applyFilter(item.owner || "No owner", layer.ownerFilter)
+        const matchCat = applyFilter(item.category || "Uncategorized", layer.categoryFilter)
+        const matchTag = applyTagFilter(item.tags || "", layer.tagFilter)
+
+        const layerMatch = matchesSearch && matchOwner && matchCat && matchTag
+
+        if (index === 0) {
+          result = layerMatch;
+        } else {
+          if (layer.logic === 'OR') {
+            result = result || layerMatch;
+          } else {
+            result = result && layerMatch;
+          }
+        }
       });
 
-      // Filter logic with Include/Exclude
-      const applyFilter = (val: string, filter: Record<string, 'include' | 'exclude'>) => {
-        const keys = Object.keys(filter)
-        if (keys.length === 0) return true
-        
-        const includes = keys.filter(k => filter[k] === 'include')
-        const excludes = keys.filter(k => filter[k] === 'exclude')
-
-        // If there are 'include' filters, the value must be one of them
-        if (includes.length > 0 && !includes.includes(val)) return false
-        
-        // If there are 'exclude' filters, the value must not be one of them
-        if (excludes.includes(val)) return false
-        
-        return true
-      }
-
-      // Tags need special multi-value logic
-      const applyTagFilter = (tagsStr: string, filter: Record<string, 'include' | 'exclude'>) => {
-        const keys = Object.keys(filter)
-        if (keys.length === 0) return true
-        
-        const currentTags = tagsStr.split(',').map(t => t.trim())
-        const includes = keys.filter(k => filter[k] === 'include')
-        const excludes = keys.filter(k => filter[k] === 'exclude')
-
-        if (includes.length > 0 && !includes.some(t => currentTags.includes(t))) return false
-        if (excludes.some(t => currentTags.includes(t))) return false
-        
-        return true
-      }
-
-      const matchOwner = applyFilter(item.owner || "No owner", ownerFilter)
-      const matchCat = applyFilter(item.category || "Uncategorized", categoryFilter)
-      const matchTag = applyTagFilter(item.tags || "", tagFilter)
-      const matchDay = !dayFilter || item.date === dayFilter
-      
-      return matchesSearch && matchOwner && matchCat && matchTag && matchDay
+      return result;
     })
-  }, [periodData, globalSearch, ownerFilter, categoryFilter, tagFilter, dayFilter])
+  }, [periodData, filterLayers, dayFilter])
 
   const selectedRows = useMemo(() => {
     return filteredData.filter(row => rowSelection[row.id])
   }, [filteredData, rowSelection])
+
+  // Data for charts: selection prioritized over filtered data
+  const chartData = useMemo(() => {
+    return selectedRows.length > 0 ? selectedRows : filteredData
+  }, [selectedRows, filteredData])
 
   const handleSaveMetaItem = async (type: 'tags' | 'categories', item: { name: string, color: string }) => {
     const current = type === 'tags' ? [...metaTags] : [...metaCategories]
@@ -394,15 +423,43 @@ export function TransactionsPage() {
     setIsVisualPending(true)
     requestAnimationFrame(() => {
       startTransition(() => {
-        setLocalSearch("")
-        setGlobalSearch("")
-        setOwnerFilter({})
-        setCategoryFilter({})
-        setTagFilter({})
+        setFilterLayers([{
+          id: crypto.randomUUID(),
+          logic: 'AND',
+          localSearch: "",
+          globalSearch: "",
+          ownerFilter: {},
+          categoryFilter: {},
+          tagFilter: {},
+        }])
         setDayFilter(null)
       })
     })
   }, [])
+
+  const addFilterLayer = () => {
+    setFilterLayers(prev => [...prev, {
+      id: crypto.randomUUID(),
+      logic: 'AND',
+      localSearch: "",
+      globalSearch: "",
+      ownerFilter: {},
+      categoryFilter: {},
+      tagFilter: {},
+    }])
+  }
+
+  const removeFilterLayer = (id: string) => {
+    if (filterLayers.length === 1) {
+      resetFilters()
+      return
+    }
+    setFilterLayers(prev => prev.filter(l => l.id !== id))
+  }
+
+  const updateLayer = (id: string, update: Partial<(typeof filterLayers)[0]>) => {
+    setFilterLayers(prev => prev.map(l => l.id === id ? { ...l, ...update } : l))
+  }
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -420,8 +477,18 @@ export function TransactionsPage() {
           setIsBulkEditDialogOpen(false)
         } else if (Object.keys(rowSelection).length > 0) {
           setRowSelection({})
-        } else if (Object.keys(ownerFilter).length > 0 || Object.keys(categoryFilter).length > 0 || Object.keys(tagFilter).length > 0 || globalSearch || dayFilter) {
-          resetFilters()
+        } else if (filterLayers.some(l => l.localSearch !== "")) {
+          setFilterLayers(prev => prev.map(l => ({ ...l, localSearch: "", globalSearch: "" })))
+        } else if (filterLayers.some(l => Object.keys(l.categoryFilter).length > 0)) {
+          setFilterLayers(prev => prev.map(l => ({ ...l, categoryFilter: {} })))
+        } else if (filterLayers.some(l => Object.keys(l.tagFilter).length > 0)) {
+          setFilterLayers(prev => prev.map(l => ({ ...l, tagFilter: {} })))
+        } else if (filterLayers.some(l => Object.keys(l.ownerFilter).length > 0)) {
+          setFilterLayers(prev => prev.map(l => ({ ...l, ownerFilter: {} })))
+        } else if (dayFilter) {
+          setDayFilter(null)
+        } else if (filterLayers.length > 1) {
+          setFilterLayers(prev => [prev[0]])
         }
       } else if (e.key.toLowerCase() === 'a') {
         e.preventDefault() // Prevent scroll or other browser defaults
@@ -442,7 +509,7 @@ export function TransactionsPage() {
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [filteredData, selectedRows.length, resetFilters, isBulkEditDialogOpen, rowSelection, ownerFilter, categoryFilter, tagFilter, globalSearch, dayFilter])
+  }, [filteredData, selectedRows.length, resetFilters, isBulkEditDialogOpen, rowSelection, filterLayers, dayFilter])
 
   const handlePeriodChange = (offsetUpdate: number | ((prev: number) => number)) => {
     setIsVisualPending(true)
@@ -602,7 +669,7 @@ export function TransactionsPage() {
 
       {viewMode === 'monthly' ? (
         <TransactionChart 
-          data={filteredData} 
+          data={chartData} 
           filterOffset={filterOffset} 
           onDayClick={(day) => setDayFilter(day === dayFilter ? null : day)}
           loading={loading}
@@ -610,82 +677,123 @@ export function TransactionsPage() {
         />
       ) : (
         <YearlyTransactionChart
-          data={filteredData}
+          data={chartData}
           yearOffset={yearOffset}
           loading={loading}
           categoriesMeta={metaCategories}
         />
       )}
 
-      <div className="sticky top-14 z-30 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 py-4 -mx-4 px-4 border-b mb-4 shadow-sm">
-        <div className="flex flex-wrap items-center gap-2">
-          <Input
-            placeholder="Search all columns..."
-            value={localSearch}
-            onChange={(e) => setLocalSearch(e.target.value)}
-            className="max-w-xs h-8 text-xs font-mono"
-          />
-          
-          <DataTableFacetedFilter
-            title="Category"
-            options={categories.map(cat => ({ label: cat, value: cat }))}
-            selectedValues={categoryFilter}
-            onSelect={(v) => startTransition(() => setCategoryFilter(v))}
-          />
-
-          <DataTableFacetedFilter
-            title="Tag"
-            options={allTags.map(tag => ({ label: tag, value: tag }))}
-            selectedValues={tagFilter}
-            onSelect={(v) => startTransition(() => setTagFilter(v))}
-          />
-
-          <DataTableFacetedFilter
-            title="Owner"
-            options={owners.map(owner => ({ label: owner, value: owner }))}
-            selectedValues={ownerFilter}
-            onSelect={(v) => startTransition(() => setOwnerFilter(v))}
-          />
-
-          {dayFilter && (
-            <div className="flex items-center bg-primary/10 border border-primary/20 rounded-md px-2 py-1 h-8">
-              <span className="text-[10px] font-bold text-primary mr-2 uppercase">Day: {format(parseISO(dayFilter), "dd/MM")}</span>
-              <button onClick={() => setDayFilter(null)} className="hover:text-primary"><Trash2 className="h-3 w-3" /></button>
+      <div className="sticky top-14 z-30 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 py-4 -mx-4 px-4 border-b mb-4 shadow-sm flex flex-col gap-2">
+        {filterLayers.map((layer, index) => (
+          <div key={layer.id} className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-1">
+              {index === 0 ? (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-indigo-600 hover:bg-indigo-50"
+                  onClick={addFilterLayer}
+                  aria-label="Add Filter Layer"
+                >
+                  <Plus className="h-4 w-4" />
+                </Button>
+              ) : (
+                <div className="flex items-center gap-1">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-destructive hover:bg-destructive/10"
+                    onClick={() => removeFilterLayer(layer.id)}
+                    aria-label="Remove Filter Layer"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 px-2 text-[10px] font-bold uppercase tracking-tighter"
+                    onClick={() => updateLayer(layer.id, { logic: layer.logic === 'AND' ? 'OR' : 'AND' })}
+                    aria-label={`Toggle logic: currently ${layer.logic}`}
+                  >
+                    {layer.logic}
+                  </Button>
+                </div>
+              )}
             </div>
-          )}
 
-          {(globalSearch || Object.keys(ownerFilter).length > 0 || Object.keys(categoryFilter).length > 0 || Object.keys(tagFilter).length > 0 || dayFilter) && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={resetFilters}
-              className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground"
-            >
-              Clear
-            </Button>
-          )}
+            <Input
+              placeholder="Search..."
+              value={layer.localSearch}
+              onChange={(e) => updateLayer(layer.id, { localSearch: e.target.value })}
+              className="max-w-[200px] h-8 text-xs font-mono"
+            />
+            
+            <DataTableFacetedFilter
+              title="Category"
+              options={categories.map(cat => ({ label: cat, value: cat }))}
+              selectedValues={layer.categoryFilter}
+              onSelect={(v) => updateLayer(layer.id, { categoryFilter: v })}
+            />
 
-          <div className="flex items-center gap-1.5 px-2 border-l ml-1">
-            <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-tight">Total:</span>
-            <Badge variant="secondary" className="h-5 px-1.5 text-[10px] font-mono font-bold bg-muted/50 border-none">
-              {filteredData.length}
-            </Badge>
-          </div>
+            <DataTableFacetedFilter
+              title="Tag"
+              options={allTags.map(tag => ({ label: tag, value: tag }))}
+              selectedValues={layer.tagFilter}
+              onSelect={(v) => updateLayer(layer.id, { tagFilter: v })}
+            />
 
-          <div className="ml-auto flex items-center gap-2">
-            {selectedRows.length > 0 && (
-              <Button 
-                variant="default" 
-                size="sm" 
-                className="h-8 bg-indigo-600 hover:bg-indigo-700 text-xs shadow-md animate-in fade-in slide-in-from-right-2"
-                onClick={() => setIsBulkEditDialogOpen(true)}
+            <DataTableFacetedFilter
+              title="Owner"
+              options={owners.map(owner => ({ label: owner, value: owner }))}
+              selectedValues={layer.ownerFilter}
+              onSelect={(v) => updateLayer(layer.id, { ownerFilter: v })}
+            />
+
+            {index === 0 && dayFilter && (
+              <div className="flex items-center bg-primary/10 border border-primary/20 rounded-md px-2 py-1 h-8">
+                <span className="text-[10px] font-bold text-primary mr-2 uppercase">Day: {format(parseISO(dayFilter), "dd/MM")}</span>
+                <button onClick={() => setDayFilter(null)} className="hover:text-primary"><Trash2 className="h-3 w-3" /></button>
+              </div>
+            )}
+
+            {index === 0 && (filterLayers.length > 1 || layer.globalSearch || Object.keys(layer.ownerFilter).length > 0 || Object.keys(layer.categoryFilter).length > 0 || Object.keys(layer.tagFilter).length > 0 || dayFilter) && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={resetFilters}
+                className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground"
               >
-                <Edit3 className="mr-2 h-3.5 w-3.5" />
-                Bulk Edit ({selectedRows.length})
+                Clear All
               </Button>
             )}
+
+            {index === 0 && (
+              <>
+                <div className="flex items-center gap-1.5 px-2 border-l ml-1">
+                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-tight">Total:</span>
+                  <Badge variant="secondary" className="h-5 px-1.5 text-[10px] font-mono font-bold bg-muted/50 border-none">
+                    {filteredData.length}
+                  </Badge>
+                </div>
+
+                <div className="ml-auto flex items-center gap-2">
+                  {selectedRows.length > 0 && (
+                    <Button 
+                      variant="default" 
+                      size="sm" 
+                      className="h-8 bg-indigo-600 hover:bg-indigo-700 text-xs shadow-md animate-in fade-in slide-in-from-right-2"
+                      onClick={() => setIsBulkEditDialogOpen(true)}
+                    >
+                      <Edit3 className="mr-2 h-3.5 w-3.5" />
+                      Bulk Edit ({selectedRows.length})
+                    </Button>
+                  )}
+                </div>
+              </>
+            )}
           </div>
-        </div>
+        ))}
       </div>
 
       <div className="relative">
@@ -878,6 +986,7 @@ export function TransactionsPage() {
                                 variant="ghost" 
                                 size="icon" 
                                 className="h-7 w-7 rounded-full"
+                                aria-label="Edit"
                                 onClick={() => setEditingItem({ ...item, isNew: false })}
                               >
                                 <Edit3 className="h-3 w-3 text-muted-foreground" />
@@ -886,6 +995,7 @@ export function TransactionsPage() {
                                 variant="ghost" 
                                 size="icon" 
                                 className="h-7 w-7 rounded-full hover:text-destructive"
+                                aria-label="Delete"
                                 onClick={() => handleDeleteMetaItem(bulkActiveTab as 'tags' | 'categories', item.name)}
                               >
                                 <Trash2 className="h-3 w-3" />
@@ -899,6 +1009,16 @@ export function TransactionsPage() {
               </div>
             </div>
           </Tabs>
+
+          <div className="flex justify-end p-6 border-t bg-muted/20">
+            <Button 
+              variant="outline" 
+              className="px-8" 
+              onClick={() => setIsBulkEditDialogOpen(false)}
+            >
+              Done
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

@@ -195,6 +195,24 @@ export function dataImportRegistration() {
   if (!fs.existsSync(sourceBaseDir)) return;
   const ownerDirs = fs.readdirSync(sourceBaseDir).filter(f => fs.statSync(path.join(sourceBaseDir, f)).isDirectory());
 
+  const existingHashesCache = new Map<string, Set<string>>();
+
+  const getExistingHashes = (destFile: string): Set<string> => {
+    if (existingHashesCache.has(destFile)) return existingHashesCache.get(destFile)!;
+    const set = new Set<string>();
+    const destPath = path.join(dataDir, destFile);
+    if (fs.existsSync(destPath)) {
+      const content = fs.readFileSync(destPath, 'utf8');
+      const data = Papa.parse<any>(content, { header: true, skipEmptyLines: true }).data;
+      for (const row of data) {
+        const hash = row['row-hash'];
+        if (hash) set.add(hash);
+      }
+    }
+    existingHashesCache.set(destFile, set);
+    return set;
+  };
+
   for (const ownerName of ownerDirs) {
     const ownerDirPath = path.join(sourceBaseDir, ownerName);
     const files = fs.readdirSync(ownerDirPath).filter(f => f.endsWith('.csv')).sort();
@@ -225,14 +243,27 @@ export function dataImportRegistration() {
       const timeCol = rows[0].date ? 'date' : 'Time';
       rows.sort((a, b) => a[timeCol].localeCompare(b[timeCol]));
 
+      const existingHashes = getExistingHashes(destFile);
+      const linesToAppend: string[] = [];
+
+      for (const row of rows) {
+        const propsForHash = Object.values(row).map(v => String(v));
+        const rowHash = getSha256(propsForHash.join(','));
+        
+        if (existingHashes.has(rowHash)) continue;
+
+        const rowValues = propsForHash.map(strVal => (strVal.includes(',') || strVal.includes('"')) ? `"${strVal.replace(/"/g, '""')}"` : strVal);
+        linesToAppend.push(rowValues.join(',') + ',' + rowHash);
+        existingHashes.add(rowHash);
+      }
+
+      if (linesToAppend.length === 0) {
+        console.log(`All transactions in ${file} are already imported. Skipping.`);
+        continue;
+      }
+
       const prevHash = getLastChainTransactionHash(destFile, ownerName);
       const secondHash = getSha256(firstHash + prevHash);
-      
-      const linesToAppend = rows.map(row => {
-        const propsForHash = Object.values(row).map(v => String(v));
-        const rowValues = propsForHash.map(strVal => (strVal.includes(',') || strVal.includes('"')) ? `"${strVal.replace(/"/g, '""')}"` : strVal);
-        return rowValues.join(',') + ',' + getSha256(propsForHash.join(','));
-      });
       
       const lastTime = rows[rows.length - 1][timeCol];
       linesToAppend.push(createChainRow(firstHash, destFile, ownerName, lastTime, 'chain'));
