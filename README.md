@@ -1,75 +1,88 @@
-# React + TypeScript + Vite
+# MondayMoney 💰
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+[![Version](https://img.shields.io/badge/version-0.4.0-blue.svg)](package.json)
+[![License: Existential](https://img.shields.io/badge/License-Existential-purple.svg)](#-license)
 
-Currently, two official plugins are available:
+**MondayMoney** is a lightweight, privacy-focused desktop application for personal finance management. Built with Electron and React, it allows you to track transactions, visualize spending, and manage your data locally via CSV files.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+---
 
-## React Compiler
+## ✨ Features
 
-The React Compiler is enabled on this template. See [this documentation](https://react.dev/learn/react-compiler) for more information.
+- **Privacy First:** All data stays on your machine. No cloud sync, no trackers.
+- **CSV Integration:** Easily import and manage transaction history using standard formats.
+- **Data Visualization:** Interactive charts powered by Recharts to understand your spending habits.
+- **Integrity Checks:** Built-in tools to ensure your ledger remains consistent.
+- **Developer Friendly:** Extensible architecture with a full E2E test suite.
 
-Note: This will impact Vite dev & build performances.
+---
 
-## Expanding the ESLint configuration
+## 🚀 Getting Started
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+### For Users
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+MondayMoney is currently distributed as a **Portable Windows Application**.
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+1. Download the latest `MondayMoney.exe` from the [Releases](link-to-releases) page.
+2. Run the executable—no installation required.
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+### For Developers
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+**Prerequisites:**
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+- [Node.js](https://nodejs.org/) (v20+ recommended)
+- [npm](https://www.npmjs.com/) or [yarn](https://yarnpkg.com/)
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+**Setup:**
+
+1. Clone the repository:
+
+   ```bash
+   git clone https://github.com/your-username/monday-money.git
+   cd monday-money
+   ```
+
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
+3. Start the development server:
+   ```bash
+   npm run dev
+   ```
+
+---
+
+## 🛠️ Tech Stack
+
+- **Runtime:** [Electron](https://www.electronjs.org/)
+- **Frontend:** [React 19](https://react.dev/), [Vite](https://vitejs.dev/), [Tailwind CSS 4](https://tailwindcss.com/)
+- **UI Components:** [Radix UI](https://www.radix-ui.com/), [Shadcn/UI](https://ui.shadcn.com/)
+- **Charts:** [Recharts](https://recharts.org/)
+- **Data Parsing:** [PapaParse](https://www.papaparse.com/)
+- **Testing:** [Playwright](https://playwright.dev/)
+
+---
+
+## 🧪 Maintenance & Tools
+
+The project includes specialized scripts to maintain data health:
+
+- **`npm run integrity-check`**: Validates the consistency of your local CSV files.
+- **`npm run data-reset`**: Wipes current data and creates a fresh seed transaction.
+- **`npm run protect-files`**: Sets local data files to a protected state.
+- **`npm run test`**: Executes the full E2E test suite via Playwright.
+- **`npm run test:file`**: Executes a single test file via Playwright in headed mode.
+  - *Example:* `npm run test:file tests/categories.spec.ts`
+
+---
+
+## 🔒 Data Architecture
+
+MondayMoney stores transactions in the `core/data/` directory as CSV files. To backup your data, simply copy the `core/` folder. This ensures you have full ownership and portability of your financial history.
+
+---
+
+## 📄 License
+
+<sub>By using this project, you accept a license written in the ink of cosmic indifference, where life is a temporary variable, aliens are your true auditors, and the universe is a simulation with 42 as its root password. Everything you track is mere digital dust; ownership is a firmware bug, and we are all just bytes in a celestial ledger awaiting the final garbage collection of the Great Refactor.</sub>
