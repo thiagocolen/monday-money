@@ -26,7 +26,7 @@ import {
 } from "@/components/ui/table"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
-import { ChevronDown, ChevronUp, ChevronsUpDown, X } from "lucide-react"
+import { ChevronDown, ChevronUp, ChevronsUpDown, Loader2, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 interface DataTableProps<TData, TValue> {
@@ -43,6 +43,7 @@ interface DataTableProps<TData, TValue> {
   stickyHeader?: boolean
   headerOffset?: number
   meta?: any
+  loading?: boolean
 }
 
 export function DataTable<TData, TValue>({
@@ -59,6 +60,7 @@ export function DataTable<TData, TValue>({
   stickyHeader = false,
   headerOffset = 0,
   meta,
+  loading = false,
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = React.useState<SortingState>([])
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
@@ -124,6 +126,11 @@ export function DataTable<TData, TValue>({
         </div>
       )}
       <div className={cn("rounded-md border relative", !stickyHeader && "overflow-hidden")}>
+        {loading && (
+          <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/50 backdrop-blur-[1px]">
+            <Loader2 className="h-6 w-6 animate-spin text-primary" />
+          </div>
+        )}
         <Table containerClassName={stickyHeader ? "overflow-visible" : ""}>
           <TableHeader className={stickyHeader ? "z-20" : ""}>
             {table.getHeaderGroups().map((headerGroup) => (

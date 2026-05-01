@@ -3,7 +3,7 @@
 import * as React from "react"
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts"
 import type { Transaction } from "@/lib/api"
-import { format, parseISO, startOfYear, endOfYear, eachMonthOfInterval, addYears } from "date-fns"
+import { format, startOfYear, endOfYear, eachMonthOfInterval, addYears } from "date-fns"
 import {
   Card,
   CardContent,
