@@ -1,0 +1,60 @@
+site_name: MondayMoney
+site_url: https://thiagocolen.github.io/monday-money/
+site_description: Lightweight, privacy-focused desktop application for personal finance management.
+site_author: Thiago Colen
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+
+nav:
+  - Home: index.md
+  - Features: features.md
+  - User Guide:
+      - Getting Started: user-guide/getting-started.md
+      - Importing Data: user-guide/imports.md
+  - Technical:
+      - Architecture: technical/architecture.md
+      - Maintenance Tools: technical/maintenance.md
+  - Developer Guide:
+      - Setup: dev-guide/setup.md
+      - Testing: dev-guide/testing.md
+  - Release Notes:
+      - v0.5.0: release-notes/MondayMoney-v0.5.0.md
+      - v0.4.0: release-notes/MondayMoney-v0.4.0.md
+      - v0.3.0: release-notes/MondayMoney-v0.3.0.md
+      - v0.2.0: release-notes/MondayMoney-v0.2.0.md
+
+markdown_extensions:
+  - admonition
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - attr_list
+  - md_in_html
