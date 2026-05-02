@@ -26,7 +26,7 @@ import {
 } from "@/components/ui/table"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
-import { ChevronDown, ChevronUp, ChevronsUpDown, Loader2, X } from "lucide-react"
+import { ChevronDown, ChevronUp, ChevronsUpDown, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 interface DataTableProps<TData, TValue> {
@@ -126,11 +126,6 @@ export function DataTable<TData, TValue>({
         </div>
       )}
       <div className={cn("rounded-md border relative", !stickyHeader && "overflow-hidden")}>
-        {loading && (
-          <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/50 backdrop-blur-[1px]">
-            <Loader2 className="h-6 w-6 animate-spin text-primary" />
-          </div>
-        )}
         <Table containerClassName={stickyHeader ? "overflow-visible" : ""}>
           <TableHeader className={stickyHeader ? "z-20" : ""}>
             {table.getHeaderGroups().map((headerGroup) => (
@@ -179,7 +174,13 @@ export function DataTable<TData, TValue>({
             ))}
           </TableHeader>
           <TableBody>
-            {table.getRowModel().rows?.length ? (
+            {loading ? (
+              <TableRow>
+                <TableCell colSpan={columns.length} className="h-24 text-center">
+                  Loading...
+                </TableCell>
+              </TableRow>
+            ) : table.getRowModel().rows?.length ? (
               table.getRowModel().rows.map((row) => (
                 <TableRow
                   key={row.id}

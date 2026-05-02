@@ -1,8 +1,8 @@
 "use client"
 
 import * as React from "react"
-import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts"
-import type { Transaction } from "@/lib/api"
+import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts"
+import { type Transaction, getEffectiveMonth } from "@/lib/api"
 import { format, startOfYear, endOfYear, eachMonthOfInterval, addYears } from "date-fns"
 import {
   Card,
@@ -44,7 +44,6 @@ export function YearlyTransactionChart({ data, yearOffset, loading = false, cate
     
     // We assume 'data' is already filtered by year and other criteria by the parent
     const yearTransactions = data.filter(t => 
-      t.category !== 'NULLED' && 
       t.category !== 'chain-transaction'
     )
 
@@ -57,7 +56,7 @@ export function YearlyTransactionChart({ data, yearOffset, loading = false, cate
 
     const result = monthsMap.map(m => {
       const monthData: any = { month: m.month }
-      const monthTransactions = yearTransactions.filter(t => t.date.startsWith(m.monthKey))
+      const monthTransactions = yearTransactions.filter(t => getEffectiveMonth(t) === m.monthKey)
       
       // Get all unique categories to ensure they exist in the object
       categoriesMeta.forEach(cat => {
@@ -107,13 +106,10 @@ export function YearlyTransactionChart({ data, yearOffset, loading = false, cate
   const totalYearlyAmount = React.useMemo(() => {
     const now = new Date()
     const targetDate = addYears(now, yearOffset)
-    const start = startOfYear(targetDate)
-    const end = endOfYear(targetDate)
-    const yearStartStr = format(start, 'yyyy-MM-dd')
-    const yearEndStr = format(end, 'yyyy-MM-dd')
+    const targetYear = format(targetDate, 'yyyy')
 
     return data
-      .filter(t => t.date >= yearStartStr && t.date <= yearEndStr && t.category !== 'NULLED' && t.category !== 'chain-transaction')
+      .filter(t => getEffectiveMonth(t).startsWith(targetYear) && t.category !== 'chain-transaction')
       .reduce((sum, t) => sum + t.amount, 0)
   }, [data, yearOffset])
 
@@ -144,7 +140,7 @@ export function YearlyTransactionChart({ data, yearOffset, loading = false, cate
         )}
         
         <ChartContainer config={chartConfig} className="h-[400px] w-full">
-          <AreaChart
+          <BarChart
             data={chartData}
             margin={{
               left: 12,
@@ -182,20 +178,19 @@ export function YearlyTransactionChart({ data, yearOffset, loading = false, cate
               />}
             />
             {Object.keys(chartConfig).map((key) => (
-              <Area
+              <Bar
                 key={key}
-                type="monotone"
                 dataKey={key}
-                stackId="1"
-                stroke={chartConfig[key].color as string}
+                stackId="a"
                 fill={chartConfig[key].color as string}
-                fillOpacity={0.4}
+                radius={[0, 0, 0, 0]}
               />
             ))}
             <ChartLegend content={<ChartLegendContent />} className="mt-8" />
-          </AreaChart>
+          </BarChart>
         </ChartContainer>
       </CardContent>
     </Card>
   )
 }
+

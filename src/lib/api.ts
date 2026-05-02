@@ -26,6 +26,12 @@ export interface Transaction {
   rowHash: string;
 }
 
+export function getEffectiveMonth(t: Transaction): string {
+  if (!t.tags) return t.date.substring(0, 7);
+  const monthTag = t.tags.split(',').map(tag => tag.trim()).find(tag => /^\d{4}-\d{2}$/.test(tag));
+  return monthTag || t.date.substring(0, 7);
+}
+
 export interface BinanceTransaction {
   id: string;
   'User ID': string;

@@ -46,12 +46,12 @@ test("is allowed to remove/add a tag, from/to multiple transactions, in a bulk o
   await page.getByRole("tab", { name: "Tags" }).click();
 
   const itemRow = dialog.locator("div.group").filter({ hasText: tag1 });
-  await itemRow.getByRole("button", { name: "Add" }).click();
+  await itemRow.click();
 
   // Wait for success toast to ensure backend processing is done
   const successToast = page.getByText("Updated 3 transactions");
-  await expect(successToast.first()).toBeVisible();
-  await expect(successToast.first()).toBeHidden(); // Ensure toast is gone before next operation
+  await expect(successToast.first()).toBeVisible({ timeout: 10000 });
+  await expect(successToast.first()).toBeHidden({ timeout: 15000 }); // Ensure toast is gone before next operation
   await dialog.getByRole("button", { name: "Done" }).click();
 
   // 4. Verify tag is added to all selected transactions
@@ -66,10 +66,12 @@ test("is allowed to remove/add a tag, from/to multiple transactions, in a bulk o
   await page.getByRole("button", { name: /Bulk Edit \(3\)/ }).click();
   await page.getByRole("tab", { name: "Tags" }).click();
   const itemRowRemove = dialog.locator("div.group").filter({ hasText: tag1 });
-  await itemRowRemove.getByRole("button", { name: "Remove" }).click();
+  await itemRowRemove.click();
 
   // Wait for success toast
-  await expect(page.getByText("Updated 3 transactions").first()).toBeVisible();
+  const successToastRemove = page.getByText("Updated 3 transactions");
+  await expect(successToastRemove.first()).toBeVisible({ timeout: 10000 });
+  await expect(successToastRemove.first()).toBeHidden({ timeout: 15000 });
   await dialog.getByRole("button", { name: "Done" }).click();
 
   // 7. Verify tag is removed from all

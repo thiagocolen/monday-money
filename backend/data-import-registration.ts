@@ -47,12 +47,25 @@ export const PARSERS: FileParser[] = [
     name: 'NubankAccount',
     match: (f) => f.startsWith('NU_'),
     parse: (_f, content, owner) => {
-      const parsed = Papa.parse<any>(content, { header: true, delimiter: ',', skipEmptyLines: true }).data;
-      const rows = parsed.filter(item => item.Data && item.Valor).map(item => {
-        const dateParts = item.Data.split('/');
+      const cleanContent = content.replace(/^\uFEFF/, '').trim();
+      const parsed = Papa.parse<any>(cleanContent, { header: true, delimiter: ',', skipEmptyLines: true }).data;
+      const rows = parsed.filter(item => {
+        const keys = Object.keys(item).map(k => k.trim().toLowerCase());
+        return keys.includes('data') && keys.includes('valor');
+      }).map(item => {
+        const getVal = (search: string) => {
+          const key = Object.keys(item).find(k => k.trim().toLowerCase() === search.toLowerCase());
+          return key ? item[key] : '';
+        };
+
+        const dateVal = getVal('data');
+        const dateParts = dateVal.split('/');
         const formattedDate = `${dateParts[2]}-${dateParts[1]}-${dateParts[0]}`;
-        const descCol = Object.keys(item).find(k => k.startsWith('Descri'));
-        const amount = parseFloat(normalizeAmount(item.Valor));
+        const descCol = Object.keys(item).find(k => k.trim().toLowerCase().startsWith('descri'));
+        
+        // Invert amount: expenses (-) become positive for categorization as per test requirements
+        const originalValue = getVal('valor');
+        const amount = parseFloat(normalizeAmount(originalValue)) * -1;
         return { date: formattedDate, description: item[descCol!], amount: amount.toString(), owner };
       });
       return { destFile: 'monthly-transactions.csv', rows };
@@ -62,10 +75,21 @@ export const PARSERS: FileParser[] = [
     name: 'NubankCreditCard',
     match: (f) => f.startsWith('Nubank_'),
     parse: (_f, content, owner) => {
-      const parsed = Papa.parse<any>(content, { header: true, delimiter: ',', skipEmptyLines: true }).data;
-      const rows = parsed.filter(item => item.date && item.amount).map(item => {
-        const amount = parseFloat(normalizeAmount(item.amount)) * -1;
-        return { date: item.date, description: item.title, amount: amount.toString(), owner };
+      const cleanContent = content.replace(/^\uFEFF/, '').trim();
+      const parsed = Papa.parse<any>(cleanContent, { header: true, delimiter: ',', skipEmptyLines: true }).data;
+      const rows = parsed.filter(item => {
+        const keys = Object.keys(item).map(k => k.trim().toLowerCase());
+        return keys.includes('date') && (keys.includes('amount') || keys.includes('valor'));
+      }).map(item => {
+        const getVal = (search: string) => {
+          const key = Object.keys(item).find(k => k.trim().toLowerCase() === search.toLowerCase());
+          return key ? item[key] : '';
+        };
+
+        const originalValue = getVal('amount') || getVal('valor');
+        const amount = parseFloat(normalizeAmount(originalValue)) * -1;
+        const title = getVal('title') || getVal('description') || getVal('descrição');
+        return { date: getVal('date'), description: title, amount: amount.toString(), owner };
       });
       return { destFile: 'monthly-transactions.csv', rows };
     }
@@ -74,10 +98,37 @@ export const PARSERS: FileParser[] = [
     name: 'BinanceTransactionHistory',
     match: (f) => f.startsWith('Binance-Transaction-History-'),
     parse: (_f, content, owner) => {
-      const parsed = Papa.parse<any>(content, { header: true, delimiter: ',', skipEmptyLines: true }).data;
-      const rows = parsed.filter(item => item.Time && item.Coin).map(item => ({
-        'User ID': item['User ID'], Time: item.Time, Account: item.Account, Operation: item.Operation, Coin: item.Coin, Change: normalizeAmount(item.Change), Remark: item.Remark, owner
-      }));
+      const cleanContent = content.replace(/^\uFEFF/, '').trim();
+      let results = Papa.parse<any>(cleanContent, { header: true, skipEmptyLines: true });
+      
+      // Fallback: if auto-detection failed to find multiple columns but we see commas, force it
+      if (Object.keys(results.data[0] || {}).length <= 1 && cleanContent.includes(',')) {
+        results = Papa.parse<any>(cleanContent, { header: true, delimiter: ',', skipEmptyLines: true });
+      }
+
+      const parsed = results.data;
+      const rows = parsed.filter(item => {
+        const keys = Object.keys(item).map(k => k.trim().toLowerCase());
+        return (keys.some(k => k.includes('time')) && keys.some(k => k.includes('coin')));
+      }).map(item => {
+        const getVal = (search: string) => {
+          const key = Object.keys(item).find(k => k.trim().toLowerCase().includes(search.toLowerCase()));
+          return key ? item[key] : '';
+        };
+
+        const originalValue = getVal('change');
+        const change = normalizeAmount(originalValue);
+        return {
+          'User ID': getVal('user id'), 
+          Time: getVal('time'), 
+          Account: getVal('account'), 
+          Operation: getVal('operation'), 
+          Coin: getVal('coin'), 
+          Change: change, 
+          Remark: getVal('remark'), 
+          owner
+        };
+      });
       return { destFile: 'binance-transaction-history.csv', rows };
     }
   },
@@ -86,10 +137,40 @@ export const PARSERS: FileParser[] = [
     match: (f) => f.startsWith('Binance-Deposit-History-') || f.startsWith('Binance-Withdraw-History-'),
     parse: (f, content, owner) => {
       const type = f.includes('Deposit') ? 'Deposit' : 'Withdraw';
-      const parsed = Papa.parse<any>(content, { header: true, delimiter: ',', skipEmptyLines: true }).data;
-      const rows = parsed.filter(item => item.Time && item.Amount).map(item => ({
-        Time: item.Time, Coin: item.Coin, Network: item.Network, Amount: normalizeAmount(item.Amount), Fee: normalizeAmount(item.Fee || '0'), Address: item.Address, TXID: item.TXID, Status: item.Status, Type: type, owner
-      }));
+      const cleanContent = content.replace(/^\uFEFF/, '').trim();
+      let results = Papa.parse<any>(cleanContent, { header: true, skipEmptyLines: true });
+
+      // Fallback: if auto-detection failed to find multiple columns but we see commas, force it
+      if (Object.keys(results.data[0] || {}).length <= 1 && cleanContent.includes(',')) {
+        results = Papa.parse<any>(cleanContent, { header: true, delimiter: ',', skipEmptyLines: true });
+      }
+
+      const parsed = results.data;
+      const rows = parsed.filter(item => {
+        const keys = Object.keys(item).map(k => k.trim().toLowerCase());
+        return keys.some(k => k.includes('time')) && (keys.some(k => k.includes('amount')) || keys.some(k => k.includes('change')));
+      }).map(item => {
+        const getVal = (search: string) => {
+          const key = Object.keys(item).find(k => k.trim().toLowerCase().includes(search.toLowerCase()));
+          return key ? item[key] : '';
+        };
+
+        const originalValue = getVal('amount') || getVal('change');
+        const amount = normalizeAmount(originalValue);
+
+        return {
+          Time: getVal('time'), 
+          Coin: getVal('coin'), 
+          Network: getVal('network'), 
+          Amount: amount, 
+          Fee: normalizeAmount(getVal('fee') || '0'), 
+          Address: getVal('address'), 
+          TXID: getVal('txid'), 
+          Status: getVal('status'), 
+          Type: type, 
+          owner
+        };
+      });
       return { destFile: 'binance-deposit-withdraw-history.csv', rows };
     }
   },
@@ -102,7 +183,8 @@ export const PARSERS: FileParser[] = [
       const parsed = Papa.parse<any>(content, { header: true, delimiter: ',', skipEmptyLines: true }).data;
       const rows = parsed.filter(item => item.Time && item['Transaction ID']).map(item => {
         const amtCol = Object.keys(item).find(k => k.includes('Amount') && !k.includes('Receive'));
-        let amount = parseFloat(normalizeAmount(item[amtCol!]));
+        const originalValue = item[amtCol!];
+        let amount = parseFloat(normalizeAmount(originalValue));
         if (isDeposit) amount = Math.abs(amount);
         else amount = -Math.abs(amount);
         return {
@@ -195,6 +277,24 @@ export function dataImportRegistration() {
   if (!fs.existsSync(sourceBaseDir)) return;
   const ownerDirs = fs.readdirSync(sourceBaseDir).filter(f => fs.statSync(path.join(sourceBaseDir, f)).isDirectory());
 
+  const existingHashesCache = new Map<string, Set<string>>();
+
+  const getExistingHashes = (destFile: string): Set<string> => {
+    if (existingHashesCache.has(destFile)) return existingHashesCache.get(destFile)!;
+    const set = new Set<string>();
+    const destPath = path.join(dataDir, destFile);
+    if (fs.existsSync(destPath)) {
+      const content = fs.readFileSync(destPath, 'utf8');
+      const data = Papa.parse<any>(content, { header: true, skipEmptyLines: true }).data;
+      for (const row of data) {
+        const hash = row['row-hash'];
+        if (hash) set.add(hash);
+      }
+    }
+    existingHashesCache.set(destFile, set);
+    return set;
+  };
+
   for (const ownerName of ownerDirs) {
     const ownerDirPath = path.join(sourceBaseDir, ownerName);
     const files = fs.readdirSync(ownerDirPath).filter(f => f.endsWith('.csv')).sort();
@@ -225,14 +325,27 @@ export function dataImportRegistration() {
       const timeCol = rows[0].date ? 'date' : 'Time';
       rows.sort((a, b) => a[timeCol].localeCompare(b[timeCol]));
 
+      const existingHashes = getExistingHashes(destFile);
+      const linesToAppend: string[] = [];
+
+      for (const row of rows) {
+        const propsForHash = Object.values(row).map(v => String(v));
+        const rowHash = getSha256(propsForHash.join(','));
+        
+        if (existingHashes.has(rowHash)) continue;
+
+        const rowValues = propsForHash.map(strVal => (strVal.includes(',') || strVal.includes('"')) ? `"${strVal.replace(/"/g, '""')}"` : strVal);
+        linesToAppend.push(rowValues.join(',') + ',' + rowHash);
+        existingHashes.add(rowHash);
+      }
+
+      if (linesToAppend.length === 0) {
+        console.log(`All transactions in ${file} are already imported. Skipping.`);
+        continue;
+      }
+
       const prevHash = getLastChainTransactionHash(destFile, ownerName);
       const secondHash = getSha256(firstHash + prevHash);
-      
-      const linesToAppend = rows.map(row => {
-        const propsForHash = Object.values(row).map(v => String(v));
-        const rowValues = propsForHash.map(strVal => (strVal.includes(',') || strVal.includes('"')) ? `"${strVal.replace(/"/g, '""')}"` : strVal);
-        return rowValues.join(',') + ',' + getSha256(propsForHash.join(','));
-      });
       
       const lastTime = rows[rows.length - 1][timeCol];
       linesToAppend.push(createChainRow(firstHash, destFile, ownerName, lastTime, 'chain'));
