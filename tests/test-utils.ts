@@ -26,7 +26,7 @@ async function navigateTo(page: Page, target: "Transactions" | "Investments" | "
   if (target === "Import") {
     await expect(page.getByRole("heading", { name: "Import Statement Files" })).toBeVisible();
   } else if (target === "Transactions") {
-    await expect(page.getByRole("heading", { name: "Monthly Transactions" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Transactions", exact: true })).toBeVisible();
   }
 }
 
@@ -66,6 +66,13 @@ export async function importRawCSV(page: Page) {
   // Wait for history to appear with a generous timeout for processing
   await expect(page.locator("tbody")).toContainText("Nubank_2026-01-09.csv", { timeout: 10000 });
   await expect(page.locator("tbody")).toContainText("28");
+
+  // Close the reprocessing dialog if it appears
+  const dialog = page.getByRole("dialog", { name: "Reprocessing Ledger" });
+  if (await dialog.isVisible()) {
+    await dialog.getByRole("button", { name: "Close" }).first().click();
+    await expect(dialog).toBeHidden();
+  }
 }
 
 export async function deleteImportedRawCSV(page: Page) {
@@ -75,17 +82,17 @@ export async function deleteImportedRawCSV(page: Page) {
   const main = page.getByRole("main");
   await expect(main).not.toContainText("Loading...");
   
-  const row = page.getByRole("row", { name: "Nubank_2026-01-09.csv" });
+  const row = page.getByRole("row").filter({ hasText: "Nubank_2026-01-09.csv" }).filter({ hasText: "test" });
   
   // Conditional check allows cleanup to be idempotent and resilient to previous test failures
-  if (await row.isVisible()) {
-    await row.getByRole("button").click();
+  if (await row.count() > 0) {
+    await row.first().getByRole("button").click();
     await page.getByRole("button", { name: "Remove and Reprocess" }).click();
     
     // Fix strict mode violation: there are two "Close" buttons (the button and the X icon)
     await page.getByRole("button", { name: "Close" }).first().click();
     
-    await expect(main).toContainText("No import history found.");
+    await expect(row).toBeHidden();
   }
 }
 
@@ -197,13 +204,9 @@ export async function applyMetadata(page: Page, type: MetadataType, name: string
   await searchInput.clear();
   await searchInput.fill(name);
 
-  // find the item row and click the action button
-  const itemRow = dialog.locator("div.group").filter({ hasText: name });
-  const actionButton = type === "Categories" 
-    ? itemRow.getByRole("button", { name: "Set" })
-    : itemRow.getByRole("button", { name: "Add" });
-  
-  await actionButton.click();
+  // find the item row and click it (the whole row is now clickable for applying)
+  const itemRow = dialog.locator(".cursor-pointer").filter({ hasText: name });
+  await itemRow.click();
   
   await closeBulkEditDialog(page, dialog);
 }
@@ -253,9 +256,10 @@ export async function deleteMetadata(page: Page, type: MetadataType, name: strin
 
   // confirm item was found
   await expect(dialog).toContainText(name);
+  
   // Target the specific item row and click its delete button
-  const itemRow = dialog.locator("div.group").filter({ hasText: name });
-  await itemRow.getByRole("button").last().click();
+  const itemRow = dialog.locator(".group").filter({ hasText: name });
+  await itemRow.getByRole("button", { name: "Delete" }).click();
 
   // confirm delete by checking the item is gone from the list
   await expect(itemRow).toBeHidden();

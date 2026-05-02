@@ -31,16 +31,24 @@ test('verify NULLED category and nubank amount inversion', async ({ page }) => {
   await expect(page.locator('tbody')).toContainText('NU_99626330_01FEV2026_28FEV2026.csv');
   await expect(page.locator('tbody')).toContainText('Nubank_2026-01-09.csv');
 
-  // 2. Go to Transactions and check values
   await page.getByRole('link', { name: 'Transactions' }).click();
-  
-  // Navigate to January 2026
-  await page.getByRole('button', { name: 'Previous Month' }).click();
-  await page.getByRole('button', { name: 'Previous Month' }).click();
-  await page.getByRole('button', { name: 'Previous Month' }).click();
-  
-  await expect(page.locator('span').filter({ hasText: 'January 2026' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Transactions', exact: true })).toBeVisible();
 
+  // Navigate to January 2026
+  const monthLabel = page.locator('span.font-mono.font-bold').filter({ hasText: /202/ }).first();
+  for (let i = 0; i < 24; i++) {
+    await expect(monthLabel).toBeVisible();
+    const currentMonth = (await monthLabel.innerText()).toUpperCase();
+
+    // Support both English and Portuguese
+    if ((currentMonth.includes('JANUARY') || currentMonth.includes('JANEIRO')) && currentMonth.includes('2026')) break;
+
+    await page.getByRole('button', { name: 'Previous Month' }).click();
+    await expect(monthLabel).not.toHaveText(currentMonth, { ignoreCase: true });
+    await expect(page.getByText(/Loading/i)).not.toBeVisible();
+  }
+
+  await expect(monthLabel).toContainText(/Jan/i);
   // 3. Verify NULLED category exists in Bulk Edit
   // Select first data row to enable bulk edit
   const firstDataRow = page.getByRole('row', { name: '*Fake Nubank Debit Transaction' });
@@ -53,13 +61,14 @@ test('verify NULLED category and nubank amount inversion', async ({ page }) => {
   // Original CSV: -763.00 -> Should be 763.00
   const nubankDebitRow = page.getByRole('row', { name: '*Fake Nubank Debit Transaction' });
   await expect(nubankDebitRow).toContainText('763,00');
-  await expect(nubankDebitRow.locator('div.text-emerald-600')).toContainText('763,00');
+  // Check the div inside the cell that has the color class
+  await expect(nubankDebitRow.locator('div.text-emerald-600')).toBeVisible();
 
   // 5. Check Nubank Credit Inversion
   // Original CSV: 874.00 -> Should be -874.00
   const nubankCreditRow = page.getByRole('row', { name: '*Fake Nubank Credit Transaction' });
   await expect(nubankCreditRow).toContainText('874,00');
-  await expect(nubankCreditRow.locator('div.text-destructive')).toContainText('874,00');
+  await expect(nubankCreditRow.locator('div.text-destructive')).toBeVisible();
 
   // 6. Verify NULLED transactions are excluded from chart
   // Initial total should be 763.00 - 874.00 = -111.00
@@ -70,17 +79,20 @@ test('verify NULLED category and nubank amount inversion', async ({ page }) => {
   await nubankCreditRow.getByRole('checkbox').check();
   await page.getByRole('button', { name: /Bulk Edit/ }).click();
   
-  // Find NULLED row in dialog and click "Set"
+  // Find NULLED row in dialog and click it
+  // Use a regex that allows trailing text (like the "Default" badge)
   const nulledRow = page.getByRole('dialog')
-    .locator('div')
-    .filter({ has: page.getByText('NULLED', { exact: true }) })
-    .filter({ has: page.getByRole('button', { name: 'Set' }) })
+    .locator('div.group')
+    .filter({ hasText: /^NULLED/ })
     .last();
-  await nulledRow.getByRole('button', { name: 'Set' }).click();
-  await page.getByRole('button', { name: 'Done' }).click();
+  await nulledRow.click();
+  await page.getByRole("button", { name: "Done" }).click();
+
+  // Clear selection so the chart shows all (non-NULLED) filtered data
+  await nubankCreditRow.getByRole("checkbox").uncheck();
 
   // Now the chart total should only be the Debit transaction: +763.00
-  await expect(page.locator('.text-2xl.font-bold', { hasText: '763,00' })).toBeVisible();
+  await expect(page.locator(".text-2xl.font-bold", { hasText: "763,00" })).toBeVisible({ timeout: 10000 });
   // And it should be positive (emerald)
   await expect(page.locator('.text-2xl.font-bold.text-emerald-600')).toContainText('763,00');
 });

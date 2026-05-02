@@ -41,11 +41,25 @@ test('import, process, check and delete transaction from: Nubank Credit, Nubank 
   await expect(page.locator('tbody')).toContainText('1');
   await expect(page.locator('tbody')).toContainText('1');
   await page.getByRole('link', { name: 'Transactions' }).click();
-  await page.locator('span').filter({ hasText: 'April' }).click();
-  await page.getByRole('button').nth(2).click();
-  await page.getByRole('button').nth(2).click();
-  await page.getByRole('button').nth(2).click();
-  await expect(page.locator('tbody')).toContainText('01/01/2026');
+  await expect(page.getByRole('heading', { name: 'Transactions', exact: true })).toBeVisible();
+  
+  // Navigate to January 2026 with a robust loop
+  const monthLabel = page.locator('span.font-mono.font-bold').filter({ hasText: /202/ }).first();
+  for (let i = 0; i < 24; i++) { // Increased range to be safe
+    await expect(monthLabel).toBeVisible();
+    const currentMonth = (await monthLabel.innerText()).toUpperCase();
+    
+    // Support both English and Portuguese
+    if ((currentMonth.includes('JANUARY') || currentMonth.includes('JANEIRO')) && currentMonth.includes('2026')) break;
+
+    await page.getByRole('button', { name: 'Previous Month' }).click();
+    // Wait for the month label to change to ensure we don't click multiple times for the same month
+    await expect(monthLabel).not.toHaveText(currentMonth, { ignoreCase: true });
+    // Also wait for any loading indicators to disappear
+    await expect(page.getByText(/Loading/i)).not.toBeVisible();
+  }
+
+  await expect(page.locator('tbody')).toContainText('01/01/2026', { timeout: 10000 });
   const bradescoRow = page.getByRole('row', { name: '*Fake Bradesco Transaction' });
   await expect(bradescoRow).toContainText('999,00');
 
