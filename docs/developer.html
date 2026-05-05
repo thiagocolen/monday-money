@@ -44,6 +44,20 @@ npm install
 npm run data-reset
 npm run dev</code></pre>
 
+            <h3>Maintenance Scripts</h3>
+            <p>The project includes specialized scripts to maintain data health:</p>
+            <pre><code># Validate CSV consistency
+npm run integrity-check
+
+# Reset data with fresh seed transactions (for dev)
+npm run data-reset
+
+# Manually trigger a backup
+npm run backup-data
+
+# Set data files to read-only at the OS level
+npm run protect-files</code></pre>
+
             <h3>Testing</h3>
             <p>We use <strong>Playwright</strong> for E2E testing. Run the full suite with:</p>
             <pre><code>npm run test</code></pre>
