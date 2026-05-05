@@ -8,6 +8,10 @@ import {
   getSha256,
   resolveSafePath,
   getCoreDir,
+  getSettings,
+  deleteSettings,
+  backupData,
+  restoreData,
   PARSERS,
   DEFAULT_CATEGORIES
 } from './index.js';
@@ -380,48 +384,49 @@ export async function handleSaveMetadata(type: 'tags' | 'categories', data: Meta
   return { success: true };
 }
 
-export async function handleBackupCategories(): Promise<{ success: boolean; fileName?: string; error?: string }> {
-  const { dataDir, protectedDir } = getPaths();
-  const categoryCsvPath = path.join(dataDir, 'monthly-transactions-category.csv');
-  const tagsJsonPath = path.join(dataDir, 'meta-tags.json');
-  const catsJsonPath = path.join(dataDir, 'meta-categories.json');
-  const backupDir = path.join(protectedDir, 'monthly-transactions-category-bkp');
-
-  if (!fs.existsSync(backupDir)) {
-    fs.mkdirSync(backupDir, { recursive: true });
-  }
-
-  if (fs.existsSync(categoryCsvPath)) {
-    const now = new Date();
-    const pad = (n: number) => n.toString().padStart(2, '0');
-    const timestamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}-${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`;
+export async function handleFullBackup(): Promise<{ success: boolean; fileName?: string; error?: string }> {
+  try {
+    const settings = getSettings();
+    if (!settings.exportPath) throw new Error('Export path not configured');
     
-    // Backup CSV
-    const backupCsvPath = path.join(backupDir, `monthly-transactions-category-${timestamp}-bkp.csv`);
-    fs.copyFileSync(categoryCsvPath, backupCsvPath);
-
-    // Backup Meta Tags
-    if (fs.existsSync(tagsJsonPath)) {
-      const backupTagsPath = path.join(backupDir, `meta-tags-${timestamp}-bkp.json`);
-      fs.copyFileSync(tagsJsonPath, backupTagsPath);
-    }
-
-    // Backup Meta Categories
-    if (fs.existsSync(catsJsonPath)) {
-      const backupCatsPath = path.join(backupDir, `meta-categories-${timestamp}-bkp.json`);
-      fs.copyFileSync(catsJsonPath, backupCatsPath);
-    }
-
-    return { success: true, fileName: path.basename(backupCsvPath) };
+    const fileName = backupData(settings.exportPath);
+    return { success: true, fileName };
+  } catch (error) {
+    console.error('Error in handleFullBackup:', error);
+    return { success: false, error: String(error) };
   }
-  throw new Error('Category file not found');
+}
+
+export async function handleRestoreBackup(zipPath: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    restoreData(zipPath);
+    return { success: true };
+  } catch (error) {
+    console.error('Error in handleRestoreBackup:', error);
+    return { success: false, error: String(error) };
+  }
+}
+
+export async function handleResetApp(): Promise<{ success: boolean; error?: string }> {
+  try {
+    const coreDir = getCoreDir();
+    if (fs.existsSync(coreDir)) {
+      fs.rmSync(coreDir, { recursive: true, force: true });
+    }
+    deleteSettings();
+    return { success: true };
+  } catch (error) {
+    console.error('Error in handleResetApp:', error);
+    return { success: false, error: String(error) };
+  }
 }
 
 export async function handleGetBackupInfo(): Promise<{ count: number; latestDate: string | null }> {
-  const { protectedDir } = getPaths();
-  const backupDir = path.join(protectedDir, 'monthly-transactions-category-bkp');
-  if (fs.existsSync(backupDir)) {
-    const files = fs.readdirSync(backupDir).filter(f => f.endsWith('-bkp.csv'));
+  const settings = getSettings();
+  const backupDir = settings.exportPath;
+  
+  if (backupDir && fs.existsSync(backupDir)) {
+    const files = fs.readdirSync(backupDir).filter(f => f.endsWith('.zip') && f.includes('monday-money-data'));
     let latestDate = null;
     if (files.length > 0) {
       const dates = files.map(f => {

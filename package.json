@@ -1,7 +1,7 @@
 {
   "name": "monday-money",
   "private": true,
-  "version": "0.5.3",
+  "version": "0.5.11",
   "type": "module",
   "main": "dist-electron/main.js",
   "scripts": {
@@ -9,9 +9,10 @@
     "dev:web": "vite --mode web",
     "lint": "eslint .",
     "preview": "vite preview",
-    "build": "tsc -b && vite build && electron-builder",
+    "build": "tsc -b && vite build && npm run data-reset && electron-builder",
     "integrity-check": "tsx backend/integrity-check.ts",
     "data-reset": "tsx backend/reset-csv-files.ts && tsx backend/create-seed-transaction.ts",
+    "backup-data": "tsx backend/backup-data.ts",
     "protect-files": "tsx backend/protect-files.ts",
     "test": "npx playwright test --headed",
     "test:file": "npx playwright test --headed",
@@ -25,8 +26,7 @@
     },
     "files": [
       "dist",
-      "dist-electron",
-      "core/**/*"
+      "dist-electron"
     ],
     "win": {
       "target": [

@@ -304,65 +304,13 @@ export async function bulkSaveMetadata(updates: { transactionHash: string, categ
   }
 }
 
-export async function fetchMetadata(): Promise<{ tags: any[], categories: any[] }> {
-  try {
-    if (window.electron) {
-      return await invoke('get-metadata');
-    }
-    const response = await fetch('/api/metadata');
-    return await response.json();
-  } catch (error) {
-    console.error('Error fetching metadata:', error);
-    return { tags: [], categories: [] };
-  }
-}
-
-export async function saveMetadataConfig(type: 'tags' | 'categories', data: any[]): Promise<boolean> {
-  try {
-    if (window.electron) {
-      const result = await invoke<{ success: boolean }>('save-metadata', { type, data });
-      return result.success;
-    }
-    const response = await fetch('/api/metadata', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type, data }),
-    });
-    const result = await response.json();
-    return result.success;
-  } catch (error) {
-    console.error('Error saving metadata config:', error);
-    return false;
-  }
-}
-
-export async function backupCategories(): Promise<{ success: boolean; fileName?: string; error?: string }> {
-  try {
-    if (window.electron) {
-      return await invoke('backup-categories');
-    }
-    const response = await fetch('/api/backup-categories', {
-      method: 'POST',
-    });
-    return await response.json();
-  } catch (error) {
-    console.error('Error backing up categories:', error);
-    return { success: false, error: String(error) };
-  }
-}
-
-export async function fetchBackupInfo(): Promise<{ count: number; latestDate: string | null }> {
-  try {
-    if (window.electron) {
-      return await invoke('get-backup-info');
-    }
-    const response = await fetch('/api/backup-info');
-    if (!response.ok) throw new Error(`Failed to fetch backup info: ${response.statusText}`);
-    return await response.json();
-  } catch (error) {
-    console.error('Error fetching backup info:', error);
-    return { count: 0, latestDate: null };
-  }
+export interface ImportHistory {
+  fileName: string;
+  owner: string;
+  processedDate: string;
+  totalTransactions: number;
+  importedTransactions: number;
+  notImportedTransactions: number;
 }
 
 export async function fetchOwners(): Promise<string[]> {
@@ -396,15 +344,6 @@ export async function importFile(owner: string, fileName: string, fileContent: s
   }
 }
 
-export interface ImportHistory {
-  fileName: string;
-  owner: string;
-  processedDate: string;
-  totalTransactions: number;
-  importedTransactions: number;
-  notImportedTransactions: number;
-}
-
 export async function fetchImportHistory(): Promise<ImportHistory[]> {
   try {
     if (window.electron) {
@@ -432,6 +371,136 @@ export async function deleteImport(owner: string, fileName: string): Promise<{ s
     return await response.json();
   } catch (error) {
     console.error('Error deleting import:', error);
+    return { success: false, error: String(error) };
+  }
+}
+
+export async function fetchMetadata(): Promise<{ tags: any[], categories: any[] }> {
+  try {
+    if (window.electron) {
+      return await invoke('get-metadata');
+    }
+    const response = await fetch('/api/metadata');
+    return await response.json();
+  } catch (error) {
+    console.error('Error fetching metadata:', error);
+    return { tags: [], categories: [] };
+  }
+}
+
+export async function saveMetadataConfig(type: 'tags' | 'categories', data: any[]): Promise<boolean> {
+  try {
+    if (window.electron) {
+      const result = await invoke<{ success: boolean }>('save-metadata', { type, data });
+      return result.success;
+    }
+    const response = await fetch('/api/metadata', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type, data }),
+    });
+    const result = await response.json();
+    return result.success;
+  } catch (error) {
+    console.error('Error saving metadata config:', error);
+    return false;
+  }
+}
+
+export async function fullBackup(): Promise<{ success: boolean; fileName?: string; error?: string }> {
+  try {
+    if (window.electron) {
+      return await invoke('full-backup');
+    }
+    return { success: false, error: 'Electron not available' };
+  } catch (error) {
+    console.error('Error in fullBackup:', error);
+    return { success: false, error: String(error) };
+  }
+}
+
+export async function restoreBackup(zipPath: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    if (window.electron) {
+      return await invoke('restore-backup', zipPath);
+    }
+    return { success: false, error: 'Electron not available' };
+  } catch (error) {
+    console.error('Error in restoreBackup:', error);
+    return { success: false, error: String(error) };
+  }
+}
+
+export async function resetApplication(): Promise<{ success: boolean; error?: string }> {
+  try {
+    if (window.electron) {
+      return await invoke('reset-app');
+    }
+    return { success: false, error: 'Electron not available' };
+  } catch (error) {
+    console.error('Error in resetApplication:', error);
+    return { success: false, error: String(error) };
+  }
+}
+
+export async function selectZipFile(): Promise<string | null> {
+  try {
+    if (window.electron) {
+      return await invoke('select-zip-file');
+    }
+    return null;
+  } catch (error) {
+    console.error('Error selecting zip file:', error);
+    return null;
+  }
+}
+
+export async function fetchBackupInfo(): Promise<{ count: number; latestDate: string | null }> {
+  try {
+    if (window.electron) {
+      return await invoke('get-backup-info');
+    }
+    const response = await fetch('/api/backup-info');
+    if (!response.ok) throw new Error(`Failed to fetch backup info: ${response.statusText}`);
+    return await response.json();
+  } catch (error) {
+    console.error('Error fetching backup info:', error);
+    return { count: 0, latestDate: null };
+  }
+}
+
+export async function fetchSettings(): Promise<{ exportPath?: string }> {
+  try {
+    if (window.electron) {
+      return await invoke('get-settings');
+    }
+    return {};
+  } catch (error) {
+    console.error('Error fetching settings:', error);
+    return {};
+  }
+}
+
+export async function selectDirectory(): Promise<string | null> {
+  try {
+    if (window.electron) {
+      return await invoke('select-directory');
+    }
+    return null;
+  } catch (error) {
+    console.error('Error selecting directory:', error);
+    return null;
+  }
+}
+
+export async function setExportPath(path: string): Promise<{ success: boolean, error?: string }> {
+  try {
+    if (window.electron) {
+      return await invoke('set-export-path', path);
+    }
+    return { success: false, error: 'Electron not available' };
+  } catch (error) {
+    console.error('Error setting export path:', error);
     return { success: false, error: String(error) };
   }
 }

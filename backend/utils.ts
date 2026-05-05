@@ -31,91 +31,84 @@ export function getSha256(inputString: string | Buffer): string {
 /**
  * Returns the path to the 'core' directory.
  * In development, it's the one in the source tree.
- * In production, it's in the user's data directory to allow writes.
+ * In production, it's in the user's data directory to allow writes,
+ * or at a custom path provided by the user.
  */
+export function getSettingsPath(): string {
+  const appName = "MondayMoney";
+  const userDataPath = process.env.APPDATA
+    ? path.join(process.env.APPDATA, appName)
+    : path.join(process.env.USERPROFILE || "", ".mondaymoney");
+  
+  if (!fs.existsSync(userDataPath)) {
+    fs.mkdirSync(userDataPath, { recursive: true });
+  }
+  
+  return path.join(userDataPath, "settings.json");
+}
+
+export function getSettings(): { exportPath?: string } {
+  const settingsPath = getSettingsPath();
+  if (fs.existsSync(settingsPath)) {
+    try {
+      return JSON.parse(fs.readFileSync(settingsPath, "utf-8"));
+    } catch (e) {
+      console.error("Error reading settings.json", e);
+    }
+  }
+  return {};
+}
+
+export function saveSettings(settings: { exportPath: string }) {
+  const settingsPath = getSettingsPath();
+  fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
+}
+
+export function deleteSettings() {
+  const settingsPath = getSettingsPath();
+  if (fs.existsSync(settingsPath)) {
+    fs.unlinkSync(settingsPath);
+  }
+}
+
 export function getCoreDir(): string {
   const currentFilename = fileURLToPath(import.meta.url);
   const currentDirname = path.dirname(currentFilename);
 
   // If we are in Electron and not in dev, use userData
-  // We can check if we are in an ASAR
   const isPackaged = currentDirname.includes("app.asar");
 
+  const appName = "MondayMoney";
+  const userDataPath = process.env.APPDATA
+    ? path.join(process.env.APPDATA, appName)
+    : path.join(process.env.USERPROFILE || "", ".mondaymoney");
+
   if (isPackaged) {
-    // In Electron main process, we could use app.getPath('userData')
-    // But this utility might be called from contexts where 'app' is not yet ready or imported
-    // As a fallback for portable/packaged apps, we can use a folder in %APPDATA%
-    const appName = "MondayMoney";
-    const userDataPath = process.env.APPDATA
-      ? path.join(process.env.APPDATA, appName)
-      : path.join(process.env.USERPROFILE || "", ".mondaymoney");
-
     const prodCoreDir = path.join(userDataPath, "core");
-
-    // Ensure it exists and has the basic structure
-    if (!fs.existsSync(prodCoreDir)) {
-      fs.mkdirSync(prodCoreDir, { recursive: true });
-      fs.mkdirSync(path.join(prodCoreDir, "data"), { recursive: true });
-      fs.mkdirSync(path.join(prodCoreDir, "protected", "raw-statement-files"), {
-        recursive: true,
-      });
-      fs.mkdirSync(
-        path.join(
-          prodCoreDir,
-          "protected",
-          "monthly-transactions-category-bkp",
-        ),
-        { recursive: true },
-      );
-
-      // Copy initial data if available in the bundle
-      const bundleCoreDir = path.resolve(currentDirname, "../core");
-      if (fs.existsSync(bundleCoreDir)) {
-        copyRecursiveSync(bundleCoreDir, prodCoreDir);
-      }
-    }
-
     return prodCoreDir;
   }
 
-  // Dev mode
-  // Strategy 1: Relative to this file (works in direct node execution)
-  const relPath = path.resolve(currentDirname, "../core");
-  if (fs.existsSync(relPath)) {
-    return relPath;
-  }
-
-  // Strategy 2: Relative to CWD (works when bundled by Vite)
+  // Dev mode - always use the local 'core' folder in the project root
+  // This ensures data is moved inside the application as requested
   const cwdPath = path.resolve(process.cwd(), "core");
-  if (fs.existsSync(cwdPath)) {
-    return cwdPath;
-  }
-
-  // Fallback to Strategy 1 even if it doesn't exist yet (e.g. first run)
-  return relPath;
+  return cwdPath;
 }
 
-function copyRecursiveSync(src: string, dest: string) {
-  const exists = fs.existsSync(src);
-  const stats = exists && fs.statSync(src);
-  const isDirectory = exists && stats && stats.isDirectory();
-  if (isDirectory) {
-    if (!fs.existsSync(dest)) {
-      fs.mkdirSync(dest);
-    }
-    fs.readdirSync(src).forEach((childItemName) => {
-      copyRecursiveSync(
-        path.join(src, childItemName),
-        path.join(dest, childItemName),
-      );
-    });
-  } else {
-    // Don't overwrite if it already exists in dest to avoid losing user data
-    // (though in first run it won't exist)
-    if (!fs.existsSync(dest)) {
-      fs.copyFileSync(src, dest);
-    }
+export function ensureCoreStructure(coreDir: string) {
+  if (!fs.existsSync(coreDir)) {
+    fs.mkdirSync(coreDir, { recursive: true });
   }
+  const subDirs = [
+    path.join(coreDir, "data"),
+    path.join(coreDir, "protected", "raw-statement-files"),
+    path.join(coreDir, "protected", "monthly-transactions-category-bkp"),
+  ];
+
+  subDirs.forEach(dir => {
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+  });
 }
 
 /**

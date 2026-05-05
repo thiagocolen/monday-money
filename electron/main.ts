@@ -1,6 +1,6 @@
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog } from 'electron';
 import path from 'path';
-import { fileURLToPath } from 'url';
+import { fileURLToPath } from "url";
 import { 
   handleGetCsvData,
   handleGetOwners,
@@ -11,13 +11,38 @@ import {
   handleBulkSaveMetadata,
   handleGetMetadata,
   handleSaveMetadata,
-  handleBackupCategories,
-  handleGetBackupInfo
+  handleFullBackup,
+  handleRestoreBackup,
+  handleResetApp,
+  handleGetBackupInfo,
+  createSeedTransaction,
+  dataImportRegistration,
+  integrityCheck,
+  getCoreDir,
+  getSettings,
+  saveSettings,
+  ensureCoreStructure
 } from '../backend/index.js';
+import fs from 'fs';
 
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
 
+function initializeCore() {
+  const coreDir = getCoreDir();
+  const mainLedgerPath = path.join(coreDir, 'data', 'monthly-transactions.csv');
+  
+  ensureCoreStructure(coreDir);
+  if (!fs.existsSync(mainLedgerPath)) {
+    console.log('Initializing fresh data directory...');
+    createSeedTransaction();
+    dataImportRegistration();
+    integrityCheck();
+  }
+}
+
 function createWindow() {
+  initializeCore();
+
   const win = new BrowserWindow({
     width: 1200,
     height: 800,
@@ -71,8 +96,16 @@ ipcMain.handle('save-category', async (event, { transactionHash, category, tags 
   return handleSaveCategory(transactionHash, category, tags);
 });
 
-ipcMain.handle('backup-categories', async () => {
-  return handleBackupCategories();
+ipcMain.handle('full-backup', async () => {
+  return handleFullBackup();
+});
+
+ipcMain.handle('restore-backup', async (event, zipPath) => {
+  return handleRestoreBackup(zipPath);
+});
+
+ipcMain.handle('reset-app', async () => {
+  return handleResetApp();
 });
 
 ipcMain.handle('get-backup-info', async () => {
@@ -90,3 +123,62 @@ ipcMain.handle('get-metadata', async () => {
 ipcMain.handle('save-metadata', async (event, { type, data }) => {
   return handleSaveMetadata(type, data);
 });
+
+ipcMain.handle('get-settings', async () => {
+  try {
+    const settings = getSettings();
+    return settings;
+  } catch (error) {
+    console.error('Main: Error in get-settings', error);
+    throw error;
+  }
+});
+
+ipcMain.handle('select-directory', async (event) => {
+  try {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    const result = await dialog.showOpenDialog(win!, {
+      properties: ['openDirectory'],
+      title: 'Select Export Folder',
+      buttonLabel: 'Select Folder'
+    });
+    if (result.canceled) {
+      return null;
+    }
+    return result.filePaths[0];
+  } catch (error) {
+    console.error('Main: Error in select-directory', error);
+    throw error;
+  }
+});
+
+ipcMain.handle('select-zip-file', async (event) => {
+  try {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    const result = await dialog.showOpenDialog(win!, {
+      properties: ['openFile'],
+      filters: [{ name: 'Zip Files', extensions: ['zip'] }],
+      title: 'Select Backup File',
+      buttonLabel: 'Import Backup'
+    });
+    if (result.canceled) {
+      return null;
+    }
+    return result.filePaths[0];
+  } catch (error) {
+    console.error('Main: Error in select-zip-file', error);
+    throw error;
+  }
+});
+
+ipcMain.handle('set-export-path', async (event, exportPath) => {
+  try {
+    if (!exportPath) throw new Error('No path provided');
+    saveSettings({ exportPath });
+    return { success: true };
+  } catch (error) {
+    console.error('Main: Error in set-export-path', error);
+    return { success: false, error: String(error) };
+  }
+});
+

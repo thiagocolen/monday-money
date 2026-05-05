@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { execSync } from "child_process";
 import {
   importRawCSV,
   deleteImportedRawCSV,
@@ -10,12 +11,13 @@ test.use({ navigationTimeout: 60000, actionTimeout: 60000 });
 test.setTimeout(120000);
 
 test.beforeEach(async ({ page }) => {
+  execSync("npm run data-reset");
   await importRawCSV(page);
   await searchForTransaction(page, 10);
 });
 
 test.afterEach(async ({ page }) => {
-  await deleteImportedRawCSV(page);
+  execSync("npm run data-reset");
 });
 
 test("Esc key sequence clears filters step-by-step", async ({ page }) => {
