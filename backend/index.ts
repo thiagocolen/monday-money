@@ -5,4 +5,5 @@ export * from './data-import-registration.js';
 export * from './integrity-check.js';
 export * from './protect-files.js';
 export * from './reset-csv-files.js';
+export * from './backup-data.js';
 export * from './utils.js';

@@ -4,10 +4,6 @@ import { fileURLToPath } from 'url';
 import Papa from 'papaparse';
 import { getSha256, getCoreDir } from './utils.js';
 
-const coreDir = getCoreDir();
-const dataDir = path.join(coreDir, 'data');
-const sourceBaseDir = path.join(coreDir, 'protected', 'raw-statement-files');
-
 export interface FileParser {
   name: string;
   match: (fileName: string, content: string) => boolean;
@@ -221,59 +217,63 @@ export const PARSERS: FileParser[] = [
   }
 ];
 
-function testFileAlreadyImported(destFile: string, fileHash: string): boolean {
-  const destPath = path.join(dataDir, destFile);
-  if (!fs.existsSync(destPath)) return false;
-  const content = fs.readFileSync(destPath, 'utf8');
-  const data = Papa.parse<any>(content, { header: true, skipEmptyLines: true }).data;
-  return data.some(row => {
-    if (destFile === 'monthly-transactions.csv') return row.description === fileHash;
-    if (destFile === 'binance-transaction-history.csv') return row.Remark === fileHash;
-    return row.TXID === fileHash || row['Transaction ID'] === fileHash;
-  });
-}
+export function dataImportRegistration() {
+  const coreDir = getCoreDir();
+  const dataDir = path.join(coreDir, 'data');
+  const sourceBaseDir = path.join(coreDir, 'protected', 'raw-statement-files');
 
-function getLastChainTransactionHash(destFile: string, owner: string): string {
-  const destPath = path.join(dataDir, destFile);
-  if (!fs.existsSync(destPath)) return '';
-  const content = fs.readFileSync(destPath, 'utf8');
-  const data = Papa.parse<any>(content, { header: true, skipEmptyLines: true }).data;
-  let lastHash = '', seedHash = '';
-  for (const row of data) {
-    if (destFile === 'monthly-transactions.csv') {
-      if ((row.amount === 0 || row.amount === '0') && (row.owner === owner || row.owner === 'seed-transaction')) {
-        if (row.owner === 'seed-transaction') seedHash = row.description; else lastHash = row.description;
-      }
-    } else if (destFile === 'binance-transaction-history.csv') {
-      if ((row.Change === 0 || row.Change === '0') && (row.owner === owner || row.owner === 'seed')) {
-        if (row.owner === 'seed') seedHash = row.Remark; else lastHash = row.Remark;
-      }
-    } else {
-      if ((row.Amount === 0 || row.Amount === '0') && (row.owner === owner || row.owner === 'seed')) {
-        const descValue = row.TXID ? row.TXID : row['Transaction ID'];
-        if (row.owner === 'seed') seedHash = descValue; else lastHash = descValue;
+  function testFileAlreadyImported(destFile: string, fileHash: string): boolean {
+    const destPath = path.join(dataDir, destFile);
+    if (!fs.existsSync(destPath)) return false;
+    const content = fs.readFileSync(destPath, 'utf8');
+    const data = Papa.parse<any>(content, { header: true, skipEmptyLines: true }).data;
+    return data.some(row => {
+      if (destFile === 'monthly-transactions.csv') return row.description === fileHash;
+      if (destFile === 'binance-transaction-history.csv') return row.Remark === fileHash;
+      return row.TXID === fileHash || row['Transaction ID'] === fileHash;
+    });
+  }
+
+  function getLastChainTransactionHash(destFile: string, owner: string): string {
+    const destPath = path.join(dataDir, destFile);
+    if (!fs.existsSync(destPath)) return '';
+    const content = fs.readFileSync(destPath, 'utf8');
+    const data = Papa.parse<any>(content, { header: true, skipEmptyLines: true }).data;
+    let lastHash = '', seedHash = '';
+    for (const row of data) {
+      if (destFile === 'monthly-transactions.csv') {
+        if ((row.amount === 0 || row.amount === '0') && (row.owner === owner || row.owner === 'seed-transaction')) {
+          if (row.owner === 'seed-transaction') seedHash = row.description; else lastHash = row.description;
+        }
+      } else if (destFile === 'binance-transaction-history.csv') {
+        if ((row.Change === 0 || row.Change === '0') && (row.owner === owner || row.owner === 'seed')) {
+          if (row.owner === 'seed') seedHash = row.Remark; else lastHash = row.Remark;
+        }
+      } else {
+        if ((row.Amount === 0 || row.Amount === '0') && (row.owner === owner || row.owner === 'seed')) {
+          const descValue = row.TXID ? row.TXID : row['Transaction ID'];
+          if (row.owner === 'seed') seedHash = descValue; else lastHash = descValue;
+        }
       }
     }
+    return lastHash || seedHash;
   }
-  return lastHash || seedHash;
-}
 
-function createChainRow(hash: string, destFile: string, owner: string, time: string, status: string): string {
-  let vals: string[] = [];
-  if (destFile === 'monthly-transactions.csv') {
-    vals = [time, `"${hash}"`, '0', owner];
-  } else if (destFile === 'binance-transaction-history.csv') {
-    vals = [owner, time, 'chain', 'chain', 'chain', '0', `"${hash}"`, owner];
-  } else if (destFile === 'binance-deposit-withdraw-history.csv') {
-    vals = [time, 'chain', 'chain', '0', '0', 'chain', `"${hash}"`, status, 'chain', owner];
-  } else if (destFile === 'binance-fiat-deposit-withdraw-history.csv') {
-    vals = [time, 'chain', '0', '0', '0', status, `"${hash}"`, 'chain', owner];
+  function createChainRow(hash: string, destFile: string, owner: string, time: string, status: string): string {
+    let vals: string[] = [];
+    if (destFile === 'monthly-transactions.csv') {
+      vals = [time, `"${hash}"`, '0', owner];
+    } else if (destFile === 'binance-transaction-history.csv') {
+      vals = [owner, time, 'chain', 'chain', 'chain', '0', `"${hash}"`, owner];
+    } else if (destFile === 'binance-deposit-withdraw-history.csv') {
+      vals = [time, 'chain', 'chain', '0', '0', 'chain', `"${hash}"`, status, 'chain', owner];
+    } else if (destFile === 'binance-fiat-deposit-withdraw-history.csv') {
+      vals = [time, 'chain', '0', '0', '0', status, `"${hash}"`, 'chain', owner];
+    }
+    const rowHash = getSha256(vals.join(',').replace(/"/g, ''));
+    return vals.join(',') + ',' + rowHash;
   }
-  const rowHash = getSha256(vals.join(',').replace(/"/g, ''));
-  return vals.join(',') + ',' + rowHash;
-}
 
-export function dataImportRegistration() {
   if (!fs.existsSync(sourceBaseDir)) return;
   const ownerDirs = fs.readdirSync(sourceBaseDir).filter(f => fs.statSync(path.join(sourceBaseDir, f)).isDirectory());
 

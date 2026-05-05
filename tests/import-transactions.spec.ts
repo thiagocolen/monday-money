@@ -10,6 +10,10 @@ test.beforeEach(async () => {
   execSync('npm run data-reset');
 });
 
+test.afterEach(async () => {
+  execSync('npm run data-reset');
+});
+
 test('import, process, check and delete transaction from: Nubank Credit, Nubank Debit, Mercado Pago, Bradesco', async ({ page }) => {
   await page.goto('http://localhost:5173/', { waitUntil: 'networkidle', timeout: 60000 });
   await page.getByRole('link', { name: 'Import' }).click();

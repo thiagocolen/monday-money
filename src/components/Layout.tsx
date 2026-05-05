@@ -1,21 +1,36 @@
 import { Link, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { useEffect } from "react";
-import { Command } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Command, FolderCog } from "lucide-react";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
+import { SettingsDialog } from "./SettingsDialog";
+import { fetchSettings } from "@/lib/api";
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const location = useLocation();
   const currentPath = location.pathname;
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [forceSettingsOpen, setForceSettingsOpen] = useState(false);
 
   // Scroll to top on load
   useEffect(() => {
     window.scrollTo(0, 0);
+  }, []);
+
+  // Check if first start
+  useEffect(() => {
+    async function checkFirstStart() {
+      const settings = await fetchSettings();
+      if (!settings.coreDirPath) {
+        setForceSettingsOpen(true);
+      }
+    }
+    checkFirstStart();
   }, []);
 
   // Global drag/drop prevention for Electron to prevent navigation
@@ -75,6 +90,20 @@ export function Layout({ children }: { children: React.ReactNode }) {
           <div className="flex items-center space-x-4">
             <Tooltip>
               <TooltipTrigger asChild>
+                <button 
+                  onClick={() => setSettingsOpen(true)}
+                  className="flex items-center justify-center w-8 h-8 rounded-md hover:bg-muted transition-colors"
+                >
+                  <FolderCog className="h-4 w-4 text-muted-foreground" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
+                <p className="text-xs">Configure Data Folder</p>
+              </TooltipContent>
+            </Tooltip>
+
+            <Tooltip>
+              <TooltipTrigger asChild>
                 <div className="flex items-center justify-center w-8 h-8 rounded-md hover:bg-muted cursor-help transition-colors">
                   <Command className="h-4 w-4 text-muted-foreground" />
                 </div>
@@ -105,6 +134,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <main className="container mx-auto py-6 px-4">
         {children}
       </main>
+      <SettingsDialog 
+        open={settingsOpen} 
+        onOpenChange={setSettingsOpen} 
+        forceOpen={forceSettingsOpen} 
+      />
       <div style={{ height: '500px' }} />
     </div>
   );

@@ -435,3 +435,39 @@ export async function deleteImport(owner: string, fileName: string): Promise<{ s
     return { success: false, error: String(error) };
   }
 }
+
+export async function fetchSettings(): Promise<{ coreDirPath?: string }> {
+  try {
+    if (window.electron) {
+      return await invoke('get-settings');
+    }
+    return {};
+  } catch (error) {
+    console.error('Error fetching settings:', error);
+    return {};
+  }
+}
+
+export async function selectDirectory(): Promise<string | null> {
+  try {
+    if (window.electron) {
+      return await invoke('select-directory');
+    }
+    return null;
+  } catch (error) {
+    console.error('Error selecting directory:', error);
+    return null;
+  }
+}
+
+export async function setCoreDir(path: string): Promise<{ success: boolean, error?: string }> {
+  try {
+    if (window.electron) {
+      return await invoke('set-core-dir', path);
+    }
+    return { success: false, error: 'Electron not available' };
+  } catch (error) {
+    console.error('Error setting core dir:', error);
+    return { success: false, error: String(error) };
+  }
+}

@@ -1,6 +1,6 @@
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog } from 'electron';
 import path from 'path';
-import { fileURLToPath } from 'url';
+import { fileURLToPath } from "url";
 import { 
   handleGetCsvData,
   handleGetOwners,
@@ -12,12 +12,43 @@ import {
   handleGetMetadata,
   handleSaveMetadata,
   handleBackupCategories,
-  handleGetBackupInfo
+  handleGetBackupInfo,
+  createSeedTransaction,
+  dataImportRegistration,
+  integrityCheck,
+  getCoreDir,
+  getSettings,
+  saveSettings,
+  ensureCoreStructure
 } from '../backend/index.js';
+import fs from 'fs';
 
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
 
+function initializeCore() {
+  const coreDir = getCoreDir();
+  const mainLedgerPath = path.join(coreDir, 'data', 'monthly-transactions.csv');
+  
+  // Only ensure structure and seed if we have a coreDir and it's either configured or we are in a state where we can use defaults
+  // In packaged app, if not configured, we might wait for user input.
+  // But getCoreDir() returns a default path if not configured.
+  // Let's check if settings has it.
+  const settings = getSettings();
+  
+  if (settings.coreDirPath || !app.isPackaged) {
+    ensureCoreStructure(coreDir);
+    if (!fs.existsSync(mainLedgerPath)) {
+      console.log('Initializing fresh data directory...');
+      createSeedTransaction();
+      dataImportRegistration();
+      integrityCheck();
+    }
+  }
+}
+
 function createWindow() {
+  initializeCore();
+
   const win = new BrowserWindow({
     width: 1200,
     height: 800,
@@ -89,4 +120,53 @@ ipcMain.handle('get-metadata', async () => {
 
 ipcMain.handle('save-metadata', async (event, { type, data }) => {
   return handleSaveMetadata(type, data);
+});
+
+ipcMain.handle('get-settings', async () => {
+  try {
+    const settings = getSettings();
+    console.log('Main: get-settings', settings);
+    return settings;
+  } catch (error) {
+    console.error('Main: Error in get-settings', error);
+    throw error;
+  }
+});
+
+ipcMain.handle('select-directory', async (event) => {
+  try {
+    console.log('Main: select-directory started');
+    const win = BrowserWindow.fromWebContents(event.sender);
+    const result = await dialog.showOpenDialog(win!, {
+      properties: ['openDirectory'],
+      title: 'Select MondayMoney Core Folder',
+      buttonLabel: 'Select Folder'
+    });
+    console.log('Main: select-directory result', result);
+    if (result.canceled) {
+      return null;
+    }
+    return result.filePaths[0];
+  } catch (error) {
+    console.error('Main: Error in select-directory', error);
+    throw error;
+  }
+});
+
+ipcMain.handle('set-core-dir', async (event, corePath) => {
+  try {
+    console.log('Main: set-core-dir', corePath);
+    if (!corePath) throw new Error('No path provided');
+    
+    saveSettings({ coreDirPath: corePath });
+    console.log('Main: Settings saved');
+    
+    initializeCore();
+    console.log('Main: Core initialized');
+    
+    return { success: true };
+  } catch (error) {
+    console.error('Main: Error in set-core-dir', error);
+    return { success: false, error: String(error) };
+  }
 });

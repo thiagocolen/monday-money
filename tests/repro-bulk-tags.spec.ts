@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { execSync } from "child_process";
 import {
   importRawCSV,
   deleteImportedRawCSV,
@@ -12,12 +13,13 @@ test.use({ navigationTimeout: 60000, actionTimeout: 60000 });
 test.setTimeout(120000);
 
 test.beforeEach(async ({ page }) => {
+  execSync("npm run data-reset");
   await importRawCSV(page);
   await searchForTransaction(page, 5); // Ensure at least 5 transactions
 });
 
 test.afterEach(async ({ page }) => {
-  await deleteImportedRawCSV(page);
+  execSync("npm run data-reset");
 });
 
 test("is allowed to remove/add a tag, from/to multiple transactions, in a bulk operation", async ({

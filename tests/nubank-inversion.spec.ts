@@ -10,6 +10,10 @@ test.beforeEach(async () => {
   execSync('npm run data-reset');
 });
 
+test.afterEach(async () => {
+  execSync('npm run data-reset');
+});
+
 test('verify NULLED category and nubank amount inversion', async ({ page }) => {
   test.setTimeout(120000);
   
