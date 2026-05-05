@@ -11,7 +11,9 @@ import {
   handleBulkSaveMetadata,
   handleGetMetadata,
   handleSaveMetadata,
-  handleBackupCategories,
+  handleFullBackup,
+  handleRestoreBackup,
+  handleResetApp,
   handleGetBackupInfo,
   createSeedTransaction,
   dataImportRegistration,
@@ -29,20 +31,12 @@ function initializeCore() {
   const coreDir = getCoreDir();
   const mainLedgerPath = path.join(coreDir, 'data', 'monthly-transactions.csv');
   
-  // Only ensure structure and seed if we have a coreDir and it's either configured or we are in a state where we can use defaults
-  // In packaged app, if not configured, we might wait for user input.
-  // But getCoreDir() returns a default path if not configured.
-  // Let's check if settings has it.
-  const settings = getSettings();
-  
-  if (settings.coreDirPath || !app.isPackaged) {
-    ensureCoreStructure(coreDir);
-    if (!fs.existsSync(mainLedgerPath)) {
-      console.log('Initializing fresh data directory...');
-      createSeedTransaction();
-      dataImportRegistration();
-      integrityCheck();
-    }
+  ensureCoreStructure(coreDir);
+  if (!fs.existsSync(mainLedgerPath)) {
+    console.log('Initializing fresh data directory...');
+    createSeedTransaction();
+    dataImportRegistration();
+    integrityCheck();
   }
 }
 
@@ -102,8 +96,16 @@ ipcMain.handle('save-category', async (event, { transactionHash, category, tags 
   return handleSaveCategory(transactionHash, category, tags);
 });
 
-ipcMain.handle('backup-categories', async () => {
-  return handleBackupCategories();
+ipcMain.handle('full-backup', async () => {
+  return handleFullBackup();
+});
+
+ipcMain.handle('restore-backup', async (event, zipPath) => {
+  return handleRestoreBackup(zipPath);
+});
+
+ipcMain.handle('reset-app', async () => {
+  return handleResetApp();
 });
 
 ipcMain.handle('get-backup-info', async () => {
@@ -125,7 +127,6 @@ ipcMain.handle('save-metadata', async (event, { type, data }) => {
 ipcMain.handle('get-settings', async () => {
   try {
     const settings = getSettings();
-    console.log('Main: get-settings', settings);
     return settings;
   } catch (error) {
     console.error('Main: Error in get-settings', error);
@@ -135,14 +136,12 @@ ipcMain.handle('get-settings', async () => {
 
 ipcMain.handle('select-directory', async (event) => {
   try {
-    console.log('Main: select-directory started');
     const win = BrowserWindow.fromWebContents(event.sender);
     const result = await dialog.showOpenDialog(win!, {
       properties: ['openDirectory'],
-      title: 'Select MondayMoney Core Folder',
+      title: 'Select Export Folder',
       buttonLabel: 'Select Folder'
     });
-    console.log('Main: select-directory result', result);
     if (result.canceled) {
       return null;
     }
@@ -153,20 +152,33 @@ ipcMain.handle('select-directory', async (event) => {
   }
 });
 
-ipcMain.handle('set-core-dir', async (event, corePath) => {
+ipcMain.handle('select-zip-file', async (event) => {
   try {
-    console.log('Main: set-core-dir', corePath);
-    if (!corePath) throw new Error('No path provided');
-    
-    saveSettings({ coreDirPath: corePath });
-    console.log('Main: Settings saved');
-    
-    initializeCore();
-    console.log('Main: Core initialized');
-    
+    const win = BrowserWindow.fromWebContents(event.sender);
+    const result = await dialog.showOpenDialog(win!, {
+      properties: ['openFile'],
+      filters: [{ name: 'Zip Files', extensions: ['zip'] }],
+      title: 'Select Backup File',
+      buttonLabel: 'Import Backup'
+    });
+    if (result.canceled) {
+      return null;
+    }
+    return result.filePaths[0];
+  } catch (error) {
+    console.error('Main: Error in select-zip-file', error);
+    throw error;
+  }
+});
+
+ipcMain.handle('set-export-path', async (event, exportPath) => {
+  try {
+    if (!exportPath) throw new Error('No path provided');
+    saveSettings({ exportPath });
     return { success: true };
   } catch (error) {
-    console.error('Main: Error in set-core-dir', error);
+    console.error('Main: Error in set-export-path', error);
     return { success: false, error: String(error) };
   }
 });
+

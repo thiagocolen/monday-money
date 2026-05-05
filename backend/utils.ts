@@ -47,7 +47,7 @@ export function getSettingsPath(): string {
   return path.join(userDataPath, "settings.json");
 }
 
-export function getSettings(): { coreDirPath?: string } {
+export function getSettings(): { exportPath?: string } {
   const settingsPath = getSettingsPath();
   if (fs.existsSync(settingsPath)) {
     try {
@@ -59,54 +59,39 @@ export function getSettings(): { coreDirPath?: string } {
   return {};
 }
 
-export function saveSettings(settings: { coreDirPath: string }) {
+export function saveSettings(settings: { exportPath: string }) {
   const settingsPath = getSettingsPath();
   fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
+}
+
+export function deleteSettings() {
+  const settingsPath = getSettingsPath();
+  if (fs.existsSync(settingsPath)) {
+    fs.unlinkSync(settingsPath);
+  }
 }
 
 export function getCoreDir(): string {
   const currentFilename = fileURLToPath(import.meta.url);
   const currentDirname = path.dirname(currentFilename);
 
-  // If we are in Electron and not in dev, use userData or custom path
+  // If we are in Electron and not in dev, use userData
   const isPackaged = currentDirname.includes("app.asar");
 
+  const appName = "MondayMoney";
+  const userDataPath = process.env.APPDATA
+    ? path.join(process.env.APPDATA, appName)
+    : path.join(process.env.USERPROFILE || "", ".mondaymoney");
+
   if (isPackaged) {
-    const settings = getSettings();
-    
-    if (settings.coreDirPath) {
-      return settings.coreDirPath;
-    }
-
-    const appName = "MondayMoney";
-    const userDataPath = process.env.APPDATA
-      ? path.join(process.env.APPDATA, appName)
-      : path.join(process.env.USERPROFILE || "", ".mondaymoney");
-
     const prodCoreDir = path.join(userDataPath, "core");
     return prodCoreDir;
   }
 
-  // Dev mode
-  const settings = getSettings();
-  if (settings.coreDirPath) {
-    return settings.coreDirPath;
-  }
-
-  // Strategy 1: Relative to this file (works in direct node execution)
-  const relPath = path.resolve(currentDirname, "../core");
-  if (fs.existsSync(relPath)) {
-    return relPath;
-  }
-
-  // Strategy 2: Relative to CWD (works when bundled by Vite)
+  // Dev mode - always use the local 'core' folder in the project root
+  // This ensures data is moved inside the application as requested
   const cwdPath = path.resolve(process.cwd(), "core");
-  if (fs.existsSync(cwdPath)) {
-    return cwdPath;
-  }
-
-  // Fallback to Strategy 1 even if it doesn't exist yet (e.g. first run)
-  return relPath;
+  return cwdPath;
 }
 
 export function ensureCoreStructure(coreDir: string) {

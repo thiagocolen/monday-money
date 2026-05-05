@@ -1,8 +1,6 @@
 import { useEffect, useState, useMemo, useCallback, useTransition, Fragment } from 'react'
 import { 
   fetchTransactions, 
-  backupCategories, 
-  fetchBackupInfo,
   fetchMetadata,
   saveMetadataConfig,
   bulkSaveMetadata,
@@ -16,8 +14,8 @@ import { TransactionChart } from '../components/transaction-chart'
 import { YearlyTransactionChart } from '../components/yearly-transaction-chart'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { addMonths, format, parseISO, addYears } from 'date-fns'
-import { ChevronLeft, ChevronRight, Edit3, Trash2, Database, Info, History, Plus, X, Check, Search, Loader2, CalendarDays, CalendarRange } from 'lucide-react'
+import { addMonths, format, addYears } from 'date-fns'
+import { ChevronLeft, ChevronRight, Edit3, Trash2, Info, Plus, X, Check, Search, Loader2, CalendarDays, CalendarRange } from 'lucide-react'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -83,8 +81,6 @@ export function TransactionsPage() {
   const [bulkSearch, setBulkSearch] = useState("")
   const [editingItem, setEditingItem] = useState<{ name: string, color: string, isNew?: boolean, isDefault?: boolean } | null>(null)
 
-  const [isBackingUp, setIsBackingUp] = useState(false)
-  const [backupInfo, setBackupInfo] = useState<{ count: number; latestDate: string | null }>({ count: 0, latestDate: null })
   const [isPeriodHovered, setIsPeriodHovered] = useState(false)
 
   // Filter states
@@ -129,11 +125,6 @@ export function TransactionsPage() {
     return () => timers.forEach(t => t && clearTimeout(t))
   }, [filterLayers])
 
-  const loadBackupInfo = useCallback(async () => {
-    const info = await fetchBackupInfo()
-    setBackupInfo(info)
-  }, [])
-
   const loadData = useCallback(async (showLoading = true) => {
     if (showLoading) setLoading(true)
     try {
@@ -154,9 +145,8 @@ export function TransactionsPage() {
 
   useEffect(() => {
     loadData()
-    loadBackupInfo()
     loadMetadata()
-  }, [loadData, loadBackupInfo, loadMetadata])
+  }, [loadData, loadMetadata])
 
   // Sync isVisualPending with isPending
   useEffect(() => {
@@ -402,23 +392,6 @@ export function TransactionsPage() {
     setIsBulkEditDialogOpen(true)
   }
 
-  const handleBackup = async () => {
-    setIsBackingUp(true)
-    try {
-      const result = await backupCategories()
-      if (result.success) {
-        toast.success(`Backup created: ${result.fileName}`)
-        loadBackupInfo()
-      } else {
-        toast.error(`Backup failed: ${result.error}`)
-      }
-    } catch (e) {
-      toast.error("Backup failed")
-    } finally {
-      setIsBackingUp(false)
-    }
-  }
-
   const resetFilters = useCallback(() => {
     setIsVisualPending(true)
     requestAnimationFrame(() => {
@@ -583,51 +556,6 @@ export function TransactionsPage() {
                 <CalendarRange className="mr-2 h-3.5 w-3.5" />
                 Yearly
               </Button>
-            </div>
-
-            <div className="flex items-center space-x-2 bg-indigo-50/30 dark:bg-indigo-950/20 p-1.5 rounded-lg border border-indigo-100/50 dark:border-indigo-900/50 shadow-sm">
-              <Button
-                variant="default"
-                size="sm"
-                className="h-8 text-xs bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm border-none"
-                onClick={handleBackup}
-                disabled={isBackingUp}
-              >
-                <Database className="mr-2 h-3.5 w-3.5 text-indigo-100" />
-                {isBackingUp ? "Backing up..." : "Backup Categories"}
-              </Button>
-              
-              <div className="flex items-center gap-1.5 px-1">
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <div className="flex items-center gap-1 cursor-default">
-                      <History className="h-3 w-3 text-indigo-400" />
-                      <Badge variant="secondary" className="h-5 px-1.5 text-[10px] bg-indigo-100/50 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100/50 dark:hover:bg-indigo-900/40 border-none">
-                        {backupInfo.count}
-                      </Badge>
-                    </div>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p className="text-[10px] font-medium">Total category backups</p>
-                  </TooltipContent>
-                </Tooltip>
-
-                {backupInfo.latestDate && (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <div className="flex items-center gap-1 cursor-default">
-                        <span className="text-[10px] font-bold text-indigo-400/70 dark:text-indigo-500 uppercase tracking-tighter">Latest:</span>
-                        <span className="text-[10px] font-mono font-medium text-indigo-700 dark:text-indigo-300 bg-indigo-100/50 dark:bg-indigo-900/40 px-1.5 py-0.5 rounded leading-none">
-                          {format(parseISO(backupInfo.latestDate), "dd/MM HH:mm")}
-                        </span>
-                      </div>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p className="text-[10px] font-medium">Last backup: {format(parseISO(backupInfo.latestDate), "PPP p")}</p>
-                    </TooltipContent>
-                  </Tooltip>
-                )}
-              </div>
             </div>
 
             <div className="flex items-center space-x-2 border rounded-md p-1 bg-indigo-50/30 dark:bg-indigo-950/20 shadow-sm border-indigo-100/50 dark:border-indigo-900/50">

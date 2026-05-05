@@ -15,7 +15,7 @@ import {
   handleBulkSaveMetadata,
   handleGetMetadata,
   handleSaveMetadata,
-  handleBackupCategories,
+  handleFullBackup,
   handleGetBackupInfo
 } from "./backend/index.js"
 
@@ -177,9 +177,9 @@ export default defineConfig(({ mode }) => {
               return
             }
 
-            if (req.url === "/api/backup-categories" && req.method === "POST") {
+            if (req.url === "/api/full-backup" && req.method === "POST") {
               try {
-                const result = await handleBackupCategories()
+                const result = await handleFullBackup()
                 res.statusCode = 200
                 res.setHeader("Content-Type", "application/json")
                 res.end(JSON.stringify(result))
