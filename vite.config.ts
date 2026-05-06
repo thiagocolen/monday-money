@@ -16,7 +16,11 @@ import {
   handleGetMetadata,
   handleSaveMetadata,
   handleFullBackup,
-  handleGetBackupInfo
+  handleGetBackupInfo,
+  handleRestoreBackup,
+  handleResetApp,
+  handleSetExportPath,
+  getSettings
 } from "./backend/index.js"
 
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
@@ -195,6 +199,58 @@ export default defineConfig(({ mode }) => {
               res.statusCode = 200
               res.setHeader("Content-Type", "application/json")
               res.end(JSON.stringify(info))
+              return
+            }
+
+            if (req.url === "/api/settings" && req.method === "GET") {
+              const settings = getSettings()
+              res.statusCode = 200
+              res.setHeader("Content-Type", "application/json")
+              res.end(JSON.stringify(settings))
+              return
+            }
+
+            if (req.url === "/api/settings" && req.method === "POST") {
+              let body = ""
+              req.on("data", (chunk: Buffer) => { body += chunk.toString() })
+              req.on("end", async () => {
+                try {
+                  const { exportPath } = JSON.parse(body)
+                  const result = await handleSetExportPath(exportPath)
+                  res.statusCode = 200
+                  res.setHeader("Content-Type", "application/json")
+                  res.end(JSON.stringify(result))
+                } catch (e: any) {
+                  res.statusCode = 400
+                  res.end(JSON.stringify({ success: false, error: e.message }))
+                }
+              })
+              return
+            }
+
+            if (req.url === "/api/restore-backup" && req.method === "POST") {
+              let body = ""
+              req.on("data", (chunk: Buffer) => { body += chunk.toString() })
+              req.on("end", async () => {
+                try {
+                  const { zipPath } = JSON.parse(body)
+                  const result = await handleRestoreBackup(zipPath)
+                  res.statusCode = 200
+                  res.setHeader("Content-Type", "application/json")
+                  res.end(JSON.stringify(result))
+                } catch (e: any) {
+                  res.statusCode = 400
+                  res.end(JSON.stringify({ success: false, error: e.message }))
+                }
+              })
+              return
+            }
+
+            if (req.url === "/api/reset-app" && req.method === "POST") {
+              const result = await handleResetApp()
+              res.statusCode = 200
+              res.setHeader("Content-Type", "application/json")
+              res.end(JSON.stringify(result))
               return
             }
           } catch (e: any) {

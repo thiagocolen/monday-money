@@ -412,7 +412,10 @@ export async function fullBackup(): Promise<{ success: boolean; fileName?: strin
     if (window.electron) {
       return await invoke('full-backup');
     }
-    return { success: false, error: 'Electron not available' };
+    const response = await fetch('/api/full-backup', {
+      method: 'POST',
+    });
+    return await response.json();
   } catch (error) {
     console.error('Error in fullBackup:', error);
     return { success: false, error: String(error) };
@@ -424,7 +427,12 @@ export async function restoreBackup(zipPath: string): Promise<{ success: boolean
     if (window.electron) {
       return await invoke('restore-backup', zipPath);
     }
-    return { success: false, error: 'Electron not available' };
+    const response = await fetch('/api/restore-backup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ zipPath }),
+    });
+    return await response.json();
   } catch (error) {
     console.error('Error in restoreBackup:', error);
     return { success: false, error: String(error) };
@@ -436,7 +444,10 @@ export async function resetApplication(): Promise<{ success: boolean; error?: st
     if (window.electron) {
       return await invoke('reset-app');
     }
-    return { success: false, error: 'Electron not available' };
+    const response = await fetch('/api/reset-app', {
+      method: 'POST',
+    });
+    return await response.json();
   } catch (error) {
     console.error('Error in resetApplication:', error);
     return { success: false, error: String(error) };
@@ -448,7 +459,9 @@ export async function selectZipFile(): Promise<string | null> {
     if (window.electron) {
       return await invoke('select-zip-file');
     }
-    return null;
+    // Web fallback for testing: ask user for a path via prompt
+    // This is useful for automated tests using page.on('dialog')
+    return window.prompt("Enter absolute path to zip file:");
   } catch (error) {
     console.error('Error selecting zip file:', error);
     return null;
@@ -474,7 +487,9 @@ export async function fetchSettings(): Promise<{ exportPath?: string }> {
     if (window.electron) {
       return await invoke('get-settings');
     }
-    return {};
+    const response = await fetch('/api/settings');
+    if (!response.ok) throw new Error(`Failed to fetch settings: ${response.statusText}`);
+    return await response.json();
   } catch (error) {
     console.error('Error fetching settings:', error);
     return {};
@@ -486,7 +501,8 @@ export async function selectDirectory(): Promise<string | null> {
     if (window.electron) {
       return await invoke('select-directory');
     }
-    return null;
+    // Web fallback for testing: ask user for a path via prompt
+    return window.prompt("Enter absolute path to directory:");
   } catch (error) {
     console.error('Error selecting directory:', error);
     return null;
@@ -498,7 +514,12 @@ export async function setExportPath(path: string): Promise<{ success: boolean, e
     if (window.electron) {
       return await invoke('set-export-path', path);
     }
-    return { success: false, error: 'Electron not available' };
+    const response = await fetch('/api/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ exportPath: path }),
+    });
+    return await response.json();
   } catch (error) {
     console.error('Error setting export path:', error);
     return { success: false, error: String(error) };

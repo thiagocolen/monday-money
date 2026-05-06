@@ -18,6 +18,12 @@ async function navigateTo(page: Page, target: "Transactions" | "Investments" | "
   if (!currentUrl.startsWith(BASE_URL)) {
     await page.goto(BASE_URL);
   }
+
+  // Handle onboarding dialog
+  const welcomeDialog = page.getByRole("dialog", { name: "Welcome to MondayMoney" });
+  if (await welcomeDialog.isVisible()) {
+    await welcomeDialog.getByRole("button", { name: "Close" }).click();
+  }
   
   const navLink = page.getByRole("link", { name: target });
   await navLink.click();
