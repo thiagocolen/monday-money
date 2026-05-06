@@ -12,6 +12,7 @@
     "build": "tsc -b && vite build && npm run data-reset && electron-builder",
     "integrity-check": "tsx backend/integrity-check.ts",
     "data-reset": "tsx backend/reset-csv-files.ts && tsx backend/create-seed-transaction.ts",
+    "settings-reset": "tsx backend/reset-settings.ts",
     "backup-data": "tsx backend/backup-data.ts",
     "protect-files": "tsx backend/protect-files.ts",
     "test": "npx playwright test --headed",

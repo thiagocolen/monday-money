@@ -15,7 +15,19 @@ test.afterEach(async () => {
 });
 
 test('import, process, check and delete transaction from: Nubank Credit, Nubank Debit, Mercado Pago, Bradesco', async ({ page }) => {
+  test.setTimeout(120000);
   await page.goto('http://localhost:5173/', { waitUntil: 'networkidle', timeout: 60000 });
+
+  // Handle onboarding dialog
+  const welcomeDialog = page.getByRole('dialog', { name: 'Welcome to MondayMoney' });
+  try {
+    await expect(welcomeDialog).toBeVisible({ timeout: 5000 });
+    await welcomeDialog.getByRole('button', { name: 'Close' }).click();
+    await expect(welcomeDialog).toBeHidden();
+  } catch (e) {
+    // Dialog didn't appear, ignore
+  }
+
   await page.getByRole('link', { name: 'Import' }).click();
   // Ensure the owner exists by creating it
   await page.getByRole('button', { name: 'Create New' }).click();

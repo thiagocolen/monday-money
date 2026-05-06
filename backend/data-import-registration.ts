@@ -59,9 +59,8 @@ export const PARSERS: FileParser[] = [
         const formattedDate = `${dateParts[2]}-${dateParts[1]}-${dateParts[0]}`;
         const descCol = Object.keys(item).find(k => k.trim().toLowerCase().startsWith('descri'));
         
-        // Invert amount: expenses (-) become positive for categorization as per test requirements
         const originalValue = getVal('valor');
-        const amount = parseFloat(normalizeAmount(originalValue)) * -1;
+        const amount = parseFloat(normalizeAmount(originalValue));
         return { date: formattedDate, description: item[descCol!], amount: amount.toString(), owner };
       });
       return { destFile: 'monthly-transactions.csv', rows };

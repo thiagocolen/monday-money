@@ -1,20 +1,20 @@
 import fs from 'fs';
 import path from 'path';
+import { clearLedger } from './clear-ledger.js';
+import { createSeedTransaction } from './create-seed-transaction.js';
+import { dataImportRegistration, PARSERS } from './data-import-registration.js';
+import { integrityCheck } from './integrity-check.js';
 import { 
-  clearLedger, 
-  createSeedTransaction, 
-  dataImportRegistration, 
-  integrityCheck,
-  getSha256,
-  resolveSafePath,
-  getCoreDir,
-  getSettings,
+  getSha256, 
+  resolveSafePath, 
+  getCoreDir, 
+  ensureCoreStructure,
+  getSettings, 
+  saveSettings, 
   deleteSettings,
-  backupData,
-  restoreData,
-  PARSERS,
-  DEFAULT_CATEGORIES
-} from './index.js';
+  DEFAULT_CATEGORIES 
+} from './utils.js';
+import { backupData, restoreData } from './backup-data.js';
 
 function getPaths() {
   const coreDir = getCoreDir();
@@ -413,10 +413,22 @@ export async function handleResetApp(): Promise<{ success: boolean; error?: stri
     if (fs.existsSync(coreDir)) {
       fs.rmSync(coreDir, { recursive: true, force: true });
     }
+    ensureCoreStructure(coreDir);
     deleteSettings();
     return { success: true };
   } catch (error) {
     console.error('Error in handleResetApp:', error);
+    return { success: false, error: String(error) };
+  }
+}
+
+export async function handleSetExportPath(exportPath: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    if (!exportPath) throw new Error('No path provided');
+    saveSettings({ exportPath });
+    return { success: true };
+  } catch (error) {
+    console.error('Error in handleSetExportPath:', error);
     return { success: false, error: String(error) };
   }
 }
