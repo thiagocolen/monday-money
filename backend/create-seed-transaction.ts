@@ -39,43 +39,7 @@ export function createSeedTransaction() {
   ];
 
   for (const target of targets) {
-    let restoreFromBackup = false;
-
-    if (target.Path.includes('monthly-transactions-category.csv')) {
-      const backupDir = path.join(coreDir, 'protected', 'monthly-transactions-category-bkp');
-      if (fs.existsSync(backupDir)) {
-        const files = fs.readdirSync(backupDir).filter(f => f.startsWith('monthly-transactions-category-') && f.endsWith('-bkp.csv'));
-        if (files.length > 0) {
-          files.sort((a, b) => {
-            return fs.statSync(path.join(backupDir, b)).mtimeMs - fs.statSync(path.join(backupDir, a)).mtimeMs;
-          });
-          const latestBackup = files[0];
-          console.log(`Restoring category file from latest backup: ${latestBackup}...`);
-          fs.copyFileSync(path.join(backupDir, latestBackup), target.Path);
-          fs.chmodSync(target.Path, 0o644);
-          restoreFromBackup = true;
-
-          // Also restore meta files if they exist in backup
-          const timestampMatch = latestBackup.match(/monthly-transactions-category-(\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2})-bkp\.csv/);
-          if (timestampMatch) {
-            const timestamp = timestampMatch[1];
-            const metaCatsBkp = path.join(backupDir, `meta-categories-${timestamp}-bkp.json`);
-            const metaTagsBkp = path.join(backupDir, `meta-tags-${timestamp}-bkp.json`);
-            
-            if (fs.existsSync(metaCatsBkp)) {
-              console.log(`Restoring meta-categories from backup: ${path.basename(metaCatsBkp)}...`);
-              fs.copyFileSync(metaCatsBkp, path.join(dataDir, 'meta-categories.json'));
-            }
-            if (fs.existsSync(metaTagsBkp)) {
-              console.log(`Restoring meta-tags from backup: ${path.basename(metaTagsBkp)}...`);
-              fs.copyFileSync(metaTagsBkp, path.join(dataDir, 'meta-tags.json'));
-            }
-          }
-        }
-      }
-    }
-
-    if (!restoreFromBackup) {
+    if (!fs.existsSync(target.Path)) {
       console.log(`Initializing ${target.Path}...`);
       fs.writeFileSync(target.Path, target.Header + '\n', 'utf8');
     }
