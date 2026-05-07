@@ -13,7 +13,7 @@ const BASE_URL = "http://localhost:5173";
  * Since the app uses createMemoryRouter, page.goto() only works for the initial load.
  * Subsequent navigation must be done by clicking on UI elements.
  */
-async function navigateTo(page: Page, target: "Transactions" | "Investments" | "Import") {
+export async function navigateTo(page: Page, target: "Transactions" | "Investments" | "Import") {
   const currentUrl = page.url();
   if (!currentUrl.startsWith(BASE_URL)) {
     await page.goto(BASE_URL);
@@ -21,8 +21,24 @@ async function navigateTo(page: Page, target: "Transactions" | "Investments" | "
 
   // Handle onboarding dialog
   const welcomeDialog = page.getByRole("dialog", { name: "Welcome to MondayMoney" });
+  
+  // Explicitly wait a short time for the dialog to appear
+  await welcomeDialog.waitFor({ state: 'visible', timeout: 2000 }).catch(() => {});
+
   if (await welcomeDialog.isVisible()) {
-    await welcomeDialog.getByRole("button", { name: "Close" }).click();
+    const exportInput = welcomeDialog.getByLabel("Export Folder Path");
+    if (await exportInput.isVisible()) {
+      await exportInput.fill("C:\\Backups\\MondayMoney");
+      const getStarted = welcomeDialog.getByRole("button", { name: "Get Started" });
+      if (await getStarted.isEnabled()) {
+        await getStarted.click();
+      } else {
+        await welcomeDialog.getByRole("button", { name: "Close" }).click();
+      }
+    } else {
+      await welcomeDialog.getByRole("button", { name: "Close" }).click();
+    }
+    await expect(welcomeDialog).toBeHidden();
   }
   
   const navLink = page.getByRole("link", { name: target });

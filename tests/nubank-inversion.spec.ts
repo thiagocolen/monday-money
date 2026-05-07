@@ -78,9 +78,16 @@ test('verify NULLED category and nubank amount inversion', async ({ page }) => {
   const welcomeDialog = page.getByRole('dialog', { name: 'Welcome to MondayMoney' });
   const exportFolderPath = path.join(__dirname, 'export-folder');
   
+  await welcomeDialog.waitFor({ state: 'visible', timeout: 5000 }).catch(() => {});
+  
   if (await welcomeDialog.isVisible()) {
     await page.getByLabel("Export Folder Path").fill(exportFolderPath);
-    await page.getByRole("button", { name: "Get Started" }).click();
+    const getStarted = page.getByRole("button", { name: "Get Started" });
+    if (await getStarted.isEnabled()) {
+      await getStarted.click();
+    } else {
+      await page.getByRole("button", { name: "Close" }).click();
+    }
     await expect(welcomeDialog).toBeHidden();
   }
 

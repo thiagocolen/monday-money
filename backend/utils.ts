@@ -101,7 +101,6 @@ export function ensureCoreStructure(coreDir: string) {
   const subDirs = [
     path.join(coreDir, "data"),
     path.join(coreDir, "protected", "raw-statement-files"),
-    path.join(coreDir, "protected", "monthly-transactions-category-bkp"),
   ];
 
   subDirs.forEach(dir => {
