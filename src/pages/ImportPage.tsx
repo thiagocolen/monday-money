@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from "react"
-import { fetchOwners, fetchImportHistory, deleteImport, fetchRawCsvFolderPath, setRawCsvFolderPath, scanFolder, selectDirectory } from "../lib/api"
+import { fetchImportHistory, deleteImport, fetchRawCsvFolderPath, setRawCsvFolderPath, scanFolder, selectDirectory } from "../lib/api"
 import type { ImportHistory } from "../lib/api"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -10,7 +10,6 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { FileText, CheckCircle2, AlertCircle, Loader2, Trash2, FolderOpen, RefreshCw, Search, ArrowUpDown } from "lucide-react"
 import { toast } from "sonner"
 import { format, parseISO } from "date-fns"
-import { cn } from "@/lib/utils"
 
 type SortField = 'fileName' | 'owner' | 'processedDate' | 'totalTransactions';
 type SortOrder = 'asc' | 'desc';
