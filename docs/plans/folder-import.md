@@ -3,28 +3,65 @@
 ## Overview
 Replace the manual file upload import process with an automated folder-based approach. Users will configure a root folder, and the application will scan its subfolders (representing owners) for CSV files to import.
 
-## Functional Changes
-### 1. New Import Process
-- **Root Folder Configuration:** Add a setting for `raw_csv_folder_path`.
-- **Owner Mapping:** The first level of sub-folders under the root will be treated as the transaction "owner".
-- **Scanning:** Implement logic to scan the root folder and identify .csv files within owner sub-folders.
-- **Import History:** The `Import History` table will show all processed files, regardless of whether they were manually uploaded (previous system) or found in the folder.
+## Technical Architecture
 
-### 2. UI Updates
-- **Startup Dialog:**
-    - Add a configuration field for the `raw csv files folder path`.
-- **Import Page:**
-    - Remove the "Import New File" dropzone/area.
-    - Replace it with a configuration input/button for the `raw csv files folder path`.
-    - Enhance the `Import History` table:
-        - Add a search filter.
-        - Add an owner filter.
-        - Enable sorting on all columns.
+### 1. Settings Management
+- **File:** `backend/utils.ts`
+- **Action:** Update `getSettings` and `saveSettings` to include `rawCsvFolderPath`.
+- **Action:** Update `ensureCoreStructure` to ensure any new required directories exist.
 
-## Technical Tasks
-- [ ] Update backend settings to store `raw_csv_folder_path`.
-- [ ] Implement a file system crawler in the backend (Electron) to detect new CSV files.
-- [ ] Modify the import logic to use the sub-folder name as the owner.
-- [ ] Refactor `ImportPage.tsx` to remove the file dropzone and add the folder path setting.
-- [ ] Update `StartupDialog.tsx` to include the new configuration.
-- [ ] Enhance the data table component or usage in `ImportPage` to support filters and sorting.
+### 2. Backend Logic: Folder Scanner
+- **New File:** `backend/folder-import.ts` (or integrate into `data-import-registration.ts`)
+- **Logic:**
+    - Read `rawCsvFolderPath` from settings.
+    - Iterate through first-level directories of `rawCsvFolderPath`. Each directory name is an `owner`.
+    - Within each owner directory, find all `.csv` files.
+    - For each file:
+        - Check if it has already been imported (using file hash or filename tracking).
+        - If new, use existing `PARSERS` from `data-import-registration.ts` to parse and import transactions.
+        - Move/copy the file to the `protected/raw-statement-files` directory (as the current manual import does).
+
+### 3. API Bridge
+- **File:** `src/lib/api.ts`
+- **New Functions:**
+    - `getRawCsvFolderPath()`: Fetches the configured path.
+    - `setRawCsvFolderPath(path: string)`: Saves the new path.
+    - `scanFolder()`: Triggers the backend scanning process.
+
+### 4. UI Components
+
+#### Startup Dialog
+- **File:** `src/components/StartupDialog.tsx`
+- **Changes:**
+    - Add a new input field and "Browse" button for "Raw CSV Folder Path".
+    - Update the `handleSave` logic to persist both the export path and the raw CSV path.
+
+#### Import Page
+- **File:** `src/pages/ImportPage.tsx`
+- **Changes:**
+    - **Remove:** The file dropzone and manual owner selection for new imports.
+    - **Add:** A configuration section showing the current `rawCsvFolderPath` with a "Change" button and a "Scan Folder" button.
+    - **Update Table:** Enhance the `Import History` table with:
+        - **Search Filter:** Filter by filename.
+        - **Owner Filter:** A multi-select or dropdown filter for owners.
+        - **Sorting:** Enable sorting on all columns (Date, Filename, Owner, Transactions).
+
+## Implementation Steps
+
+### Phase 1: Backend & API
+1. [ ] Update settings schema and utils.
+2. [ ] Implement the folder scanning logic.
+3. [ ] Expose new API endpoints.
+
+### Phase 2: UI Foundation
+1. [ ] Update `StartupDialog` to collect the new path.
+2. [ ] Update `ImportPage` layout to show the folder path and scan button.
+
+### Phase 3: Table Enhancements
+1. [ ] Implement sorting in the `Import History` table.
+2. [ ] Add search and owner filters to the table.
+
+### Phase 4: Validation
+1. [ ] Verify manual import history is still visible.
+2. [ ] Test folder scanning with various owners and file formats.
+3. [ ] Ensure no regressions in transaction processing.

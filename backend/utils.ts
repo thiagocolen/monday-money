@@ -47,7 +47,7 @@ export function getSettingsPath(): string {
   return path.join(userDataPath, "settings.json");
 }
 
-export function getSettings(): { exportPath?: string } {
+export function getSettings(): { exportPath?: string, rawCsvFolderPath?: string } {
   const settingsPath = getSettingsPath();
   if (fs.existsSync(settingsPath)) {
     try {
@@ -59,9 +59,11 @@ export function getSettings(): { exportPath?: string } {
   return {};
 }
 
-export function saveSettings(settings: { exportPath: string }) {
+export function saveSettings(settings: { exportPath?: string, rawCsvFolderPath?: string }) {
   const settingsPath = getSettingsPath();
-  fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
+  const currentSettings = getSettings();
+  const newSettings = { ...currentSettings, ...settings };
+  fs.writeFileSync(settingsPath, JSON.stringify(newSettings, null, 2));
 }
 
 export function deleteSettings() {

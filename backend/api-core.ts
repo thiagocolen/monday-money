@@ -433,6 +433,69 @@ export async function handleSetExportPath(exportPath: string): Promise<{ success
   }
 }
 
+export async function handleGetRawCsvFolderPath(): Promise<string> {
+  const settings = getSettings();
+  return settings.rawCsvFolderPath || "";
+}
+
+export async function handleSetRawCsvFolderPath(rawCsvFolderPath: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    if (!rawCsvFolderPath) throw new Error('No path provided');
+    saveSettings({ rawCsvFolderPath });
+    return { success: true };
+  } catch (error) {
+    console.error('Error in handleSetRawCsvFolderPath:', error);
+    return { success: false, error: String(error) };
+  }
+}
+
+export async function handleScanFolder(): Promise<{ success: boolean; error?: string }> {
+  await acquireLock();
+  try {
+    const settings = getSettings();
+    if (!settings.rawCsvFolderPath) throw new Error('Raw CSV folder path not configured');
+
+    if (!fs.existsSync(settings.rawCsvFolderPath)) {
+      throw new Error(`Folder not found: ${settings.rawCsvFolderPath}`);
+    }
+
+    const { rawStatementFilesDir } = getPaths();
+    const ownerDirs = fs.readdirSync(settings.rawCsvFolderPath).filter(f => fs.statSync(path.join(settings.rawCsvFolderPath!, f)).isDirectory());
+
+    for (const ownerName of ownerDirs) {
+      const sourceOwnerPath = path.join(settings.rawCsvFolderPath, ownerName);
+      const targetOwnerPath = resolveSafePath(rawStatementFilesDir, ownerName);
+
+      if (!fs.existsSync(targetOwnerPath)) {
+        fs.mkdirSync(targetOwnerPath, { recursive: true });
+      }
+
+      const files = fs.readdirSync(sourceOwnerPath).filter(f => f.endsWith('.csv'));
+      for (const file of files) {
+        const sourceFilePath = path.join(sourceOwnerPath, file);
+        const targetFilePath = path.join(targetOwnerPath, file);
+
+        if (!fs.existsSync(targetFilePath)) {
+          fs.copyFileSync(sourceFilePath, targetFilePath);
+        }
+      }
+    }
+
+    // Run pipeline
+    clearLedger();
+    createSeedTransaction();
+    dataImportRegistration();
+    integrityCheck();
+
+    return { success: true };
+  } catch (error) {
+    console.error('Error in handleScanFolder:', error);
+    return { success: false, error: String(error) };
+  } finally {
+    releaseLock();
+  }
+}
+
 export async function handleGetBackupInfo(): Promise<{ count: number; latestDate: string | null }> {
   const settings = getSettings();
   const backupDir = settings.exportPath;
