@@ -409,6 +409,9 @@ export async function handleRestoreBackup(zipPath: string): Promise<{ success: b
 
 export async function handleResetApp(): Promise<{ success: boolean; error?: string }> {
   try {
+    // Small delay to allow file handles to settle
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
     const coreDir = getCoreDir();
     if (fs.existsSync(coreDir)) {
       // RESET: Clear contents instead of deleting root folder to avoid EPERM on Windows
@@ -459,8 +462,17 @@ async function safeEmptyDirAsync(dir: string, retries = 5, delay = 200) {
       for (const file of files) {
         const fullPath = path.join(dir, file);
         if (fs.statSync(fullPath).isDirectory()) {
-          fs.rmSync(fullPath, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+          // RECURSIVELY EMPTY SUBDIRECTORY
+          await safeEmptyDirAsync(fullPath, retries, delay);
+          // TRY TO REMOVE THE SUBDIRECTORY ITSELF
+          try {
+            fs.rmSync(fullPath, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+          } catch (e) {
+            // Ignore if we can't remove the empty dir
+            console.warn(`Could not remove empty directory: ${fullPath}`, e);
+          }
         } else {
+          // REMOVE FILE
           fs.unlinkSync(fullPath);
         }
       }
