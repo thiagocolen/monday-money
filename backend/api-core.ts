@@ -411,7 +411,8 @@ export async function handleResetApp(): Promise<{ success: boolean; error?: stri
   try {
     const coreDir = getCoreDir();
     if (fs.existsSync(coreDir)) {
-      fs.rmSync(coreDir, { recursive: true, force: true });
+      // RESET: Clear contents instead of deleting root folder to avoid EPERM on Windows
+      await safeEmptyDirAsync(coreDir);
     }
     ensureCoreStructure(coreDir);
     deleteSettings();
