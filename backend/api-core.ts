@@ -449,35 +449,6 @@ export async function handleSetRawCsvFolderPath(rawCsvFolderPath: string): Promi
   }
 }
 
-/**
- * Safely empties a directory without deleting the directory itself.
- * This is more robust on Windows where the directory handle might be locked.
- */
-function safeEmptyDir(dir: string, retries = 5, delay = 200) {
-  if (!fs.existsSync(dir)) return;
-
-  for (let i = 0; i < retries; i++) {
-    try {
-      const files = fs.readdirSync(dir);
-      for (const file of files) {
-        const fullPath = path.join(dir, file);
-        if (fs.statSync(fullPath).isDirectory()) {
-          fs.rmSync(fullPath, { recursive: true, force: true });
-        } else {
-          fs.unlinkSync(fullPath);
-        }
-      }
-      return; // Success
-    } catch (error) {
-      if (i === retries - 1) throw error;
-      // Wait and retry
-      const wait = new Promise(resolve => setTimeout(resolve, delay));
-      // We can't really await here easily in a sync-like loop without making safeEmptyDir async
-      // But we are in an async context in handleScanFolder, so let's make it async.
-    }
-  }
-}
-
 async function safeEmptyDirAsync(dir: string, retries = 5, delay = 200) {
   if (!fs.existsSync(dir)) return;
 
