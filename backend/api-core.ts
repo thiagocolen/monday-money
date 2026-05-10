@@ -449,6 +449,57 @@ export async function handleSetRawCsvFolderPath(rawCsvFolderPath: string): Promi
   }
 }
 
+/**
+ * Safely empties a directory without deleting the directory itself.
+ * This is more robust on Windows where the directory handle might be locked.
+ */
+function safeEmptyDir(dir: string, retries = 5, delay = 200) {
+  if (!fs.existsSync(dir)) return;
+
+  for (let i = 0; i < retries; i++) {
+    try {
+      const files = fs.readdirSync(dir);
+      for (const file of files) {
+        const fullPath = path.join(dir, file);
+        if (fs.statSync(fullPath).isDirectory()) {
+          fs.rmSync(fullPath, { recursive: true, force: true });
+        } else {
+          fs.unlinkSync(fullPath);
+        }
+      }
+      return; // Success
+    } catch (error) {
+      if (i === retries - 1) throw error;
+      // Wait and retry
+      const wait = new Promise(resolve => setTimeout(resolve, delay));
+      // We can't really await here easily in a sync-like loop without making safeEmptyDir async
+      // But we are in an async context in handleScanFolder, so let's make it async.
+    }
+  }
+}
+
+async function safeEmptyDirAsync(dir: string, retries = 5, delay = 200) {
+  if (!fs.existsSync(dir)) return;
+
+  for (let i = 0; i < retries; i++) {
+    try {
+      const files = fs.readdirSync(dir);
+      for (const file of files) {
+        const fullPath = path.join(dir, file);
+        if (fs.statSync(fullPath).isDirectory()) {
+          fs.rmSync(fullPath, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+        } else {
+          fs.unlinkSync(fullPath);
+        }
+      }
+      return; // Success
+    } catch (error) {
+      if (i === retries - 1) throw error;
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+}
+
 export async function handleScanFolder(): Promise<{ success: boolean; error?: string }> {
   await acquireLock();
   try {
@@ -461,14 +512,12 @@ export async function handleScanFolder(): Promise<{ success: boolean; error?: st
 
     const { rawStatementFilesDir, dataDir, coreDir } = getPaths();
 
-    // RESET: Clear internal storage to perfectly mirror the source folder
-    if (fs.existsSync(dataDir)) {
-      fs.rmSync(dataDir, { recursive: true, force: true });
-    }
-    if (fs.existsSync(rawStatementFilesDir)) {
-      fs.rmSync(rawStatementFilesDir, { recursive: true, force: true });
-    }
+    // Ensure structure exists first
     ensureCoreStructure(coreDir);
+
+    // RESET: Clear contents instead of deleting root folders to avoid EPERM on Windows
+    await safeEmptyDirAsync(dataDir);
+    await safeEmptyDirAsync(rawStatementFilesDir);
 
     const ownerDirs = fs.readdirSync(settings.rawCsvFolderPath).filter(f => fs.statSync(path.join(settings.rawCsvFolderPath!, f)).isDirectory());
 
