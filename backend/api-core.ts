@@ -459,7 +459,17 @@ export async function handleScanFolder(): Promise<{ success: boolean; error?: st
       throw new Error(`Folder not found: ${settings.rawCsvFolderPath}`);
     }
 
-    const { rawStatementFilesDir } = getPaths();
+    const { rawStatementFilesDir, dataDir, coreDir } = getPaths();
+
+    // RESET: Clear internal storage to perfectly mirror the source folder
+    if (fs.existsSync(dataDir)) {
+      fs.rmSync(dataDir, { recursive: true, force: true });
+    }
+    if (fs.existsSync(rawStatementFilesDir)) {
+      fs.rmSync(rawStatementFilesDir, { recursive: true, force: true });
+    }
+    ensureCoreStructure(coreDir);
+
     const ownerDirs = fs.readdirSync(settings.rawCsvFolderPath).filter(f => fs.statSync(path.join(settings.rawCsvFolderPath!, f)).isDirectory());
 
     for (const ownerName of ownerDirs) {
@@ -474,15 +484,13 @@ export async function handleScanFolder(): Promise<{ success: boolean; error?: st
       for (const file of files) {
         const sourceFilePath = path.join(sourceOwnerPath, file);
         const targetFilePath = path.join(targetOwnerPath, file);
-
-        if (!fs.existsSync(targetFilePath)) {
-          fs.copyFileSync(sourceFilePath, targetFilePath);
-        }
+        
+        // Copy every file (reset means we start fresh)
+        fs.copyFileSync(sourceFilePath, targetFilePath);
       }
     }
 
-    // Run pipeline
-    clearLedger();
+    // Run pipeline: re-initialize since we cleared data
     createSeedTransaction();
     dataImportRegistration();
     integrityCheck();
