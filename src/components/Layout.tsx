@@ -36,10 +36,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
   }, []);
 
   const navItems = [
-    { name: "Transactions", path: "/" },
-    { name: "Investments", path: "/investments" },
-    { name: "Import", path: "/import" },
-    { name: "Backup", path: "/backup" },
+    { name: "Transaction Account", path: "/" },
+    { name: "Investiments Account", path: "/investments" },
+    { name: "Import Export", path: "/import" },
   ];
 
   const isPathActive = (itemPath: string) => {

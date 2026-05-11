@@ -358,22 +358,7 @@ export async function fetchImportHistory(): Promise<ImportHistory[]> {
   }
 }
 
-export async function deleteImport(owner: string, fileName: string): Promise<{ success: boolean; error?: string; logs?: string }> {
-  try {
-    if (window.electron) {
-      return await invoke('delete-import', { owner, fileName });
-    }
-    const response = await fetch('/api/delete-import', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ owner, fileName }),
-    });
-    return await response.json();
-  } catch (error) {
-    console.error('Error deleting import:', error);
-    return { success: false, error: String(error) };
-  }
-}
+
 
 export async function fetchMetadata(): Promise<{ tags: any[], categories: any[] }> {
   try {
@@ -482,7 +467,7 @@ export async function fetchBackupInfo(): Promise<{ count: number; latestDate: st
   }
 }
 
-export async function fetchSettings(): Promise<{ exportPath?: string }> {
+export async function fetchSettings(): Promise<{ exportPath?: string, rawCsvFolderPath?: string }> {
   try {
     if (window.electron) {
       return await invoke('get-settings');
@@ -496,13 +481,13 @@ export async function fetchSettings(): Promise<{ exportPath?: string }> {
   }
 }
 
-export async function selectDirectory(): Promise<string | null> {
+export async function selectDirectory(title?: string): Promise<string | null> {
   try {
     if (window.electron) {
-      return await invoke('select-directory');
+      return await invoke('select-directory', title);
     }
     // Web fallback for testing: ask user for a path via prompt
-    return window.prompt("Enter absolute path to directory:");
+    return window.prompt(title || "Enter absolute path to directory:");
   } catch (error) {
     console.error('Error selecting directory:', error);
     return null;
@@ -522,6 +507,42 @@ export async function setExportPath(path: string): Promise<{ success: boolean, e
     return await response.json();
   } catch (error) {
     console.error('Error setting export path:', error);
+    return { success: false, error: String(error) };
+  }
+}
+
+export async function fetchRawCsvFolderPath(): Promise<string> {
+  try {
+    if (window.electron) {
+      return await invoke('get-raw-csv-folder-path');
+    }
+    return "";
+  } catch (error) {
+    console.error('Error fetching raw CSV folder path:', error);
+    return "";
+  }
+}
+
+export async function setRawCsvFolderPath(path: string): Promise<{ success: boolean, error?: string }> {
+  try {
+    if (window.electron) {
+      return await invoke('set-raw-csv-folder-path', path);
+    }
+    return { success: false, error: "Not supported in web mode" };
+  } catch (error) {
+    console.error('Error setting raw CSV folder path:', error);
+    return { success: false, error: String(error) };
+  }
+}
+
+export async function scanFolder(): Promise<{ success: boolean, error?: string }> {
+  try {
+    if (window.electron) {
+      return await invoke('scan-folder');
+    }
+    return { success: false, error: "Not supported in web mode" };
+  } catch (error) {
+    console.error('Error scanning folder:', error);
     return { success: false, error: String(error) };
   }
 }
