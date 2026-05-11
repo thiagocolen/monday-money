@@ -1,15 +1,26 @@
 import { useState, useEffect, useCallback, useMemo } from "react"
-import { fetchImportHistory, deleteImport, fetchRawCsvFolderPath, setRawCsvFolderPath, scanFolder, selectDirectory } from "../lib/api"
+import { fetchImportHistory, fetchRawCsvFolderPath, setRawCsvFolderPath, scanFolder, selectDirectory, fetchSettings, setExportPath, fullBackup, resetApplication } from "../lib/api"
 import type { ImportHistory } from "../lib/api"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { FileText, CheckCircle2, AlertCircle, Loader2, Trash2, FolderOpen, RefreshCw, Search, ArrowUpDown } from "lucide-react"
+import { FileText, CheckCircle2, AlertCircle, Loader2, Trash2, FolderOpen, RefreshCw, Search, ArrowUpDown, Download, AlertTriangle, ArrowRight } from "lucide-react"
 import { toast } from "sonner"
 import { format, parseISO } from "date-fns"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 type SortField = 'fileName' | 'owner' | 'processedDate' | 'totalTransactions';
 type SortOrder = 'asc' | 'desc';
@@ -18,12 +29,13 @@ export function ImportPage() {
   const [history, setHistory] = useState<ImportHistory[]>([])
   const [rawFolderPath, setRawFolderPath] = useState<string>("")
   const [isScanning, setIsScanning] = useState(false)
-  const [deletingFile, setDeletingFile] = useState<ImportHistory | null>(null)
-  const [isDeleteDialogOpen, setIsDeleteOpen] = useState(false)
   const [isLogsModalOpen, setIsLogsModalOpen] = useState(false)
   const [reprocessingLogs, setReprocessingLogs] = useState("")
   const [isLoading, setIsLoading] = useState(true)
-  const [isDeleting, setIsDeleting] = useState(false)
+  
+  const [exportPathVal, setExportPathVal] = useState("");
+  const [savingExport, setSavingExport] = useState(false);
+  const [exporting, setExporting] = useState(false);
   
   // Filters and Sorting
   const [searchQuery, setSearchQuery] = useState("")
@@ -34,12 +46,16 @@ export function ImportPage() {
   const loadData = useCallback(async () => {
     setIsLoading(true)
     try {
-      const [historyData, path] = await Promise.all([
+      const [historyData, path, settings] = await Promise.all([
         fetchImportHistory(),
-        fetchRawCsvFolderPath()
+        fetchRawCsvFolderPath(),
+        fetchSettings()
       ])
       setHistory(historyData)
       setRawFolderPath(path)
+      if (settings.exportPath) {
+        setExportPathVal(settings.exportPath)
+      }
     } catch (error) {
       toast.error("Failed to load data")
     } finally {
@@ -136,45 +152,54 @@ export function ImportPage() {
     }
   }
 
-  const handleDeleteClick = (item: ImportHistory) => {
-    setDeletingFile(item)
-    setIsDeleteOpen(true)
-  }
 
-  const handleCancelDelete = () => {
-    setIsDeleteOpen(false)
-    if (!isDeleting) {
-      setDeletingFile(null)
-    }
-  }
 
-  const handleConfirmDelete = async () => {
-    if (!deletingFile) return
-
-    const { owner, fileName } = deletingFile
-    setIsDeleting(true)
-    setIsDeleteOpen(false)
-    setReprocessingLogs("Initiating reprocessing...\n")
-    setIsLogsModalOpen(true)
-    
+  const handleBrowseExport = async () => {
     try {
-      const result = await deleteImport(owner, fileName)
-      if (result.success) {
-        setReprocessingLogs(prev => prev + (result.logs || "Done."))
-        toast.success(`Successfully removed ${fileName} and refreshed data.`)
-        loadData()
-      } else {
-        setReprocessingLogs(prev => prev + `\nERROR: ${result.error}`)
-        toast.error(`Failed to delete file: ${result.error}`)
+      const selectedPath = await selectDirectory();
+      if (selectedPath) {
+        setExportPathVal(selectedPath);
       }
     } catch (error) {
-      setReprocessingLogs(prev => prev + `\nFATAL ERROR: ${String(error)}`)
-      toast.error("An error occurred during deletion.")
-    } finally {
-      setIsDeleting(false)
-      setDeletingFile(null)
+      toast.error("Failed to open folder picker");
     }
-  }
+  };
+
+  const handleSaveExportPath = async () => {
+    if (!exportPathVal) {
+      toast.error("Please select a folder path");
+      return;
+    }
+    setSavingExport(true);
+    const result = await setExportPath(exportPathVal);
+    setSavingExport(false);
+    if (result.success) {
+      toast.success("Export path updated successfully");
+    } else {
+      toast.error(result.error || "Failed to save settings");
+    }
+  };
+
+  const handleExport = async () => {
+    setExporting(true);
+    const result = await fullBackup();
+    setExporting(false);
+    if (result.success) {
+      toast.success(`Backup created: ${result.fileName}`);
+    } else {
+      toast.error(result.error || "Failed to create backup");
+    }
+  };
+
+  const handleReset = async () => {
+    const result = await resetApplication();
+    if (result.success) {
+      toast.success("Application data reset successfully");
+      window.location.reload();
+    } else {
+      toast.error(result.error || "Failed to reset application");
+    }
+  };
 
   const toggleSort = (field: SortField) => {
     if (sortField === field) {
@@ -188,22 +213,51 @@ export function ImportPage() {
   return (
     <div className="space-y-8">
       <div>
-        <h2 className="text-2xl font-bold tracking-tight">Import Statement Files</h2>
+        <h2 className="text-2xl font-bold tracking-tight">Import Export</h2>
         <p className="text-muted-foreground">
-          Automate transaction imports by configuring a local folder with your bank statements.
+          Automate transaction imports and manage your data backups.
         </p>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-        <Card className="md:col-span-1 lg:col-span-1">
+      {/* Row 1: How it works (1 col) */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm font-bold uppercase tracking-wider text-indigo-600 flex items-center gap-2">
+            <FileText className="h-4 w-4" />
+            How it works
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="text-xs space-y-3 text-muted-foreground">
+          <div className="flex items-start gap-2">
+            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 mt-0.5" />
+            <p>Place your CSV files in subfolders named after the transaction <strong>owner</strong> (e.g., <code>.../MyFolder/John-Doe/statement.csv</code>).</p>
+          </div>
+          <div className="flex items-start gap-2">
+            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 mt-0.5" />
+            <p>Scanning will detect new files and process them automatically using the appropriate bank parser.</p>
+          </div>
+          <div className="flex items-start gap-2">
+            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 mt-0.5" />
+            <p>Files already imported are tracked by content hash and will be skipped to avoid duplicates.</p>
+          </div>
+          <div className="flex items-start gap-2">
+            <AlertCircle className="h-3.5 w-3.5 text-amber-500 mt-0.5" />
+            <p>A full data reset and reload is performed during each scan to maintain ledger integrity.</p>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Row 2: Import Folder | Export Folder (2 cols) */}
+      <div className="grid gap-6 md:grid-cols-2">
+        <Card className="flex flex-col">
           <CardHeader>
             <CardTitle className="text-sm font-bold uppercase tracking-wider text-indigo-600 flex items-center gap-2">
               <FolderOpen className="h-4 w-4" />
-              Folder Configuration
+              Import Folder
             </CardTitle>
             <CardDescription>Path where statement files are stored</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-4 flex-1">
             <div className="space-y-2">
               <label className="text-[10px] font-bold text-muted-foreground uppercase">Folder Path</label>
               <div className="flex gap-2">
@@ -218,7 +272,8 @@ export function ImportPage() {
                 </Button>
               </div>
             </div>
-
+          </CardContent>
+          <CardFooter className="bg-muted/30 border-t py-3 mt-auto">
             <Button 
               className="w-full bg-indigo-600 hover:bg-indigo-700 h-9 text-xs gap-2" 
               onClick={handleScanFolder}
@@ -236,37 +291,141 @@ export function ImportPage() {
                 </>
               )}
             </Button>
+          </CardFooter>
+        </Card>
+
+        <Card className="border-indigo-100 dark:border-indigo-900/40 shadow-sm overflow-hidden flex flex-col">
+          <div className="h-1 bg-indigo-600" />
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-indigo-600">
+              <FolderOpen className="h-5 w-5 text-indigo-600" />
+              Export Folder
+            </CardTitle>
+            <CardDescription>
+              Choose where your .zip backups will be stored.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4 flex-1">
+            <div className="flex flex-col gap-2">
+              <label htmlFor="path" className="text-[10px] font-bold text-muted-foreground uppercase">
+                Backup Folder Path
+              </label>
+              <div className="flex gap-2">
+                <Input
+                  id="path"
+                  value={exportPathVal}
+                  onChange={(e) => setExportPathVal(e.target.value)}
+                  placeholder="C:\Backups\MondayMoney"
+                  className="flex-1 font-mono text-[11px]"
+                />
+                <Button variant="outline" size="icon" className="h-9 w-9" onClick={handleBrowseExport} disabled={savingExport}>
+                  <FolderOpen className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+          <CardFooter className="bg-muted/30 border-t py-3 mt-auto">
+            <Button 
+              onClick={handleSaveExportPath} 
+              disabled={savingExport || !exportPathVal} 
+              className="ml-auto bg-indigo-600 hover:bg-indigo-700 h-9 px-4 text-xs"
+            >
+              {savingExport ? "Saving..." : "Update Path"}
+            </Button>
+          </CardFooter>
+        </Card>
+      </div>
+
+      {/* Row 3: Danger Zone | Full System Export */}
+      <div className="grid gap-6 md:grid-cols-2">
+        <Card className="border-red-100 dark:border-red-900/40 bg-red-50/10 dark:bg-red-950/5 shadow-sm overflow-hidden flex flex-col">
+          <div className="h-1 bg-red-600" />
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-red-700 dark:text-red-400">
+              <AlertTriangle className="h-5 w-5" />
+              Danger Zone
+            </CardTitle>
+            <CardDescription>
+              Irreversible actions that affect your entire application data.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex-1">
+            <div className="flex flex-col items-start justify-between gap-4 p-4 border border-red-200 dark:border-red-900/50 rounded-lg bg-red-50/50 dark:bg-red-900/10 h-full">
+              <div className="space-y-1">
+                <h4 className="font-bold text-red-900 dark:text-red-200">Reset Application Data</h4>
+                <p className="text-xs text-red-700/70 dark:text-red-400/70">
+                  This will permanently delete all transactions, categories, and configuration. 
+                  Make sure you have a backup before proceeding.
+                </p>
+              </div>
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button variant="destructive" className="font-bold gap-2 mt-auto w-full">
+                    <Trash2 className="h-4 w-4" />
+                    Reset App
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent className="border-red-200 dark:border-red-900">
+                  <AlertDialogHeader>
+                    <AlertDialogTitle className="flex items-center gap-2 text-red-600">
+                      <AlertTriangle className="h-5 w-5" />
+                      Total Data Destruction
+                    </AlertDialogTitle>
+                    <AlertDialogDescription className="text-foreground">
+                      This action <strong>cannot be undone</strong>. All your imported files, 
+                      transaction history, and custom categories will be permanently deleted.
+                      <br /><br />
+                      Are you absolutely sure you want to reset MondayMoney?
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction 
+                      onClick={handleReset}
+                      className="bg-red-600 hover:bg-red-700 text-white font-bold"
+                    >
+                      Yes, Reset Everything
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </div>
           </CardContent>
         </Card>
 
-        <Card className="md:col-span-1 lg:col-span-2">
-          <CardHeader>
-            <CardTitle className="text-sm font-bold uppercase tracking-wider text-indigo-600 flex items-center gap-2">
-              <FileText className="h-4 w-4" />
-              How it works
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="text-xs space-y-3 text-muted-foreground">
-            <div className="flex items-start gap-2">
-              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 mt-0.5" />
-              <p>Place your CSV files in subfolders named after the transaction <strong>owner</strong> (e.g., <code>.../MyFolder/John-Doe/statement.csv</code>).</p>
-            </div>
-            <div className="flex items-start gap-2">
-              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 mt-0.5" />
-              <p>Scanning will detect new files and process them automatically using the appropriate bank parser.</p>
-            </div>
-            <div className="flex items-start gap-2">
-              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 mt-0.5" />
-              <p>Files already imported are tracked by content hash and will be skipped to avoid duplicates.</p>
-            </div>
-            <div className="flex items-start gap-2">
-              <AlertCircle className="h-3.5 w-3.5 text-amber-500 mt-0.5" />
-              <p>A full data reset and reload is performed during each scan to maintain ledger integrity.</p>
+        <Card className="border-emerald-100 dark:border-emerald-900/40 shadow-sm overflow-hidden flex flex-col">
+          <div className="h-1 bg-emerald-500" />
+          <CardContent className="pt-6 flex flex-col flex-1">
+            <div className="flex flex-col space-y-4 h-full">
+              <div className="space-y-1">
+                <h3 className="text-sm font-bold uppercase tracking-wider flex items-center gap-2 text-emerald-600">
+                  <Download className="h-5 w-5 text-emerald-600" />
+                  Full System Export
+                </h3>
+                <p className="text-sm text-muted-foreground">
+                  Create a complete .zip archive of all your transactions, categories, and settings. 
+                  This file can be used to restore your data on another machine or after a reset.
+                </p>
+              </div>
+              <Button 
+                size="lg"
+                className="bg-emerald-600 hover:bg-emerald-700 text-white w-full h-14 text-md font-bold gap-3 shadow-md mt-auto"
+                onClick={handleExport}
+                disabled={exporting || !exportPathVal}
+              >
+                {exporting ? "Creating Zip..." : (
+                  <>
+                    Export All Data
+                    <ArrowRight className="h-5 w-5" />
+                  </>
+                )}
+              </Button>
             </div>
           </CardContent>
         </Card>
       </div>
 
+      {/* Row 4: Import History */}
       <Card>
         <CardHeader className="flex flex-col md:flex-row md:items-center justify-between space-y-4 md:space-y-0 pb-6">
           <div className="space-y-1">
@@ -351,13 +510,12 @@ export function ImportPage() {
                     </TableHead>
                     <TableHead className="text-[10px] font-bold uppercase text-right">Imported</TableHead>
                     <TableHead className="text-[10px] font-bold uppercase text-right">Skipped</TableHead>
-                    <TableHead className="w-[50px]"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filteredHistory.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={7} className="text-center py-6 text-xs text-muted-foreground">
+                      <TableCell colSpan={6} className="text-center py-6 text-xs text-muted-foreground">
                         No files match your filters.
                       </TableCell>
                     </TableRow>
@@ -382,21 +540,6 @@ export function ImportPage() {
                         <TableCell className="text-[10px] font-mono text-right text-amber-600 font-bold">
                           {item.notImportedTransactions}
                         </TableCell>
-                        <TableCell>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                            onClick={() => handleDeleteClick(item)}
-                            disabled={isDeleting || (isDeleteDialogOpen && deletingFile?.fileName !== item.fileName)}
-                          >
-                            {deletingFile?.fileName === item.fileName && isDeleting ? (
-                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                            ) : (
-                              <Trash2 className="h-3.5 w-3.5" />
-                            )}
-                          </Button>
-                        </TableCell>
                       </TableRow>
                     ))
                   )}
@@ -407,23 +550,7 @@ export function ImportPage() {
         </CardContent>
       </Card>
 
-      <Dialog open={isDeleteDialogOpen} onOpenChange={(open) => {
-        if (!open) handleCancelDelete();
-      }}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Remove Statement File</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to remove <span className="font-bold text-foreground">{deletingFile?.fileName}</span>? 
-              This action will trigger a full data reset and re-process all remaining files to maintain ledger integrity.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={handleCancelDelete}>Cancel</Button>
-            <Button variant="destructive" onClick={handleConfirmDelete}>Remove and Reprocess</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+
       <Dialog open={isLogsModalOpen} onOpenChange={setIsLogsModalOpen}>
         <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col">
           <DialogHeader>

@@ -2,7 +2,6 @@ import { test, expect } from "@playwright/test";
 import { execSync } from "child_process";
 import {
   importRawCSV,
-  deleteImportedRawCSV,
   searchForTransaction,
 } from "./test-utils";
 

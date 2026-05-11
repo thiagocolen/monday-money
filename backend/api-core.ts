@@ -494,13 +494,13 @@ export async function handleScanFolder(): Promise<{ success: boolean; error?: st
       throw new Error(`Folder not found: ${settings.rawCsvFolderPath}`);
     }
 
-    const { rawStatementFilesDir, dataDir, coreDir } = getPaths();
+    const { rawStatementFilesDir, coreDir } = getPaths();
 
     // Ensure structure exists first
     ensureCoreStructure(coreDir);
 
-    // RESET: Clear contents instead of deleting root folders to avoid EPERM on Windows
-    await safeEmptyDirAsync(dataDir);
+    // RESET: Clear previous generated ledger files and all raw statement files
+    clearLedger();
     await safeEmptyDirAsync(rawStatementFilesDir);
 
     const ownerDirs = fs.readdirSync(settings.rawCsvFolderPath).filter(f => fs.statSync(path.join(settings.rawCsvFolderPath!, f)).isDirectory());
