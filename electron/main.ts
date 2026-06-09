@@ -1,6 +1,9 @@
 import { app, BrowserWindow, ipcMain, dialog } from 'electron';
 import path from 'path';
 import { fileURLToPath } from "url";
+
+// Disable sandbox to prevent startup crashes (0x80000003) on some Windows environments
+app.commandLine.appendSwitch('no-sandbox');
 import { 
   handleGetCsvData,
   handleGetOwners,
