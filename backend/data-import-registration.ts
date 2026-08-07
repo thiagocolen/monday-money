@@ -12,7 +12,7 @@ export interface FileParser {
 
 function normalizeAmount(val: string): string {
   if (!val) return '0';
-  const trimmed = val.trim();
+  const trimmed = val.trim().replace(/\s+/g, '');
   // If it contains a comma, we assume Brazilian/European format (e.g., 1.234,56 or 123,45)
   // or a format where comma is the decimal separator.
   if (trimmed.includes(',')) {
