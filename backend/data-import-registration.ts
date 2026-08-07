@@ -12,7 +12,7 @@ export interface FileParser {
 
 function normalizeAmount(val: string): string {
   if (!val) return '0';
-  const trimmed = val.trim();
+  const trimmed = val.trim().replace(/\s+/g, '');
   // If it contains a comma, we assume Brazilian/European format (e.g., 1.234,56 or 123,45)
   // or a format where comma is the decimal separator.
   if (trimmed.includes(',')) {
@@ -35,6 +35,20 @@ export const PARSERS: FileParser[] = [
         const dateParts = item.RELEASE_DATE.split('-');
         const formattedDate = `${dateParts[2]}-${dateParts[1]}-${dateParts[0]}`;
         return { date: formattedDate, description: item.TRANSACTION_TYPE, amount: normalizeAmount(item.TRANSACTION_NET_AMOUNT), owner };
+      });
+      return { destFile: 'monthly-transactions.csv', rows };
+    }
+  },
+  {
+    name: 'MercadoPagoSettlementV2',
+    match: (f) => f.toLowerCase().startsWith('settlement_v2-'),
+    parse: (_f, content, owner) => {
+      const cleanContent = content.replace(/^﻿/, '').trim();
+      const parsed = Papa.parse<any>(cleanContent, { header: true, delimiter: ';', skipEmptyLines: true }).data;
+      const rows = parsed.filter(item => item.TRANSACTION_DATE && item.REAL_AMOUNT).map(item => {
+        const formattedDate = item.TRANSACTION_DATE.slice(0, 10);
+        const description = item.PAYMENT_METHOD_TYPE || item.TRANSACTION_TYPE;
+        return { date: formattedDate, description, amount: normalizeAmount(item.REAL_AMOUNT), owner };
       });
       return { destFile: 'monthly-transactions.csv', rows };
     }
