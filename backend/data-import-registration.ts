@@ -40,6 +40,20 @@ export const PARSERS: FileParser[] = [
     }
   },
   {
+    name: 'MercadoPagoSettlementV2',
+    match: (f) => f.toLowerCase().startsWith('settlement_v2-'),
+    parse: (_f, content, owner) => {
+      const cleanContent = content.replace(/^﻿/, '').trim();
+      const parsed = Papa.parse<any>(cleanContent, { header: true, delimiter: ';', skipEmptyLines: true }).data;
+      const rows = parsed.filter(item => item.TRANSACTION_DATE && item.REAL_AMOUNT).map(item => {
+        const formattedDate = item.TRANSACTION_DATE.slice(0, 10);
+        const description = item.PAYMENT_METHOD_TYPE || item.TRANSACTION_TYPE;
+        return { date: formattedDate, description, amount: normalizeAmount(item.REAL_AMOUNT), owner };
+      });
+      return { destFile: 'monthly-transactions.csv', rows };
+    }
+  },
+  {
     name: 'NubankAccount',
     match: (f) => f.startsWith('NU_'),
     parse: (_f, content, owner) => {
