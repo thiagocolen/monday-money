@@ -37,7 +37,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
   const navItems = [
     { name: "Transaction Account", path: "/" },
-    { name: "Investiments Account", path: "/investments" },
+    { name: "Investments Account", path: "/investments" },
     { name: "Import Export", path: "/import" },
   ];
 
@@ -53,8 +53,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="container mx-auto flex h-14 items-center justify-between px-4">
           <div className="flex items-center gap-6 md:gap-10">
-            <Link to="/" className="flex items-center space-x-2">
+            <Link to="/" className="flex items-baseline space-x-1.5">
               <span className="inline-block font-bold text-xl">Monday Money</span>
+              <span className="text-[10px] font-medium text-muted-foreground tabular-nums">
+                v{__APP_VERSION__}
+              </span>
             </Link>
             <nav className="flex gap-6">
               {navItems.map((item) => (

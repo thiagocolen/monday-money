@@ -28,6 +28,14 @@ import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { ChevronDown, ChevronUp, ChevronsUpDown, X } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { DateRangeFilter } from "@/components/date-range-filter"
+import type { DateRangeFilterValue } from "@/components/date-range-filter"
+import { MultiSelectFilter } from "@/components/multi-select-filter"
+
+type ColumnFilterVariant = "dateRange" | "multiSelect"
+
+const filterVariantOf = (columnDef: { meta?: unknown }) =>
+  (columnDef.meta as { filterVariant?: ColumnFilterVariant } | undefined)?.filterVariant
 
 interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[]
@@ -44,6 +52,8 @@ interface DataTableProps<TData, TValue> {
   headerOffset?: number
   meta?: any
   loading?: boolean
+  /** Fires with the row data currently passing all column filters (post-filter, pre-pagination). */
+  onFilteredRowsChange?: (rows: TData[]) => void
 }
 
 export function DataTable<TData, TValue>({
@@ -61,6 +71,7 @@ export function DataTable<TData, TValue>({
   headerOffset = 0,
   meta,
   loading = false,
+  onFilteredRowsChange,
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = React.useState<SortingState>([])
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
@@ -105,12 +116,18 @@ export function DataTable<TData, TValue>({
   }, [rowSelection, table, onSelectionChange])
 
   const hasFilters = columnFilters.length > 0
+  const hasFooter = table.getAllLeafColumns().some((c) => c.columnDef.footer != null)
+
+  const filteredRows = table.getFilteredRowModel().rows
+  React.useEffect(() => {
+    onFilteredRowsChange?.(filteredRows.map((row) => row.original))
+  }, [filteredRows, onFilteredRowsChange])
 
   return (
     <div className="space-y-4">
       {filterable && (
         <div className="flex items-center justify-between">
-          <div className="text-sm text-muted-foreground font-mono">
+          <div className="text-xs text-muted-foreground font-mono">
             Showing {table.getFilteredRowModel().rows.length} of {data.length} records
           </div>
           {hasFilters && (
@@ -156,15 +173,46 @@ export function DataTable<TData, TValue>({
                           }[header.column.getIsSorted() as string] ?? 
                             (header.column.getCanSort() ? <ChevronsUpDown className="h-3 w-3 opacity-50" /> : null)}
                         </div>
+                        {hasFooter ? (
+                          <div className="flex min-h-7 items-center text-xs font-mono font-bold tabular-nums normal-case tracking-normal text-foreground">
+                            {header.isPlaceholder
+                              ? null
+                              : flexRender(
+                                  header.column.columnDef.footer,
+                                  header.getContext()
+                                )}
+                          </div>
+                        ) : null}
                         {filterable && header.column.getCanFilter() ? (
-                          <Input
-                            placeholder="Filter..."
-                            value={(header.column.getFilterValue() as string) ?? ""}
-                            onChange={(event) =>
-                              header.column.setFilterValue(event.target.value)
-                            }
-                            className="h-7 text-xs px-2 font-normal"
-                          />
+                          filterVariantOf(header.column.columnDef) === "dateRange" ? (
+                            <DateRangeFilter
+                              column={header.column}
+                              filterValue={
+                                columnFilters.find((f) => f.id === header.column.id)?.value as
+                                  | DateRangeFilterValue
+                                  | undefined
+                              }
+                            />
+                          ) : filterVariantOf(header.column.columnDef) === "multiSelect" ? (
+                            <MultiSelectFilter
+                              column={header.column}
+                              table={table}
+                              filterValue={
+                                columnFilters.find((f) => f.id === header.column.id)?.value as
+                                  | string[]
+                                  | undefined
+                              }
+                            />
+                          ) : (
+                            <Input
+                              placeholder="Filter..."
+                              value={(header.column.getFilterValue() as string) ?? ""}
+                              onChange={(event) =>
+                                header.column.setFilterValue(event.target.value)
+                              }
+                              className="h-7 text-xs px-2 font-normal"
+                            />
+                          )
                         ) : null}
                       </div>
                     </TableHead>

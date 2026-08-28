@@ -14,8 +14,26 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { RotateCcw, Trash2 } from 'lucide-react'
-import type { ColumnDef } from '@tanstack/react-table'
+import type { ColumnDef, FilterFn } from '@tanstack/react-table'
 import { toast } from 'sonner'
+import { parseFlexibleDate } from '@/lib/date'
+import type { DateRangeFilterValue } from '@/components/date-range-filter'
+import { FiatFlowChart } from '@/components/fiat-flow-chart'
+
+const dateRangeFilter: FilterFn<BinanceFiatDepositWithdraw> = (row, columnId, value: DateRangeFilterValue) => {
+  if (!value || (value.from == null && value.to == null)) return true
+  const date = parseFlexibleDate(row.getValue(columnId))
+  if (!date) return false
+  const t = date.getTime()
+  if (value.from != null && t < value.from) return false
+  if (value.to != null && t > value.to) return false
+  return true
+}
+
+const multiSelectFilter: FilterFn<BinanceFiatDepositWithdraw> = (row, columnId, value: string[]) => {
+  if (!value || value.length === 0) return true
+  return value.includes(String(row.getValue(columnId) ?? ''))
+}
 
 export function InvestmentsPage() {
   const [historyData, setHistoryData] = useState<BinanceTransaction[]>([])
@@ -72,7 +90,15 @@ export function InvestmentsPage() {
   const filteredCrypto = useMemo(() => filterData(cryptoData), [cryptoData, filterData]);
   const filteredFiat = useMemo(() => filterData(fiatData), [fiatData, filterData]);
 
-  const historyColumns: ColumnDef<BinanceTransaction>[] = [
+  // Rows currently visible in the Fiat Flow table (after its column filters); drives the chart.
+  const [fiatChartRows, setFiatChartRows] = useState<BinanceFiatDepositWithdraw[]>([]);
+  const [fiatSynced, setFiatSynced] = useState(false);
+  const handleFiatFilteredRows = useCallback((rows: BinanceFiatDepositWithdraw[]) => {
+    setFiatChartRows(rows);
+    setFiatSynced(true);
+  }, []);
+
+  const historyColumns = useMemo<ColumnDef<BinanceTransaction>[]>(() => [
     { accessorKey: 'User ID', header: 'User ID' },
     { accessorKey: 'Time', header: 'Time' },
     { accessorKey: 'Account', header: 'Account' },
@@ -90,9 +116,9 @@ export function InvestmentsPage() {
     },
     { accessorKey: 'Remark', header: 'Remark' },
     { accessorKey: 'owner', header: 'Owner' },
-  ]
+  ], [])
 
-  const cryptoColumns: ColumnDef<BinanceDepositWithdraw>[] = [
+  const cryptoColumns = useMemo<ColumnDef<BinanceDepositWithdraw>[]>(() => [
     { accessorKey: 'Time', header: 'Time' },
     { accessorKey: 'Coin', header: 'Coin' },
     { accessorKey: 'Network', header: 'Network' },
@@ -115,26 +141,44 @@ export function InvestmentsPage() {
     { accessorKey: 'Status', header: 'Status' },
     { accessorKey: 'Type', header: 'Type' },
     { accessorKey: 'owner', header: 'Owner' },
-  ]
+  ], [])
 
-  const fiatColumns: ColumnDef<BinanceFiatDepositWithdraw>[] = [
-    { accessorKey: 'Time', header: 'Time' },
+  const fiatColumns = useMemo<ColumnDef<BinanceFiatDepositWithdraw>[]>(() => [
+    {
+      accessorKey: 'Time',
+      header: 'Time',
+      filterFn: dateRangeFilter,
+      meta: { filterVariant: 'dateRange' },
+    },
     { accessorKey: 'Method', header: 'Method' },
-    { 
-      accessorKey: 'Amount', 
+    {
+      accessorKey: 'Amount',
       header: 'Amount',
+      footer: ({ table }) => {
+        const total = table.getFilteredRowModel().rows.reduce((sum, row) => {
+          const val = parseFloat(row.getValue('Amount'))
+          return sum + (isNaN(val) ? 0 : val)
+        }, 0)
+        return total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+      },
       cell: ({ row }) => {
         const val = parseFloat(row.getValue('Amount'))
         return <span className="font-mono font-bold">{val.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
       }
     },
-    { accessorKey: 'Receive Amount', header: 'Receive' },
-    { accessorKey: 'Fee', header: 'Fee' },
-    { accessorKey: 'Status', header: 'Status' },
-    { accessorKey: 'Transaction ID', header: 'ID' },
-    { accessorKey: 'Type', header: 'Type' },
-    { accessorKey: 'owner', header: 'Owner' },
-  ]
+    {
+      accessorKey: 'Status',
+      header: 'Status',
+      filterFn: multiSelectFilter,
+      meta: { filterVariant: 'multiSelect' },
+    },
+    {
+      accessorKey: 'Type',
+      header: 'Type',
+      filterFn: multiSelectFilter,
+      meta: { filterVariant: 'multiSelect' },
+    },
+  ], [])
 
   if (loading) {
     return (
@@ -193,7 +237,22 @@ export function InvestmentsPage() {
         </TabsContent>
         
         <TabsContent value="fiat" className="border-none p-0 outline-none">
-          <DataTable columns={fiatColumns} data={filteredFiat} filterable paginated={false} loading={loading} />
+          <div className="space-y-4">
+            <div className="rounded-md border p-4">
+              <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+                Accumulated amount over time
+              </p>
+              <FiatFlowChart data={fiatSynced ? fiatChartRows : filteredFiat} />
+            </div>
+            <DataTable
+              columns={fiatColumns}
+              data={filteredFiat}
+              filterable
+              paginated={false}
+              loading={loading}
+              onFilteredRowsChange={handleFiatFilteredRows}
+            />
+          </div>
         </TabsContent>
       </Tabs>
     </div>
