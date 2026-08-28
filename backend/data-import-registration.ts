@@ -308,6 +308,34 @@ export function dataImportRegistration() {
     return set;
   };
 
+  // Stable per-transaction identity column for a dest file. Used to dedupe when
+  // volatile display fields change between overlapping exports (e.g. Binance
+  // relabelling the fiat "Method" from "Bank Transfer (PIX)" to
+  // "Transferência Bancária ( Pix )"), which would otherwise defeat the row-hash.
+  const identityColumnFor = (destFile: string): string | null =>
+    destFile === 'binance-fiat-deposit-withdraw-history.csv' ? 'Transaction ID' : null;
+
+  const existingIdsCache = new Map<string, Set<string>>();
+
+  const getExistingIds = (destFile: string): Set<string> => {
+    const col = identityColumnFor(destFile);
+    if (!col) return new Set<string>();
+    if (existingIdsCache.has(destFile)) return existingIdsCache.get(destFile)!;
+    const set = new Set<string>();
+    const destPath = path.join(dataDir, destFile);
+    if (fs.existsSync(destPath)) {
+      const content = fs.readFileSync(destPath, 'utf8');
+      const data = Papa.parse<any>(content, { header: true, skipEmptyLines: true }).data;
+      for (const row of data) {
+        const id = row[col];
+        // ignore the internal chain/seed bookkeeping rows
+        if (id && row.Type !== 'chain' && row.owner !== 'seed') set.add(String(id).trim());
+      }
+    }
+    existingIdsCache.set(destFile, set);
+    return set;
+  };
+
   for (const ownerName of ownerDirs) {
     const ownerDirPath = path.join(sourceBaseDir, ownerName);
     const files = fs.readdirSync(ownerDirPath).filter(f => f.endsWith('.csv')).sort();
@@ -339,13 +367,21 @@ export function dataImportRegistration() {
       rows.sort((a, b) => a[timeCol].localeCompare(b[timeCol]));
 
       const existingHashes = getExistingHashes(destFile);
+      const existingIds = getExistingIds(destFile);
+      const idCol = identityColumnFor(destFile);
       const linesToAppend: string[] = [];
 
       for (const row of rows) {
         const propsForHash = Object.values(row).map(v => String(v));
         const rowHash = getSha256(propsForHash.join(','));
-        
+
         if (existingHashes.has(rowHash)) continue;
+
+        if (idCol) {
+          const id = String(row[idCol] ?? '').trim();
+          if (id && existingIds.has(id)) continue;
+          if (id) existingIds.add(id);
+        }
 
         const rowValues = propsForHash.map(strVal => (strVal.includes(',') || strVal.includes('"')) ? `"${strVal.replace(/"/g, '""')}"` : strVal);
         linesToAppend.push(rowValues.join(',') + ',' + rowHash);
