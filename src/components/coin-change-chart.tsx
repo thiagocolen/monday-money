@@ -181,8 +181,7 @@ export function CoinChangeChart({ data }: CoinChangeChartProps) {
             tickFormatter={(value) => format(new Date(value), "dd MMM ''yy")}
           />
           <YAxis
-            domain={[-1, 1]}
-            ticks={[-1, -0.5, 0, 0.5, 1]}
+            domain={["auto", "auto"]}
             tickLine={false}
             axisLine={false}
             tickMargin={8}
@@ -222,8 +221,8 @@ export function CoinChangeChart({ data }: CoinChangeChartProps) {
         ))}
       </div>
       <p className="text-[10px] text-muted-foreground">
-        Each coin is scaled to its own peak balance (−100%…100%, shared zero line).
-        Hover for actual cumulative amounts.
+        Each coin is scaled to its own peak balance (100% = that coin's largest holding,
+        0% = none, shared zero line). Hover for actual cumulative amounts.
       </p>
     </div>
   )
