@@ -14,13 +14,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { RotateCcw, Trash2 } from 'lucide-react'
-import type { ColumnDef, FilterFn } from '@tanstack/react-table'
+import type { ColumnDef, Row } from '@tanstack/react-table'
 import { toast } from 'sonner'
 import { parseFlexibleDate } from '@/lib/date'
 import type { DateRangeFilterValue } from '@/components/date-range-filter'
 import { FiatFlowChart } from '@/components/fiat-flow-chart'
 
-const dateRangeFilter: FilterFn<BinanceFiatDepositWithdraw> = (row, columnId, value: DateRangeFilterValue) => {
+/** Inclusive epoch-ms range filter over a flexibly-formatted timestamp column. */
+function dateRangeFilterFn<T>(row: Row<T>, columnId: string, value: DateRangeFilterValue | undefined): boolean {
   if (!value || (value.from == null && value.to == null)) return true
   const date = parseFlexibleDate(row.getValue(columnId))
   if (!date) return false
@@ -30,7 +31,8 @@ const dateRangeFilter: FilterFn<BinanceFiatDepositWithdraw> = (row, columnId, va
   return true
 }
 
-const multiSelectFilter: FilterFn<BinanceFiatDepositWithdraw> = (row, columnId, value: string[]) => {
+/** Keeps rows whose cell value is one of the selected values (empty selection = show all). */
+function multiSelectFilterFn<T>(row: Row<T>, columnId: string, value: string[] | undefined): boolean {
   if (!value || value.length === 0) return true
   return value.includes(String(row.getValue(columnId) ?? ''))
 }
@@ -100,13 +102,45 @@ export function InvestmentsPage() {
 
   const historyColumns = useMemo<ColumnDef<BinanceTransaction>[]>(() => [
     { accessorKey: 'User ID', header: 'User ID' },
-    { accessorKey: 'Time', header: 'Time' },
-    { accessorKey: 'Account', header: 'Account' },
-    { accessorKey: 'Operation', header: 'Operation' },
-    { accessorKey: 'Coin', header: 'Coin' },
-    { 
-      accessorKey: 'Change', 
+    {
+      accessorKey: 'Time',
+      header: 'Time',
+      filterFn: dateRangeFilterFn,
+      meta: { filterVariant: 'dateRange' },
+    },
+    {
+      accessorKey: 'Account',
+      header: 'Account',
+      filterFn: multiSelectFilterFn,
+      meta: { filterVariant: 'multiSelect' },
+    },
+    {
+      accessorKey: 'Operation',
+      header: 'Operation',
+      filterFn: multiSelectFilterFn,
+      meta: { filterVariant: 'multiSelect' },
+    },
+    {
+      accessorKey: 'Coin',
+      header: 'Coin',
+      filterFn: multiSelectFilterFn,
+      meta: { filterVariant: 'multiSelect' },
+    },
+    {
+      accessorKey: 'Change',
       header: 'Change',
+      footer: ({ table }) => {
+        const total = table.getFilteredRowModel().rows.reduce((sum, row) => {
+          const val = parseFloat(row.getValue('Change'))
+          return sum + (isNaN(val) ? 0 : val)
+        }, 0)
+        const rounded = Number(total.toFixed(8))
+        return (
+          <span className={rounded < 0 ? 'text-destructive' : 'text-emerald-600'}>
+            {rounded > 0 ? `+${rounded}` : rounded}
+          </span>
+        )
+      },
       cell: ({ row }) => {
         const value = parseFloat(row.getValue('Change'))
         return <span className={`font-mono font-medium ${value < 0 ? "text-destructive" : "text-emerald-600"}`}>
@@ -114,8 +148,12 @@ export function InvestmentsPage() {
         </span>
       }
     },
-    { accessorKey: 'Remark', header: 'Remark' },
-    { accessorKey: 'owner', header: 'Owner' },
+    {
+      accessorKey: 'owner',
+      header: 'Owner',
+      filterFn: multiSelectFilterFn,
+      meta: { filterVariant: 'multiSelect' },
+    },
   ], [])
 
   const cryptoColumns = useMemo<ColumnDef<BinanceDepositWithdraw>[]>(() => [
@@ -147,7 +185,7 @@ export function InvestmentsPage() {
     {
       accessorKey: 'Time',
       header: 'Time',
-      filterFn: dateRangeFilter,
+      filterFn: dateRangeFilterFn,
       meta: { filterVariant: 'dateRange' },
     },
     { accessorKey: 'Method', header: 'Method' },
@@ -169,13 +207,13 @@ export function InvestmentsPage() {
     {
       accessorKey: 'Status',
       header: 'Status',
-      filterFn: multiSelectFilter,
+      filterFn: multiSelectFilterFn,
       meta: { filterVariant: 'multiSelect' },
     },
     {
       accessorKey: 'Type',
       header: 'Type',
-      filterFn: multiSelectFilter,
+      filterFn: multiSelectFilterFn,
       meta: { filterVariant: 'multiSelect' },
     },
   ], [])
