@@ -267,7 +267,7 @@ export function InvestmentsPage() {
         </TabsList>
         
         <TabsContent value="history" className="border-none p-0 outline-none">
-          <DataTable columns={historyColumns} data={filteredHistory} filterable paginated pageSize={20} loading={loading} />
+          <DataTable columns={historyColumns} data={filteredHistory} filterable paginated={false} loading={loading} />
         </TabsContent>
         
         <TabsContent value="crypto" className="border-none p-0 outline-none">
