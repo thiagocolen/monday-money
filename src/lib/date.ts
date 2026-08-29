@@ -29,3 +29,18 @@ export function parseFlexibleDate(value: unknown): Date | null {
   )
   return isNaN(date.getTime()) ? null : date
 }
+
+const pad2 = (n: number) => String(n).padStart(2, '0')
+
+/**
+ * Render any of the loose Binance timestamp variants in one canonical
+ * `YYYY-MM-DD HH:MM:SS` form. Falls back to the trimmed input if unparseable.
+ */
+export function formatTimestamp(value: unknown): string {
+  const d = parseFlexibleDate(value)
+  if (!d) return String(value ?? '').trim()
+  return (
+    `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ` +
+    `${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`
+  )
+}

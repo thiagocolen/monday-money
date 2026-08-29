@@ -16,9 +16,10 @@ import { Input } from '@/components/ui/input'
 import { RotateCcw, Trash2 } from 'lucide-react'
 import type { ColumnDef, Row } from '@tanstack/react-table'
 import { toast } from 'sonner'
-import { parseFlexibleDate } from '@/lib/date'
+import { parseFlexibleDate, formatTimestamp } from '@/lib/date'
 import type { DateRangeFilterValue } from '@/components/date-range-filter'
 import { FiatFlowChart } from '@/components/fiat-flow-chart'
+import { CoinChangeChart } from '@/components/coin-change-chart'
 
 /** Inclusive epoch-ms range filter over a flexibly-formatted timestamp column. */
 function dateRangeFilterFn<T>(row: Row<T>, columnId: string, value: DateRangeFilterValue | undefined): boolean {
@@ -100,6 +101,14 @@ export function InvestmentsPage() {
     setFiatSynced(true);
   }, []);
 
+  // Rows currently visible in the Transaction History table (after its column filters); drives the chart.
+  const [historyChartRows, setHistoryChartRows] = useState<BinanceTransaction[]>([]);
+  const [historySynced, setHistorySynced] = useState(false);
+  const handleHistoryFilteredRows = useCallback((rows: BinanceTransaction[]) => {
+    setHistoryChartRows(rows);
+    setHistorySynced(true);
+  }, []);
+
   const historyColumns = useMemo<ColumnDef<BinanceTransaction>[]>(() => [
     { accessorKey: 'User ID', header: 'User ID' },
     {
@@ -107,6 +116,9 @@ export function InvestmentsPage() {
       header: 'Time',
       filterFn: dateRangeFilterFn,
       meta: { filterVariant: 'dateRange' },
+      cell: ({ row }) => (
+        <span className="font-mono whitespace-nowrap">{formatTimestamp(row.getValue('Time'))}</span>
+      ),
     },
     {
       accessorKey: 'Account',
@@ -267,7 +279,22 @@ export function InvestmentsPage() {
         </TabsList>
         
         <TabsContent value="history" className="border-none p-0 outline-none">
-          <DataTable columns={historyColumns} data={filteredHistory} filterable paginated={false} loading={loading} />
+          <div className="space-y-4">
+            <div className="rounded-md border p-4">
+              <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+                Cumulative change per coin over time
+              </p>
+              <CoinChangeChart data={historySynced ? historyChartRows : filteredHistory} />
+            </div>
+            <DataTable
+              columns={historyColumns}
+              data={filteredHistory}
+              filterable
+              paginated={false}
+              loading={loading}
+              onFilteredRowsChange={handleHistoryFilteredRows}
+            />
+          </div>
         </TabsContent>
         
         <TabsContent value="crypto" className="border-none p-0 outline-none">

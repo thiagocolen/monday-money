@@ -22,6 +22,23 @@ function normalizeAmount(val: string): string {
   return trimmed;
 }
 
+/**
+ * Binance exports the same timestamp in several shapes (`YY-MM-DD HH:MM:SS`,
+ * `YYYY-MM-DD HH:MM:SS`, date only, single-digit parts). Store one canonical
+ * `YYYY-MM-DD HH:MM:SS` form so the column has a single, sortable format.
+ */
+function normalizeTimestamp(val: string): string {
+  const raw = String(val ?? '').trim();
+  const m = raw.match(
+    /^(\d{2}|\d{4})-(\d{1,2})-(\d{1,2})(?:[ T](\d{1,2}):(\d{1,2})(?::(\d{1,2}))?)?/
+  );
+  if (!m) return raw;
+  const [, y, mo, d, hh = '0', mi = '0', ss = '0'] = m;
+  const year = y.length === 2 ? `20${y}` : y;
+  const p = (n: string) => n.padStart(2, '0');
+  return `${year}-${p(mo)}-${p(d)} ${p(hh)}:${p(mi)}:${p(ss)}`;
+}
+
 export const PARSERS: FileParser[] = [
   {
     name: 'MercadoPago',
@@ -128,9 +145,9 @@ export const PARSERS: FileParser[] = [
         const originalValue = getVal('change');
         const change = normalizeAmount(originalValue);
         return {
-          'User ID': getVal('user id'), 
-          Time: getVal('time'), 
-          Account: getVal('account'), 
+          'User ID': getVal('user id'),
+          Time: normalizeTimestamp(getVal('time')),
+          Account: getVal('account'),
           Operation: getVal('operation'), 
           Coin: getVal('coin'), 
           Change: change, 
