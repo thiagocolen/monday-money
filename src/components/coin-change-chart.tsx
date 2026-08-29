@@ -27,8 +27,6 @@ function coinColor(coin: string): string {
 
 interface CoinChangePoint {
   t: number
-  /** normalised cumulative per coin, in [-1, 1] (share of that coin's peak |balance|) */
-  n: Record<string, number>
   /** raw cumulative CHANGE per coin at this instant */
   raw: Record<string, number>
 }
@@ -62,7 +60,7 @@ function buildSeries(data: BinanceTransaction[]): {
   const running: Record<string, number> = Object.fromEntries(
     coins.map((c) => [c, 0]),
   )
-  const raws: { t: number; raw: Record<string, number> }[] = []
+  const points: CoinChangePoint[] = []
   let i = 0
   while (i < parsed.length) {
     const t = parsed[i].date.getTime()
@@ -70,25 +68,17 @@ function buildSeries(data: BinanceTransaction[]): {
       running[parsed[i].coin] += parsed[i].change
       i++
     }
-    raws.push({ t, raw: { ...running } })
+    points.push({ t, raw: { ...running } })
   }
 
-  const peak: Record<string, number> = Object.fromEntries(
-    coins.map((c) => [
-      c,
-      raws.reduce((m, p) => Math.max(m, Math.abs(p.raw[c])), 0),
-    ]),
-  )
-
-  const points: CoinChangePoint[] = raws.map((p) => ({
-    t: p.t,
-    raw: p.raw,
-    n: Object.fromEntries(
-      coins.map((c) => [c, peak[c] > 0 ? p.raw[c] / peak[c] : 0]),
-    ),
-  }))
-
   return { points, coins }
+}
+
+const compactNumber = (v: number) => {
+  const abs = Math.abs(v)
+  if (abs === 0) return "0"
+  if (abs < 1) return v.toPrecision(2)
+  return v.toLocaleString("en-US", { notation: "compact", maximumFractionDigits: 1 })
 }
 
 const fmtAmount = (v: number) => {
@@ -185,8 +175,8 @@ export function CoinChangeChart({ data }: CoinChangeChartProps) {
             tickLine={false}
             axisLine={false}
             tickMargin={8}
-            width={52}
-            tickFormatter={(value) => `${Math.round(Number(value) * 100)}%`}
+            width={64}
+            tickFormatter={(value) => compactNumber(Number(value))}
           />
           <ReferenceLine y={0} stroke="var(--border)" strokeWidth={1} />
           <Tooltip
@@ -196,7 +186,7 @@ export function CoinChangeChart({ data }: CoinChangeChartProps) {
           {coins.map((coin) => (
             <Line
               key={coin}
-              dataKey={(p: CoinChangePoint) => p.n[coin]}
+              dataKey={(p: CoinChangePoint) => p.raw[coin]}
               name={coin}
               type="monotone"
               stroke={coinColor(coin)}
@@ -221,8 +211,8 @@ export function CoinChangeChart({ data }: CoinChangeChartProps) {
         ))}
       </div>
       <p className="text-[10px] text-muted-foreground">
-        Each coin is scaled to its own peak balance (100% = that coin's largest holding,
-        0% = none, shared zero line). Hover for actual cumulative amounts.
+        Running total of CHANGE per coin, in each coin's own units, on one shared scale.
+        Filter the Coin column to compare coins of similar magnitude.
       </p>
     </div>
   )
