@@ -20,6 +20,7 @@ import { parseFlexibleDate, formatTimestamp } from '@/lib/date'
 import type { DateRangeFilterValue } from '@/components/date-range-filter'
 import { FiatFlowChart } from '@/components/fiat-flow-chart'
 import { CoinChangeChart } from '@/components/coin-change-chart'
+import { canonicalCoin } from '@/lib/coins'
 
 /** Inclusive epoch-ms range filter over a flexibly-formatted timestamp column. */
 function dateRangeFilterFn<T>(row: Row<T>, columnId: string, value: DateRangeFilterValue | undefined): boolean {
@@ -62,7 +63,11 @@ export function InvestmentsPage() {
         return values.some(v => internalMarkers.includes(v));
       }
 
-      setHistoryData(history.filter(d => !isInternal(d)))
+      setHistoryData(
+        history
+          .filter(d => !isInternal(d))
+          .map(d => ({ ...d, Coin: canonicalCoin(d.Coin) })),
+      )
       setCryptoData(crypto.filter(d => !isInternal(d)))
       setFiatData(fiat.filter(d => !isInternal(d)))
     } catch (error) {

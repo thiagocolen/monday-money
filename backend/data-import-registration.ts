@@ -39,6 +39,21 @@ function normalizeTimestamp(val: string): string {
   return `${year}-${p(mo)}-${p(d)} ${p(hh)}:${p(mi)}:${p(ss)}`;
 }
 
+/**
+ * Tickers Binance rebranded 1:1 — old symbol -> current symbol. Rows are stored
+ * under the current name so both exports fold into one coin.
+ */
+const COIN_RENAMES: Record<string, string> = {
+  MKR: 'SKY',
+  RNDR: 'RENDER',
+  MATIC: 'POL',
+};
+
+function canonicalCoin(val: string): string {
+  const c = String(val ?? '').trim();
+  return COIN_RENAMES[c.toUpperCase()] ?? c;
+}
+
 export const PARSERS: FileParser[] = [
   {
     name: 'MercadoPago',
@@ -148,8 +163,8 @@ export const PARSERS: FileParser[] = [
           'User ID': getVal('user id'),
           Time: normalizeTimestamp(getVal('time')),
           Account: getVal('account'),
-          Operation: getVal('operation'), 
-          Coin: getVal('coin'), 
+          Operation: getVal('operation'),
+          Coin: canonicalCoin(getVal('coin')),
           Change: change, 
           Remark: getVal('remark'), 
           owner
