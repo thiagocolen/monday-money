@@ -72,6 +72,13 @@ function buildSeries(data: BinanceTransaction[]): {
     points.push({ t, raw: { ...running } })
   }
 
+  // Extend every line to "today" so it ends on each coin's current balance
+  // (the all-time running total carried forward from the last transaction).
+  const now = Date.now()
+  if (points[points.length - 1].t < now) {
+    points.push({ t: now, raw: { ...running } })
+  }
+
   return { points, coins }
 }
 
