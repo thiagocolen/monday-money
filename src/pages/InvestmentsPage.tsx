@@ -68,7 +68,11 @@ export function InvestmentsPage() {
           .filter(d => !isInternal(d))
           .map(d => ({ ...d, Coin: canonicalCoin(d.Coin) })),
       )
-      setCryptoData(crypto.filter(d => !isInternal(d)))
+      setCryptoData(
+        crypto
+          .filter(d => !isInternal(d))
+          .map(d => ({ ...d, Coin: canonicalCoin(d.Coin) })),
+      )
       setFiatData(fiat.filter(d => !isInternal(d)))
     } catch (error) {
       toast.error("Failed to load investment data")

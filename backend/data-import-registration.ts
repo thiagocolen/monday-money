@@ -200,9 +200,9 @@ export const PARSERS: FileParser[] = [
         const amount = normalizeAmount(originalValue);
 
         return {
-          Time: getVal('time'), 
-          Coin: getVal('coin'), 
-          Network: getVal('network'), 
+          Time: getVal('time'),
+          Coin: canonicalCoin(getVal('coin')),
+          Network: getVal('network'),
           Amount: amount, 
           Fee: normalizeAmount(getVal('fee') || '0'), 
           Address: getVal('address'), 
