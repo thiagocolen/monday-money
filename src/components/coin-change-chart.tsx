@@ -16,6 +16,7 @@ import { ChartContainer } from "@/components/ui/chart"
 import type { ChartConfig } from "@/components/ui/chart"
 import type { BinanceTransaction } from "@/lib/api"
 import { parseFlexibleDate } from "@/lib/date"
+import { coinLabel, renamedCoinNote } from "@/lib/coins"
 
 /** Stable hue per coin symbol — a coin keeps its colour regardless of how many
  * other coins are on screen (filtering never repaints the survivors). */
@@ -118,7 +119,7 @@ function CoinTooltip({
                   className="inline-block h-2 w-2 shrink-0 rounded-[2px]"
                   style={{ backgroundColor: coinColor(coin) }}
                 />
-                {coin}
+                {coinLabel(coin)}
               </span>
               <span
                 className={`text-right font-mono tabular-nums ${
@@ -206,7 +207,7 @@ export function CoinChangeChart({ data }: CoinChangeChartProps) {
               className="inline-block h-2 w-2 shrink-0 rounded-[2px]"
               style={{ backgroundColor: coinColor(coin) }}
             />
-            {coin}
+            {coinLabel(coin)}
           </span>
         ))}
       </div>
@@ -214,6 +215,9 @@ export function CoinChangeChart({ data }: CoinChangeChartProps) {
         Running total of CHANGE per coin, in each coin's own units, on one shared scale.
         Filter the Coin column to compare coins of similar magnitude.
       </p>
+      {renamedCoinNote(coins) && (
+        <p className="text-[10px] text-muted-foreground">{renamedCoinNote(coins)}</p>
+      )}
     </div>
   )
 }

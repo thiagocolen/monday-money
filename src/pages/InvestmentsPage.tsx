@@ -20,7 +20,7 @@ import { parseFlexibleDate, formatTimestamp } from '@/lib/date'
 import type { DateRangeFilterValue } from '@/components/date-range-filter'
 import { FiatFlowChart } from '@/components/fiat-flow-chart'
 import { CoinChangeChart } from '@/components/coin-change-chart'
-import { canonicalCoin } from '@/lib/coins'
+import { canonicalCoin, coinLabel, renamedCoinNote } from '@/lib/coins'
 
 /** Inclusive epoch-ms range filter over a flexibly-formatted timestamp column. */
 function dateRangeFilterFn<T>(row: Row<T>, columnId: string, value: DateRangeFilterValue | undefined): boolean {
@@ -102,6 +102,15 @@ export function InvestmentsPage() {
   const filteredCrypto = useMemo(() => filterData(cryptoData), [cryptoData, filterData]);
   const filteredFiat = useMemo(() => filterData(fiatData), [fiatData, filterData]);
 
+  const historyCoinNote = useMemo(
+    () => renamedCoinNote(historyData.map(d => d.Coin)),
+    [historyData],
+  );
+  const cryptoCoinNote = useMemo(
+    () => renamedCoinNote(cryptoData.map(d => d.Coin)),
+    [cryptoData],
+  );
+
   // Rows currently visible in the Fiat Flow table (after its column filters); drives the chart.
   const [fiatChartRows, setFiatChartRows] = useState<BinanceFiatDepositWithdraw[]>([]);
   const [fiatSynced, setFiatSynced] = useState(false);
@@ -146,6 +155,7 @@ export function InvestmentsPage() {
       header: 'Coin',
       filterFn: multiSelectFilterFn,
       meta: { filterVariant: 'multiSelect' },
+      cell: ({ row }) => coinLabel(row.getValue('Coin')),
     },
     {
       accessorKey: 'Change',
@@ -179,7 +189,7 @@ export function InvestmentsPage() {
 
   const cryptoColumns = useMemo<ColumnDef<BinanceDepositWithdraw>[]>(() => [
     { accessorKey: 'Time', header: 'Time' },
-    { accessorKey: 'Coin', header: 'Coin' },
+    { accessorKey: 'Coin', header: 'Coin', cell: ({ row }) => coinLabel(row.getValue('Coin')) },
     { accessorKey: 'Network', header: 'Network' },
     { 
       accessorKey: 'Amount', 
@@ -303,11 +313,19 @@ export function InvestmentsPage() {
               loading={loading}
               onFilteredRowsChange={handleHistoryFilteredRows}
             />
+            {historyCoinNote && (
+              <p className="text-[10px] text-muted-foreground">{historyCoinNote}</p>
+            )}
           </div>
         </TabsContent>
         
         <TabsContent value="crypto" className="border-none p-0 outline-none">
-          <DataTable columns={cryptoColumns} data={filteredCrypto} filterable paginated={false} loading={loading} />
+          <div className="space-y-4">
+            <DataTable columns={cryptoColumns} data={filteredCrypto} filterable paginated={false} loading={loading} />
+            {cryptoCoinNote && (
+              <p className="text-[10px] text-muted-foreground">{cryptoCoinNote}</p>
+            )}
+          </div>
         </TabsContent>
         
         <TabsContent value="fiat" className="border-none p-0 outline-none">
