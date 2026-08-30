@@ -16,15 +16,7 @@ import { ChartContainer } from "@/components/ui/chart"
 import type { ChartConfig } from "@/components/ui/chart"
 import type { BinanceTransaction } from "@/lib/api"
 import { parseFlexibleDate } from "@/lib/date"
-import { coinLabel, renamedCoinNote } from "@/lib/coins"
-
-/** Stable hue per coin symbol — a coin keeps its colour regardless of how many
- * other coins are on screen (filtering never repaints the survivors). */
-function coinColor(coin: string): string {
-  let h = 0
-  for (let i = 0; i < coin.length; i++) h = (h * 31 + coin.charCodeAt(i)) >>> 0
-  return `hsl(${Math.round((h * 137.508) % 360)} 70% 45%)`
-}
+import { coinColor, coinLabel, renamedCoinNote } from "@/lib/coins"
 
 interface CoinChangePoint {
   t: number

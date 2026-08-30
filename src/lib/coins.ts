@@ -14,6 +14,16 @@ for (const [oldName, current] of Object.entries(COIN_RENAMES)) {
   ;(FORMER_NAMES[current] ??= []).push(oldName)
 }
 
+/**
+ * Stable hue per coin symbol — a coin keeps its colour regardless of which
+ * other coins share the chart (filtering never repaints the survivors).
+ */
+export function coinColor(coin: string): string {
+  let h = 0
+  for (let i = 0; i < coin.length; i++) h = (h * 31 + coin.charCodeAt(i)) >>> 0
+  return `hsl(${Math.round((h * 137.508) % 360)} 70% 45%)`
+}
+
 /** Fold a rebranded ticker onto its current symbol. */
 export function canonicalCoin(value: unknown): string {
   const c = String(value ?? '').trim()
