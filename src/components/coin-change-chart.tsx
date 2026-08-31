@@ -77,7 +77,7 @@ function buildSeries(data: BinanceTransaction[]): {
 const compactNumber = (v: number) => {
   const abs = Math.abs(v)
   if (abs === 0) return "0"
-  if (abs < 1) return v.toPrecision(2)
+  if (abs < 1) return v.toLocaleString("en-US", { maximumSignificantDigits: 2 })
   return v.toLocaleString("en-US", { notation: "compact", maximumFractionDigits: 1 })
 }
 

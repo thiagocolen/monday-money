@@ -21,7 +21,7 @@ import type { DateRangeFilterValue } from '@/components/date-range-filter'
 import { FiatFlowChart } from '@/components/fiat-flow-chart'
 import { CoinChangeChart } from '@/components/coin-change-chart'
 import { PortfolioPieChart } from '@/components/portfolio-pie-chart'
-import { canonicalCoin, coinLabel, renamedCoinNote } from '@/lib/coins'
+import { canonicalCoin, coinLabel, formatCoinAmount, renamedCoinNote } from '@/lib/coins'
 
 /** Inclusive epoch-ms range filter over a flexibly-formatted timestamp column. */
 function dateRangeFilterFn<T>(row: Row<T>, columnId: string, value: DateRangeFilterValue | undefined): boolean {
@@ -169,14 +169,14 @@ export function InvestmentsPage() {
         const rounded = Number(total.toFixed(8))
         return (
           <span className={rounded < 0 ? 'text-destructive' : 'text-emerald-600'}>
-            {rounded > 0 ? `+${rounded}` : rounded}
+            {rounded > 0 ? `+${formatCoinAmount(rounded)}` : formatCoinAmount(rounded)}
           </span>
         )
       },
       cell: ({ row }) => {
         const value = parseFloat(row.getValue('Change'))
         return <span className={`font-mono font-medium ${value < 0 ? "text-destructive" : "text-emerald-600"}`}>
-          {value > 0 ? `+${value}` : value}
+          {value > 0 ? `+${formatCoinAmount(value)}` : formatCoinAmount(value)}
         </span>
       }
     },

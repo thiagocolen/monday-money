@@ -15,6 +15,16 @@ for (const [oldName, current] of Object.entries(COIN_RENAMES)) {
 }
 
 /**
+ * Human-readable token quantity. Uses fixed (never exponential) notation so
+ * dust-sized crypto amounts render as `0.00000041`, not `4.1e-7` — plain
+ * `String(n)` switches to exponent notation below 1e-6.
+ */
+export function formatCoinAmount(value: number): string {
+  if (!Number.isFinite(value) || value === 0) return '0'
+  return value.toLocaleString('en-US', { maximumSignificantDigits: 6 })
+}
+
+/**
  * Stable hue per coin symbol — a coin keeps its colour regardless of which
  * other coins share the chart (filtering never repaints the survivors).
  */
