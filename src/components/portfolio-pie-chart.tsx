@@ -26,10 +26,6 @@ interface Slice {
   color: string
 }
 
-const OTHER_COLOR = "hsl(215 12% 65%)"
-/** holdings below this share of the portfolio are folded into "Other" */
-const MIN_SHARE = 0.015
-
 const fmtUsd = (v: number, compact = false) =>
   v.toLocaleString("en-US", {
     style: "currency",
@@ -64,26 +60,16 @@ function buildSlices(
   const totalUsd = priced.reduce((sum, h) => sum + h.usd, 0)
   if (totalUsd <= 0) return { slices: [], totalUsd: 0, unpriced: unpriced.sort() }
 
-  const big = priced.filter((h) => h.usd / totalUsd >= MIN_SHARE)
-  const small = priced.filter((h) => h.usd / totalUsd < MIN_SHARE)
-
-  const slices: Slice[] = big.map((h) => ({
+  // Every priced holding gets its own slice — no "Other" folding. The table's
+  // Coin filter already decides which assets are in scope; whatever survives it
+  // (or all of them, when nothing is filtered) is shown in full.
+  const slices: Slice[] = priced.map((h) => ({
     coin: h.coin,
     usd: h.usd,
     qty: h.qty,
     share: h.usd / totalUsd,
     color: coinColor(h.coin),
   }))
-  if (small.length) {
-    const usd = small.reduce((sum, h) => sum + h.usd, 0)
-    slices.push({
-      coin: `Other (${small.length})`,
-      usd,
-      qty: NaN,
-      share: usd / totalUsd,
-      color: OTHER_COLOR,
-    })
-  }
   return { slices, totalUsd, unpriced: unpriced.sort() }
 }
 
@@ -96,7 +82,6 @@ function SliceTooltip({
 }) {
   if (!active || !payload?.length) return null
   const s = payload[0].payload
-  const isOther = s.coin.startsWith("Other")
   return (
     <div className="rounded-md border bg-background px-2.5 py-2 text-xs shadow-md">
       <div className="flex items-center gap-1.5 font-medium text-foreground">
@@ -104,11 +89,11 @@ function SliceTooltip({
           className="inline-block h-2 w-2 shrink-0 rounded-[2px]"
           style={{ backgroundColor: s.color }}
         />
-        {isOther ? s.coin : coinLabel(s.coin)}
+        {coinLabel(s.coin)}
       </div>
       <div className="mt-0.5 font-mono tabular-nums text-muted-foreground">
         {fmtUsd(s.usd)} · {fmtPct(s.share)}
-        {!isOther && !Number.isNaN(s.qty) ? ` · ${fmtQty(s.qty)} ${s.coin}` : ""}
+        {Number.isNaN(s.qty) ? "" : ` · ${fmtQty(s.qty)} ${s.coin}`}
       </div>
     </div>
   )
@@ -220,9 +205,7 @@ export function PortfolioPieChart({ data }: PortfolioPieChartProps) {
                 className="inline-block h-2 w-2 shrink-0 rounded-[2px]"
                 style={{ backgroundColor: s.color }}
               />
-              <span className="truncate">
-                {s.coin.startsWith("Other") ? s.coin : coinLabel(s.coin)}
-              </span>
+              <span className="truncate">{coinLabel(s.coin)}</span>
             </span>
             <span className="flex shrink-0 gap-2 font-mono tabular-nums">
               <span className="text-muted-foreground">{fmtUsd(s.usd)}</span>
