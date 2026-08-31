@@ -20,6 +20,7 @@ import { parseFlexibleDate, formatTimestamp } from '@/lib/date'
 import type { DateRangeFilterValue } from '@/components/date-range-filter'
 import { FiatFlowChart } from '@/components/fiat-flow-chart'
 import { AssetPriceKlineChart } from '@/components/asset-price-kline-chart'
+import type { DateSnapshot } from '@/components/asset-price-kline-chart'
 import { PortfolioPieChart } from '@/components/portfolio-pie-chart'
 import { canonicalCoin, coinLabel, formatCoinAmount, renamedCoinNote } from '@/lib/coins'
 
@@ -121,10 +122,17 @@ export function InvestmentsPage() {
   }, []);
 
   // A date picked on the price chart; the allocation pie then shows that day
-  // instead of today. `null` = today.
-  const [allocSnapshot, setAllocSnapshot] = useState<
-    { timestamp: number; holdings: Record<string, number> } | null
-  >(null);
+  // instead of today, and its rows are highlighted in the table. `null` = today.
+  const [allocSnapshot, setAllocSnapshot] = useState<DateSnapshot | null>(null);
+
+  const isHistoryRowSelectedDay = useCallback(
+    (row: BinanceTransaction) => {
+      if (!allocSnapshot) return false;
+      const t = parseFlexibleDate(row.Time)?.getTime();
+      return t != null && t >= allocSnapshot.timestamp && t < allocSnapshot.end;
+    },
+    [allocSnapshot],
+  );
 
   // Rows currently visible in the Transaction History table (after its column filters); drives the chart.
   const [historyChartRows, setHistoryChartRows] = useState<BinanceTransaction[]>([]);
@@ -336,6 +344,7 @@ export function InvestmentsPage() {
               paginated={false}
               loading={loading}
               onFilteredRowsChange={handleHistoryFilteredRows}
+              isRowHighlighted={isHistoryRowSelectedDay}
               persistFiltersKey="investments.history.columnFilters"
             />
             {historyCoinNote && (

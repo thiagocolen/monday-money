@@ -13,7 +13,7 @@
  * last good snapshot is returned flagged `stale`.
  */
 
-import { COINGECKO_IDS } from "./prices"
+import { COINGECKO_IDS, FIAT_SYMBOLS } from "./prices"
 
 export interface Candle {
   /** epoch ms (start of the UTC day) */
@@ -26,7 +26,7 @@ export interface Candle {
   volume: number
 }
 
-export type CandleSource = "coinbase" | "coingecko" | null
+export type CandleSource = "coinbase" | "coingecko" | "frankfurter" | null
 
 export interface CandleHistory {
   candles: Candle[]
@@ -159,6 +159,44 @@ async function fetchCoinGecko(ticker: string): Promise<Candle[] | null> {
   }
 }
 
+/** A fiat we hold directly (BRL, …) — priced against USD via an FX feed. */
+function isFiat(ticker: string): boolean {
+  return (FIAT_SYMBOLS as readonly string[]).includes(ticker.trim().toUpperCase())
+}
+
+/**
+ * Daily USD value of one unit of a fiat, from Frankfurter (`api.frankfurter.dev`,
+ * keyless, CORS `*`, ECB reference rates). One call covers the whole window —
+ * `from` returns USD→fiat, so the USD value is its reciprocal. Business days
+ * only; the merge step carries the last rate forward across weekends/holidays.
+ * Promoted to flat candles (open = high = low = close, no volume).
+ */
+async function fetchFrankfurter(ticker: string, fromMs: number): Promise<Candle[] | null> {
+  const sym = ticker.trim().toUpperCase()
+  const start = new Date(Math.max(fromMs, Date.now() - MAX_LOOKBACK_MS))
+    .toISOString()
+    .slice(0, 10)
+  try {
+    const res = await fetch(
+      `https://api.frankfurter.dev/v1/${start}..?base=USD&symbols=${sym}`,
+    )
+    if (!res.ok) return null
+    const json: { rates?: Record<string, Record<string, number>> } = await res.json()
+    const candles: Candle[] = []
+    for (const [day, obj] of Object.entries(json.rates ?? {})) {
+      const perUsd = obj?.[sym]
+      if (!Number.isFinite(perUsd) || !(perUsd > 0)) continue
+      const t = Math.floor(Date.parse(`${day}T00:00:00Z`) / DAY_MS) * DAY_MS
+      const usd = 1 / perUsd
+      candles.push({ timestamp: t, open: usd, high: usd, low: usd, close: usd, volume: 0 })
+    }
+    candles.sort((a, b) => a.timestamp - b.timestamp)
+    return candles.length ? candles : null
+  } catch {
+    return null
+  }
+}
+
 /**
  * Daily USD candle history for `ticker`, reaching back to at least `sinceMs`
  * (clamped to 12 years). Cached for 12h; a cache that already covers the
@@ -175,8 +213,19 @@ export async function fetchPriceCandles(ticker: string, sinceMs: number): Promis
     return { ...cached, stale: false }
   }
 
-  let candles = await fetchCoinbase(ticker, sinceMs)
-  let source: CandleSource = candles && candles.length ? "coinbase" : null
+  let candles: Candle[] | null = null
+  let source: CandleSource = null
+
+  // Fiat (BRL, …) isn't a crypto pair — price it against USD via Frankfurter.
+  if (isFiat(ticker)) {
+    candles = await fetchFrankfurter(ticker, sinceMs)
+    source = candles && candles.length ? "frankfurter" : null
+  }
+
+  if (!candles || candles.length === 0) {
+    candles = await fetchCoinbase(ticker, sinceMs)
+    source = candles && candles.length ? "coinbase" : null
+  }
 
   if (!candles || candles.length === 0) {
     const cg = await fetchCoinGecko(ticker)

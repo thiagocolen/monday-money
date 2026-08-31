@@ -27,7 +27,7 @@ export const COINGECKO_IDS: Record<string, string> = {
 }
 
 /** Fiat symbols we hold directly, priced via CoinGecko's `vs_currencies`. */
-const FIAT_SYMBOLS = ["BRL"] as const
+export const FIAT_SYMBOLS = ["BRL"] as const
 
 const CACHE_KEY = "mm.coingecko.usd.v1"
 const TTL_MS = 5 * 60_000

@@ -2,7 +2,6 @@
 
 import * as React from "react"
 import {
-  ActionType,
   dispose,
   init,
   registerIndicator,
@@ -26,8 +25,10 @@ import type { CandleHistory } from "@/lib/price-candles"
 import { cn } from "@/lib/utils"
 
 export interface DateSnapshot {
-  /** epoch ms of the picked bar */
+  /** epoch ms of the picked bar (start of its day/week/month period) */
   timestamp: number
+  /** exclusive end of the picked bar's period, epoch ms */
+  end: number
   /** USD value held per coin as of that bar */
   holdings: Record<string, number>
 }
@@ -277,7 +278,7 @@ interface Merged {
   priced: string[]
   /** selected coins with no USD price anywhere */
   unpriced: string[]
-  sources: Set<"coinbase" | "coingecko">
+  sources: Set<"coinbase" | "coingecko" | "frankfurter">
   /** earliest day any line covers, epoch ms */
   coveredFrom: number
   /** crosshair tooltip decimals, driven by the smallest-priced coin */
@@ -418,7 +419,7 @@ function buildMerged(
     minLast >= 1 ? 2 : minLast >= 0.01 ? 4 : minLast >= 0.0001 ? 6 : 8
   const axisPrecision = hi >= 100 ? 2 : hi >= 0.1 ? 4 : hi >= 0.001 ? 6 : 8
 
-  const sources = new Set<"coinbase" | "coingecko">()
+  const sources = new Set<"coinbase" | "coingecko" | "frankfurter">()
   let stale = false
   let coveredFrom = Infinity
   for (const c of priced) {
@@ -449,6 +450,14 @@ function periodStart(ms: number, tf: Timeframe): number {
   if (tf === "month") return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1)
   const isoDow = (d.getUTCDay() + 6) % 7 // Mon = 0
   return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() - isoDow)
+}
+
+/** Exclusive end (UTC) of the day/week/month period a period-start falls in. */
+function periodEnd(ms: number, tf: Timeframe): number {
+  if (tf === "day") return ms + DAY_MS
+  if (tf === "week") return ms + 7 * DAY_MS
+  const d = new Date(ms)
+  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1)
 }
 
 /**
@@ -499,23 +508,23 @@ function klineStyles(dark: boolean, family: string, log: boolean): DeepPartial<S
         showRule: TooltipShowRule.FollowCross,
         showName: false,
         showParams: false,
-        text: { family },
+        text: { family, size: 10, marginTop: 4, marginBottom: 4 },
       },
     },
     xAxis: {
       axisLine: { color: axisLine },
       tickLine: { color: axisLine },
-      tickText: { color: text, family },
+      tickText: { color: text, family, size: 10 },
     },
     yAxis: {
       type: log ? YAxisType.Log : YAxisType.Normal,
       axisLine: { color: axisLine },
       tickLine: { color: axisLine },
-      tickText: { color: text, family },
+      tickText: { color: text, family, size: 10 },
     },
     crosshair: {
-      horizontal: { text: { backgroundColor: crosshairBg, family } },
-      vertical: { text: { backgroundColor: crosshairBg, family } },
+      horizontal: { text: { backgroundColor: crosshairBg, family, size: 10 } },
+      vertical: { text: { backgroundColor: crosshairBg, family, size: 10 } },
     },
     separator: { color: grid },
   }
@@ -556,6 +565,9 @@ export function AssetPriceKlineChart({
   React.useEffect(() => {
     onDateSelectRef.current = onDateSelect
   })
+
+  // Current timeframe, readable from the mount-only click handler.
+  const timeframeRef = React.useRef<Timeframe>("day")
 
   const [timeframe, setTimeframe] = React.useState<Timeframe>(
     () => (["day", "week", "month"] as const).find((t) => t === safeGet(TF_KEY)) ?? "day",
@@ -633,8 +645,31 @@ export function AssetPriceKlineChart({
     if (!el) return
     const chart = init(el)
     chartRef.current = chart
-    const onBarClick = (payload?: { data?: KLineData }) => {
-      const kd = payload?.data
+
+    // Pick the bar under the pointer. The candle series is invisible and only a
+    // few px wide, so `OnCandleBarClick` almost never lands — instead map the
+    // click x onto the nearest bar and toggle it (same bar again → clear).
+    let downX = 0
+    let downY = 0
+    const onPointerDown = (e: PointerEvent) => {
+      downX = e.clientX
+      downY = e.clientY
+    }
+    const onPointerUp = (e: PointerEvent) => {
+      // Ignore the click that ends a pan/zoom drag.
+      if (Math.abs(e.clientX - downX) > 4 || Math.abs(e.clientY - downY) > 4) return
+      const c = chartRef.current
+      if (!c) return
+      const list = c.getDataList()
+      if (list.length === 0) return
+      const rect = el.getBoundingClientRect()
+      const p = c.convertFromPixel(
+        [{ x: e.clientX - rect.left, y: 0 }],
+        { paneId: CANDLE_PANE },
+      )
+      const point = Array.isArray(p) ? p[0] : p
+      const raw = typeof point?.dataIndex === "number" ? point.dataIndex : -1
+      const kd = list[Math.max(0, Math.min(list.length - 1, raw))]
       if (!kd || typeof kd.timestamp !== "number") return
       const ts = kd.timestamp
       if (pickedRef.current === ts) {
@@ -644,45 +679,34 @@ export function AssetPriceKlineChart({
         pickedRef.current = ts
         onDateSelectRef.current?.({
           timestamp: ts,
+          end: periodEnd(ts, timeframeRef.current),
           holdings: {
             ...((kd as { holdings?: Record<string, number> }).holdings ?? {}),
           },
         })
       }
     }
-    chart?.subscribeAction(ActionType.OnCandleBarClick, onBarClick)
+    el.addEventListener("pointerdown", onPointerDown)
+    el.addEventListener("pointerup", onPointerUp)
+
     const ro = new ResizeObserver(() => chartRef.current?.resize())
     ro.observe(el)
     return () => {
       ro.disconnect()
-      chart?.unsubscribeAction(ActionType.OnCandleBarClick, onBarClick)
+      el.removeEventListener("pointerdown", onPointerDown)
+      el.removeEventListener("pointerup", onPointerUp)
       dispose(el)
       chartRef.current = null
     }
   }, [])
 
-  // A locked vertical line marking the picked bar.
+  // A locked vertical line marking the picked bar — see the effect below the
+  // data push, so the overlay lands after `applyNewData`.
   const markerRef = React.useRef<string | null>(null)
-  React.useEffect(() => {
-    const chart = chartRef.current
-    if (!chart) return
-    if (markerRef.current) {
-      chart.removeOverlay(markerRef.current)
-      markerRef.current = null
-    }
-    if (selectedTimestamp != null) {
-      const id = chart.createOverlay({
-        name: "verticalStraightLine",
-        points: [{ timestamp: selectedTimestamp }],
-        lock: true,
-      })
-      markerRef.current = typeof id === "string" ? id : null
-    }
-    pickedRef.current = selectedTimestamp ?? null
-  }, [selectedTimestamp])
 
   // Changing the timeframe / filter invalidates any picked bar.
   React.useEffect(() => {
+    timeframeRef.current = timeframe
     if (pickedRef.current != null) {
       pickedRef.current = null
       onDateSelectRef.current?.(null)
@@ -735,6 +759,31 @@ export function AssetPriceKlineChart({
     }
   }, [merged, viewData, isDark, logScale])
 
+  // Vertical line on the picked bar, falling back to the latest bar ("today")
+  // when nothing is picked. Runs after the data push so the overlay's timestamp
+  // resolves against bars the chart already holds.
+  const lastBarTs = viewData.length
+    ? viewData[viewData.length - 1].timestamp
+    : null
+  React.useEffect(() => {
+    const chart = chartRef.current
+    if (!chart) return
+    const markTs = selectedTimestamp ?? lastBarTs
+    if (markerRef.current) {
+      chart.removeOverlay(markerRef.current)
+      markerRef.current = null
+    }
+    if (markTs != null) {
+      const id = chart.createOverlay({
+        name: "verticalStraightLine",
+        points: [{ timestamp: markTs }],
+        lock: true,
+      })
+      markerRef.current = typeof id === "string" ? id : null
+    }
+    pickedRef.current = selectedTimestamp ?? null
+  }, [selectedTimestamp, lastBarTs, viewData])
+
   return (
     <div className="space-y-2">
       {plotCoins.length > 0 && (
@@ -775,7 +824,7 @@ export function AssetPriceKlineChart({
       <div className="relative">
         <div
           ref={containerRef}
-          className={cn("w-full", merged?.hasHoldings ? "h-[440px]" : "h-[360px]")}
+          className={cn("w-full", merged?.hasHoldings ? "h-[560px]" : "h-[460px]")}
         />
         {plotCoins.length === 0 && (
           <div className="absolute inset-0 flex items-center justify-center bg-background px-4 text-center text-xs text-muted-foreground">
@@ -816,7 +865,13 @@ export function AssetPriceKlineChart({
             {timeframe === "day" ? "Daily" : timeframe === "week" ? "Weekly" : "Monthly"}{" "}
             USD price ·{" "}
             {[...merged.sources]
-              .map((s) => (s === "coinbase" ? "Coinbase Exchange" : "CoinGecko"))
+              .map((s) =>
+                s === "coinbase"
+                  ? "Coinbase Exchange"
+                  : s === "frankfurter"
+                    ? "Frankfurter (ECB)"
+                    : "CoinGecko",
+              )
               .join(" + ")}
             {merged.coveredFrom ? ` · since ${fmtDay(merged.coveredFrom)}` : ""}
             {merged.stale ? " · offline, last known" : ""}.{" "}
