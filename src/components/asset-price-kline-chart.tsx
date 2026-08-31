@@ -1,7 +1,14 @@
 "use client"
 
 import * as React from "react"
-import { dispose, init, registerIndicator, TooltipShowRule } from "klinecharts"
+import {
+  dispose,
+  init,
+  registerIndicator,
+  registerYAxis,
+  TooltipShowRule,
+  YAxisType,
+} from "klinecharts"
 import type { Chart, DeepPartial, KLineData, Styles } from "klinecharts"
 
 import type { BinanceTransaction } from "@/lib/api"
@@ -9,6 +16,7 @@ import { coinColor, coinLabel, renamedCoinNote } from "@/lib/coins"
 import { parseFlexibleDate } from "@/lib/date"
 import { fetchPriceCandles } from "@/lib/price-candles"
 import type { CandleHistory } from "@/lib/price-candles"
+import { cn } from "@/lib/utils"
 
 interface AssetPriceKlineChartProps {
   /** rows currently visible in the table (already column-filtered) */
@@ -18,6 +26,32 @@ interface AssetPriceKlineChartProps {
 const DAY_MS = 86_400_000
 const CANDLE_PANE = "candle_pane"
 const INDICATOR_NAME = "MM_PRICE_LINES"
+const LOG_YAXIS = "mm-log"
+
+type Timeframe = "day" | "week" | "month"
+const TIMEFRAMES: { id: Timeframe; label: string }[] = [
+  { id: "day", label: "Daily" },
+  { id: "week", label: "Weekly" },
+  { id: "month", label: "Monthly" },
+]
+
+const TF_KEY = "mm.history.klineTimeframe"
+const LOG_KEY = "mm.history.klineLog"
+
+function safeGet(key: string): string {
+  try {
+    return localStorage.getItem(key) ?? ""
+  } catch {
+    return ""
+  }
+}
+function safeSet(key: string, value: string) {
+  try {
+    localStorage.setItem(key, value)
+  } catch {
+    /* ignore */
+  }
+}
 
 /** USD-pegged coins — a flat $1 line adds nothing, so they're left off the chart. */
 const STABLES = new Set([
@@ -65,6 +99,52 @@ registerIndicator({
     dataList.map((d) => ({
       ...((d as { prices?: Record<string, number> }).prices ?? {}),
     })),
+})
+
+const fmtAxisTick = (v: number): string => {
+  if (v >= 1000)
+    return v.toLocaleString("en-US", { notation: "compact", maximumFractionDigits: 1 })
+  if (v >= 1) return v.toLocaleString("en-US", { maximumFractionDigits: 2 })
+  return v.toLocaleString("en-US", { maximumSignificantDigits: 2 })
+}
+
+/** 1 / 2 / 5 · 10ⁿ values inside [lo, hi], thinning the mantissa as the span grows. */
+function niceLogTicks(lo: number, hi: number): number[] {
+  if (!(lo > 0) || !(hi > lo)) return []
+  const p0 = Math.floor(Math.log10(lo))
+  const p1 = Math.ceil(Math.log10(hi))
+  const decades = p1 - p0
+  const mantissas = decades <= 2 ? [1, 2, 3, 5, 7] : decades <= 5 ? [1, 2, 5] : [1]
+  const out: number[] = []
+  for (let p = p0; p <= p1; p++) {
+    for (const m of mantissas) {
+      const v = m * Math.pow(10, p)
+      if (v >= lo && v <= hi) out.push(v)
+    }
+  }
+  return out
+}
+
+/**
+ * klinecharts v9's built-in log axis positions lines correctly but generates
+ * linearly-spaced tick *values* (0, 20k, 40k…) that pile up at the top. This
+ * replacement emits proper decade ticks and maps them through the same
+ * log-space→pixel transform the chart uses for everything else.
+ */
+registerYAxis({
+  name: LOG_YAXIS,
+  createTicks: ({ range, bounding, defaultTicks }) => {
+    const from = range.from
+    const span = range.range
+    const height = bounding.height
+    if (!(span > 0) || !(height > 0) || !(range.realFrom > 0)) return defaultTicks
+    const values = niceLogTicks(range.realFrom, range.realTo)
+    if (values.length < 2) return defaultTicks
+    return values.map((v) => {
+      const rate = (Math.log10(v) - from) / span
+      return { value: v, text: fmtAxisTick(v), coord: Math.round((1 - rate) * height) }
+    })
+  },
 })
 
 /** Distinct coins in the filtered rows and the earliest instant each appears. */
@@ -137,7 +217,7 @@ function buildMerged(
   }
 
   // Overall price span across every line — used to anchor the (invisible) candle
-  // series at a single mid value so it never widens or distorts the axis.
+  // series so it always frames all lines.
   let gMin = Infinity
   let gMax = -Infinity
   for (const m of byCoinDay.values()) {
@@ -151,8 +231,6 @@ function buildMerged(
   const lo = Number.isFinite(gMin) ? gMin : 0
   const hi = Number.isFinite(gMax) ? gMax : 0
 
-  // The candle series is invisible; its only job is to hand the axis a stable
-  // [min, max] that frames every line each day.
   const klineData: KLineData[] = sorted.map((day) => {
     const prices: Record<string, number> = {}
     for (const coin of priced) {
@@ -195,10 +273,31 @@ function buildMerged(
   }
 }
 
-function klineStyles(dark: boolean): DeepPartial<Styles> {
+/** Start-of-period (UTC) for the week/month a timestamp falls in. */
+function periodStart(ms: number, tf: Timeframe): number {
+  if (tf === "day") return ms
+  const d = new Date(ms)
+  if (tf === "month") return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1)
+  const isoDow = (d.getUTCDay() + 6) % 7 // Mon = 0
+  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() - isoDow)
+}
+
+/** Down-sample daily points to one per week/month (the period's last close). */
+function bucketKline(kline: KLineData[], tf: Timeframe): KLineData[] {
+  if (tf === "day") return kline
+  const byPeriod = new Map<number, KLineData>()
+  for (const pt of kline) {
+    const t = periodStart(pt.timestamp, tf)
+    byPeriod.set(t, { ...pt, timestamp: t })
+  }
+  return [...byPeriod.values()].sort((a, b) => a.timestamp - b.timestamp)
+}
+
+function klineStyles(dark: boolean, family: string, log: boolean): DeepPartial<Styles> {
   const grid = dark ? "#26262b" : "#ededed"
   const text = dark ? "#8f8f96" : "#76808f"
   const axisLine = dark ? "#3a3a42" : "#dcdcdc"
+  const crosshairBg = dark ? "#3a3a42" : "#686d76"
   const transparent = "rgba(0, 0, 0, 0)"
   return {
     grid: {
@@ -219,26 +318,32 @@ function klineStyles(dark: boolean): DeepPartial<Styles> {
         noChangeWickColor: transparent,
       },
       priceMark: { show: false },
-      tooltip: { showRule: TooltipShowRule.None },
+      tooltip: { showRule: TooltipShowRule.None, text: { family } },
     },
     indicator: {
       // Static colour key lives below the chart; the built-in legend only needs
       // to surface exact values on crosshair hover.
-      tooltip: { showRule: TooltipShowRule.FollowCross, showName: false, showParams: false },
+      tooltip: {
+        showRule: TooltipShowRule.FollowCross,
+        showName: false,
+        showParams: false,
+        text: { family },
+      },
     },
     xAxis: {
       axisLine: { color: axisLine },
       tickLine: { color: axisLine },
-      tickText: { color: text },
+      tickText: { color: text, family },
     },
     yAxis: {
+      type: log ? YAxisType.Log : YAxisType.Normal,
       axisLine: { color: axisLine },
       tickLine: { color: axisLine },
-      tickText: { color: text },
+      tickText: { color: text, family },
     },
     crosshair: {
-      horizontal: { text: { backgroundColor: dark ? "#3a3a42" : "#686d76" } },
-      vertical: { text: { backgroundColor: dark ? "#3a3a42" : "#686d76" } },
+      horizontal: { text: { backgroundColor: crosshairBg, family } },
+      vertical: { text: { backgroundColor: crosshairBg, family } },
     },
     separator: { color: grid },
   }
@@ -270,6 +375,21 @@ const fmtDay = (ms: number) =>
 export function AssetPriceKlineChart({ data }: AssetPriceKlineChartProps) {
   const { coins, earliest } = React.useMemo(() => coinsFromRows(data), [data])
   const isDark = useIsDark()
+
+  const [timeframe, setTimeframe] = React.useState<Timeframe>(
+    () => (["day", "week", "month"] as const).find((t) => t === safeGet(TF_KEY)) ?? "day",
+  )
+  const [logScale, setLogScale] = React.useState(() => safeGet(LOG_KEY) === "1")
+  const chooseTimeframe = React.useCallback((tf: Timeframe) => {
+    setTimeframe(tf)
+    safeSet(TF_KEY, tf)
+  }, [])
+  const toggleLog = React.useCallback(() => {
+    setLogScale((v) => {
+      safeSet(LOG_KEY, v ? "0" : "1")
+      return !v
+    })
+  }, [])
 
   // Stablecoins are dropped from the plot; everything else is a line.
   const plotCoins = React.useMemo(
@@ -304,6 +424,11 @@ export function AssetPriceKlineChart({ data }: AssetPriceKlineChartProps) {
   const loading = plotCoins.length > 0 && !merged
   const hasLines = (merged?.priced.length ?? 0) > 0
 
+  const viewData = React.useMemo(
+    () => (merged ? bucketKline(merged.klineData, timeframe) : []),
+    [merged, timeframe],
+  )
+
   // Chart instance lifecycle.
   const containerRef = React.useRef<HTMLDivElement>(null)
   const chartRef = React.useRef<Chart | null>(null)
@@ -320,16 +445,24 @@ export function AssetPriceKlineChart({ data }: AssetPriceKlineChartProps) {
     }
   }, [])
 
-  // Push data, theme and the per-coin line set.
+  // Push data, theme, scale and the per-coin line set.
   React.useEffect(() => {
     const chart = chartRef.current
     if (!chart) return
     const lines = merged?.priced ?? []
-    chart.setStyles(klineStyles(isDark))
-    // Axis ticks stay at 2 decimals for dollar-plus assets: klinecharts' tick
-    // generator mis-scales a wide range at higher precision.
+    const family = containerRef.current
+      ? getComputedStyle(containerRef.current).fontFamily
+      : "monospace"
+
+    chart.setStyles(klineStyles(isDark, family, logScale))
+    chart.setPaneOptions({
+      id: CANDLE_PANE,
+      axisOptions: { name: logScale ? LOG_YAXIS : "default" },
+    })
+    // Linear ticks stay at 2 decimals for dollar-plus assets: klinecharts'
+    // built-in generator mis-scales a wide range at higher precision.
     chart.setPriceVolumePrecision(merged?.axisPrecision ?? 2, 2)
-    chart.applyNewData(merged?.klineData ?? [])
+    chart.applyNewData(viewData)
     chart.removeIndicator(CANDLE_PANE, INDICATOR_NAME)
     if (lines.length > 0 && merged) {
       chart.createIndicator(
@@ -339,19 +472,54 @@ export function AssetPriceKlineChart({ data }: AssetPriceKlineChartProps) {
       )
       // Open on the whole history rather than the most recent bars. Runs after
       // layout so clientWidth is real.
-      const n = merged.klineData.length
+      const n = viewData.length
       requestAnimationFrame(() => {
         const c = chartRef.current
         if (!c || n < 2) return
         const width = containerRef.current?.clientWidth ?? 720
-        c.setBarSpace(Math.min(12, Math.max(1, width / n)))
+        c.setBarSpace(Math.min(16, Math.max(1, width / n)))
         c.scrollToRealTime()
       })
     }
-  }, [merged, isDark])
+  }, [merged, viewData, isDark, logScale])
 
   return (
     <div className="space-y-2">
+      {plotCoins.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex border">
+            {TIMEFRAMES.map((tf) => (
+              <button
+                key={tf.id}
+                type="button"
+                onClick={() => chooseTimeframe(tf.id)}
+                className={cn(
+                  "px-2 py-0.5 text-[11px] transition-colors",
+                  tf.id === timeframe
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                )}
+              >
+                {tf.label}
+              </button>
+            ))}
+          </div>
+          <button
+            type="button"
+            onClick={toggleLog}
+            aria-pressed={logScale}
+            className={cn(
+              "border px-2 py-0.5 text-[11px] transition-colors",
+              logScale
+                ? "border-primary bg-primary text-primary-foreground"
+                : "border-border text-muted-foreground hover:bg-muted hover:text-foreground",
+            )}
+          >
+            Log scale
+          </button>
+        </div>
+      )}
+
       <div className="relative">
         <div ref={containerRef} className="h-[360px] w-full" />
         {plotCoins.length === 0 && (
@@ -390,14 +558,16 @@ export function AssetPriceKlineChart({ data }: AssetPriceKlineChartProps) {
             ))}
           </div>
           <p className="text-[10px] text-muted-foreground">
-            Daily USD price ·{" "}
+            {timeframe === "day" ? "Daily" : timeframe === "week" ? "Weekly" : "Monthly"}{" "}
+            USD price ·{" "}
             {[...merged.sources]
               .map((s) => (s === "coinbase" ? "Coinbase Exchange" : "CoinGecko"))
               .join(" + ")}
             {merged.coveredFrom ? ` · since ${fmtDay(merged.coveredFrom)}` : ""}
-            {merged.stale ? " · offline, last known" : ""}. Every line shares one
-            linear USD axis — filter the Coin column to compare assets of similar
-            price.
+            {merged.stale ? " · offline, last known" : ""}.{" "}
+            {logScale
+              ? "Log axis."
+              : "Lines share one linear USD axis — turn on Log scale or filter the Coin column to compare assets of different price."}
             {merged.unpriced.length > 0 &&
               ` No quote for: ${merged.unpriced.map(coinLabel).join(", ")}.`}
             {stableCoins.length > 0 &&

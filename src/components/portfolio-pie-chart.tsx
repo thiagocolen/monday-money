@@ -195,6 +195,10 @@ export function PortfolioPieChart({ data }: PortfolioPieChartProps) {
       </ChartContainer>
 
       <div className="flex flex-col gap-1">
+        <div className="flex items-center justify-between gap-2 border-b pb-1 text-[11px] font-medium">
+          <span className="text-foreground">Total ({slices.length} asset{slices.length === 1 ? "" : "s"})</span>
+          <span className="font-mono tabular-nums text-foreground">{fmtUsd(totalUsd)}</span>
+        </div>
         {slices.map((s) => (
           <div
             key={s.coin}
