@@ -44,6 +44,7 @@
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
     "date-fns": "^4.1.0",
+    "klinecharts": "^9.8.12",
     "lucide-react": "^1.7.0",
     "papaparse": "^5.5.3",
     "radix-ui": "^1.4.3",

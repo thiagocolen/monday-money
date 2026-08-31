@@ -82,7 +82,7 @@ Enjoy taking back control of your money!
 - **Runtime:** [Electron](https://www.electronjs.org/)
 - **Frontend:** [React 19](https://react.dev/), [Vite](https://vitejs.dev/), [Tailwind CSS 4](https://tailwindcss.com/)
 - **UI Components:** [Radix UI](https://www.radix-ui.com/), [Shadcn/UI](https://ui.shadcn.com/)
-- **Charts:** [Recharts](https://recharts.org/)
+- **Charts:** [Recharts](https://recharts.org/), [KLineChart](https://github.com/klinecharts/KLineChart) (price history)
 - **Data Parsing:** [PapaParse](https://www.papaparse.com/)
 - **Testing:** [Playwright](https://playwright.dev/)
 

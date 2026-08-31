@@ -19,7 +19,7 @@ import { toast } from 'sonner'
 import { parseFlexibleDate, formatTimestamp } from '@/lib/date'
 import type { DateRangeFilterValue } from '@/components/date-range-filter'
 import { FiatFlowChart } from '@/components/fiat-flow-chart'
-import { CoinChangeChart } from '@/components/coin-change-chart'
+import { AssetPriceKlineChart } from '@/components/asset-price-kline-chart'
 import { PortfolioPieChart } from '@/components/portfolio-pie-chart'
 import { canonicalCoin, coinLabel, formatCoinAmount, renamedCoinNote } from '@/lib/coins'
 
@@ -303,9 +303,9 @@ export function InvestmentsPage() {
             <div className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
               <div className="rounded-md border p-4">
                 <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-                  Cumulative change per coin over time
+                  Historical USD price
                 </p>
-                <CoinChangeChart data={historySynced ? historyChartRows : filteredHistory} />
+                <AssetPriceKlineChart data={historySynced ? historyChartRows : filteredHistory} />
               </div>
               <div className="rounded-md border p-4">
                 <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
