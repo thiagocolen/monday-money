@@ -9,7 +9,13 @@ import {
   TooltipShowRule,
   YAxisType,
 } from "klinecharts"
-import type { Chart, DeepPartial, KLineData, Styles } from "klinecharts"
+import type {
+  Chart,
+  DeepPartial,
+  KLineData,
+  Styles,
+  TooltipLegend,
+} from "klinecharts"
 
 import type { BinanceTransaction } from "@/lib/api"
 import { coinColor, coinLabel, renamedCoinNote } from "@/lib/coins"
@@ -26,12 +32,17 @@ interface AssetPriceKlineChartProps {
 const DAY_MS = 86_400_000
 const CANDLE_PANE = "candle_pane"
 const INDICATOR_NAME = "MM_PRICE_LINES"
-const FLOW_PANE = "pane_flow"
-const FLOW_NAME = "MM_FLOW"
+const HOLDINGS_PANE = "pane_holdings"
+const HOLDINGS_NAME = "MM_HOLDINGS"
 const LOG_YAXIS = "mm-log"
 
-const UP_COLOR = "#16a34a"
-const DOWN_COLOR = "#dc2626"
+const fmtUsdShort = (v: number): string =>
+  v.toLocaleString("en-US", {
+    style: "currency",
+    currency: "USD",
+    notation: v >= 10_000 ? "compact" : "standard",
+    maximumFractionDigits: v >= 10_000 ? 1 : 0,
+  })
 
 type Timeframe = "day" | "week" | "month"
 const TIMEFRAMES: { id: Timeframe; label: string }[] = [
@@ -107,29 +118,83 @@ registerIndicator({
 })
 
 /**
- * Net transaction flow per bar, in USD: buys draw up from zero (green), sells
- * down (red). The signed USD value is stashed on each point as `flow`.
+ * Portfolio value per bar, in USD: one stacked segment per asset (its coin
+ * balance on that day × the day's price). `calcParams` carries the bottom→top
+ * asset order; each point's per-asset USD values are stashed as `holdings`.
+ * A hidden `total` figure sizes the axis; a custom `draw` paints the stack.
  */
-registerIndicator({
-  name: FLOW_NAME,
-  shortName: "Net flow",
+interface HoldingsResult {
+  total: number
+  [coin: string]: number
+}
+
+registerIndicator<HoldingsResult>({
+  name: HOLDINGS_NAME,
+  shortName: "Holdings",
   precision: 0,
-  figures: [
-    {
-      key: "flow",
-      title: "Net: ",
-      type: "bar",
-      baseValue: 0,
-      styles: (figureData) => ({
-        color:
-          ((figureData.current?.indicatorData as { flow?: number })?.flow ?? 0) >= 0
-            ? UP_COLOR
-            : DOWN_COLOR,
-      }),
-    },
-  ],
-  calc: (dataList) =>
-    dataList.map((d) => ({ flow: (d as { flow?: number }).flow ?? 0 })),
+  calcParams: [],
+  figures: [{ key: "total", title: "Total: ", type: "bar" }],
+  regenerateFigures: () => [{ key: "total", title: "Total: ", type: "bar" }],
+  calc: (dataList, indicator) => {
+    const order = (indicator.calcParams as string[]) ?? []
+    return dataList.map((d) => {
+      const h = (d as { holdings?: Record<string, number> }).holdings ?? {}
+      const out: HoldingsResult = { total: 0 }
+      for (const coin of order) {
+        const v = h[coin] ?? 0
+        out[coin] = v
+        out.total += v
+      }
+      return out
+    })
+  },
+  draw: ({ ctx, indicator, visibleRange, barSpace, xAxis, yAxis }) => {
+    const order = (indicator.calcParams as string[]) ?? []
+    const results = (indicator.result as HoldingsResult[]) ?? []
+    const w = Math.max(1, barSpace.bar * 0.8)
+    const from = Math.max(0, visibleRange.from)
+    const to = Math.min(visibleRange.to, results.length - 1)
+    for (let i = from; i <= to; i++) {
+      const row = results[i]
+      if (!row) continue
+      const x = xAxis.convertToPixel(i)
+      let cum = 0
+      for (const coin of order) {
+        const v = row[coin] ?? 0
+        if (v <= 0) continue
+        const yBottom = yAxis.convertToPixel(cum)
+        cum += v
+        const yTop = yAxis.convertToPixel(cum)
+        ctx.fillStyle = coinColor(coin)
+        ctx.fillRect(Math.round(x - w / 2), yTop, Math.max(1, w), Math.max(0, yBottom - yTop))
+      }
+    }
+    return true
+  },
+  createTooltipDataSource: ({ crosshair, indicator, defaultStyles }) => {
+    const order = (indicator.calcParams as string[]) ?? []
+    const results = (indicator.result as HoldingsResult[]) ?? []
+    const idx = crosshair.dataIndex ?? results.length - 1
+    const row = results[idx]
+    const color = defaultStyles.tooltip.text.color
+    const values: TooltipLegend[] = []
+    if (row) {
+      values.push({
+        title: { text: "Total", color },
+        value: { text: fmtUsdShort(row.total), color },
+      })
+      for (const coin of order) {
+        const v = row[coin] ?? 0
+        if (v >= 1) {
+          values.push({
+            title: { text: coinLabel(coin), color: coinColor(coin) },
+            value: { text: fmtUsdShort(v), color },
+          })
+        }
+      }
+    }
+    return { name: "", calcParamsText: "", icons: [], values }
+  },
 })
 
 const fmtAxisTick = (v: number): string => {
@@ -207,8 +272,10 @@ interface Merged {
   precision: number
   /** y-axis tick decimals, driven by the largest-priced coin */
   axisPrecision: number
-  /** at least one priced coin has a transaction that values > $0 */
-  hasFlow: boolean
+  /** at least one priced coin holds a positive, priceable balance */
+  hasHoldings: boolean
+  /** holdings-bar stack order, bottom → top (largest current value first) */
+  stackOrder: string[]
   stale: boolean
 }
 
@@ -278,18 +345,38 @@ function buildMerged(
   const lo = Number.isFinite(gMin) ? gMin : 0
   const hi = Number.isFinite(gMax) ? gMax : 0
 
-  // Net USD flow per day: sum of (Δcoin × that coin's price on the day). A txn
-  // before the coin's price history is valued at its earliest known close.
-  const flowByDay = new Map<number, number>()
-  let hasFlow = false
-  for (const t of parsedTxns) {
-    const m = byCoinDay.get(t.coin)
-    if (!m) continue
-    const price = m.get(t.day) ?? m.values().next().value
-    if (typeof price !== "number" || !(price > 0)) continue
-    flowByDay.set(t.day, (flowByDay.get(t.day) ?? 0) + t.change * price)
-    hasFlow = true
+  // Running coin balance × that day's price = USD held, per coin per day. A
+  // balance held before the coin's price history is valued at its earliest close.
+  const txnsByDay = [...parsedTxns].sort((a, b) => a.day - b.day)
+  const balance = new Map<string, number>()
+  const holdingsByDay = new Map<number, Record<string, number>>()
+  let hasHoldings = false
+  let ti = 0
+  for (const day of sorted) {
+    while (ti < txnsByDay.length && txnsByDay[ti].day <= day) {
+      const t = txnsByDay[ti]
+      balance.set(t.coin, (balance.get(t.coin) ?? 0) + t.change)
+      ti++
+    }
+    const rec: Record<string, number> = {}
+    for (const coin of priced) {
+      const bal = balance.get(coin) ?? 0
+      if (bal <= 0) continue
+      const m = byCoinDay.get(coin)
+      const price = m?.get(day) ?? m?.values().next().value
+      if (typeof price === "number" && price > 0) {
+        rec[coin] = bal * price
+        hasHoldings = true
+      }
+    }
+    holdingsByDay.set(day, rec)
   }
+
+  // Stack the biggest current holding at the bottom.
+  const lastRec = holdingsByDay.get(sorted[sorted.length - 1]) ?? {}
+  const stackOrder = [...priced].sort(
+    (a, b) => (lastRec[b] ?? 0) - (lastRec[a] ?? 0),
+  )
 
   const klineData: KLineData[] = sorted.map((day) => {
     const prices: Record<string, number> = {}
@@ -304,7 +391,7 @@ function buildMerged(
       low: lo,
       close: hi,
       prices,
-      flow: flowByDay.get(day) ?? 0,
+      holdings: holdingsByDay.get(day) ?? {},
     }
   })
 
@@ -337,7 +424,8 @@ function buildMerged(
     coveredFrom: Number.isFinite(coveredFrom) ? coveredFrom : 0,
     precision,
     axisPrecision,
-    hasFlow,
+    hasHoldings,
+    stackOrder,
     stale,
   }
 }
@@ -352,20 +440,15 @@ function periodStart(ms: number, tf: Timeframe): number {
 }
 
 /**
- * Down-sample daily points to one per week/month: prices are the period's last
- * close (points arrive ascending), transaction flow is summed over the period.
+ * Down-sample daily points to one per week/month — the period's last row (points
+ * arrive ascending), so prices and holdings are the period-end snapshot.
  */
 function bucketKline(kline: KLineData[], tf: Timeframe): KLineData[] {
   if (tf === "day") return kline
   const byPeriod = new Map<number, KLineData>()
   for (const pt of kline) {
     const t = periodStart(pt.timestamp, tf)
-    const prevFlow = (byPeriod.get(t) as { flow?: number } | undefined)?.flow ?? 0
-    byPeriod.set(t, {
-      ...pt,
-      timestamp: t,
-      flow: prevFlow + ((pt as { flow?: number }).flow ?? 0),
-    })
+    byPeriod.set(t, { ...pt, timestamp: t })
   }
   return [...byPeriod.values()].sort((a, b) => a.timestamp - b.timestamp)
 }
@@ -479,7 +562,7 @@ export function AssetPriceKlineChart({ data }: AssetPriceKlineChartProps) {
   )
   const plotKey = plotCoins.join(",")
 
-  // Transactions for the plotted coins — drives the net-flow bars.
+  // Transactions for the plotted coins — drives the holdings bars.
   const txns = React.useMemo(
     () => data.filter((r) => plotCoins.includes(String(r.Coin ?? "").trim())),
     [data, plotCoins],
@@ -555,18 +638,19 @@ export function AssetPriceKlineChart({ data }: AssetPriceKlineChartProps) {
     chart.setPriceVolumePrecision(merged?.axisPrecision ?? 2, 2)
     chart.applyNewData(viewData)
     chart.removeIndicator(CANDLE_PANE, INDICATOR_NAME)
-    chart.removeIndicator(FLOW_PANE, FLOW_NAME)
+    chart.removeIndicator(HOLDINGS_PANE, HOLDINGS_NAME)
     if (lines.length > 0 && merged) {
       chart.createIndicator(
         { name: INDICATOR_NAME, calcParams: lines, precision: merged.precision },
         true,
         { id: CANDLE_PANE },
       )
-      if (merged.hasFlow) {
-        chart.createIndicator({ name: FLOW_NAME }, false, {
-          id: FLOW_PANE,
-          height: 104,
-        })
+      if (merged.hasHoldings) {
+        chart.createIndicator(
+          { name: HOLDINGS_NAME, calcParams: merged.stackOrder },
+          false,
+          { id: HOLDINGS_PANE, height: 108 },
+        )
       }
       // Open on the whole history rather than the most recent bars. Runs after
       // layout so clientWidth is real.
@@ -621,7 +705,7 @@ export function AssetPriceKlineChart({ data }: AssetPriceKlineChartProps) {
       <div className="relative">
         <div
           ref={containerRef}
-          className={cn("w-full", merged?.hasFlow ? "h-[440px]" : "h-[360px]")}
+          className={cn("w-full", merged?.hasHoldings ? "h-[440px]" : "h-[360px]")}
         />
         {plotCoins.length === 0 && (
           <div className="absolute inset-0 flex items-center justify-center bg-background px-4 text-center text-xs text-muted-foreground">
@@ -657,24 +741,6 @@ export function AssetPriceKlineChart({ data }: AssetPriceKlineChartProps) {
                 {coinLabel(coin)}
               </span>
             ))}
-            {merged.hasFlow && (
-              <>
-                <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                  <span
-                    className="inline-block h-2 w-2 shrink-0 rounded-[2px]"
-                    style={{ backgroundColor: UP_COLOR }}
-                  />
-                  bought
-                </span>
-                <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                  <span
-                    className="inline-block h-2 w-2 shrink-0 rounded-[2px]"
-                    style={{ backgroundColor: DOWN_COLOR }}
-                  />
-                  sold
-                </span>
-              </>
-            )}
           </div>
           <p className="text-[10px] text-muted-foreground">
             {timeframe === "day" ? "Daily" : timeframe === "week" ? "Weekly" : "Monthly"}{" "}
@@ -687,8 +753,8 @@ export function AssetPriceKlineChart({ data }: AssetPriceKlineChartProps) {
             {logScale
               ? "Log axis."
               : "Lines share one linear USD axis — turn on Log scale or filter the Coin column to compare assets of different price."}
-            {merged.hasFlow &&
-              " Lower pane: net USD bought (green) / sold (red) per period."}
+            {merged.hasHoldings &&
+              " Lower pane: USD value of holdings, stacked by asset."}
             {merged.unpriced.length > 0 &&
               ` No quote for: ${merged.unpriced.map(coinLabel).join(", ")}.`}
             {stableCoins.length > 0 &&
