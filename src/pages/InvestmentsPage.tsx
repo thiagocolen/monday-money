@@ -321,6 +321,7 @@ export function InvestmentsPage() {
               paginated={false}
               loading={loading}
               onFilteredRowsChange={handleHistoryFilteredRows}
+              persistFiltersKey="investments.history.columnFilters"
             />
             {historyCoinNote && (
               <p className="text-[10px] text-muted-foreground">{historyCoinNote}</p>

@@ -54,6 +54,23 @@ interface DataTableProps<TData, TValue> {
   loading?: boolean
   /** Fires with the row data currently passing all column filters (post-filter, pre-pagination). */
   onFilteredRowsChange?: (rows: TData[]) => void
+  /**
+   * When set, column filters (coin selection, date range, …) are saved to
+   * localStorage under this key and restored on the next mount — so the choice
+   * survives closing and reopening the app.
+   */
+  persistFiltersKey?: string
+}
+
+function loadPersistedFilters(key: string | undefined): ColumnFiltersState {
+  if (!key) return []
+  try {
+    const raw = localStorage.getItem(key)
+    const parsed = raw ? JSON.parse(raw) : null
+    return Array.isArray(parsed) ? (parsed as ColumnFiltersState) : []
+  } catch {
+    return []
+  }
 }
 
 export function DataTable<TData, TValue>({
@@ -72,9 +89,21 @@ export function DataTable<TData, TValue>({
   meta,
   loading = false,
   onFilteredRowsChange,
+  persistFiltersKey,
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = React.useState<SortingState>([])
-  const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
+  const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>(
+    () => loadPersistedFilters(persistFiltersKey),
+  )
+
+  React.useEffect(() => {
+    if (!persistFiltersKey) return
+    try {
+      localStorage.setItem(persistFiltersKey, JSON.stringify(columnFilters))
+    } catch {
+      /* storage unavailable — persistence is best-effort */
+    }
+  }, [persistFiltersKey, columnFilters])
   const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({})
   const [internalRowSelection, setInternalRowSelection] = React.useState({})
 
