@@ -26,7 +26,12 @@ interface AssetPriceKlineChartProps {
 const DAY_MS = 86_400_000
 const CANDLE_PANE = "candle_pane"
 const INDICATOR_NAME = "MM_PRICE_LINES"
+const FLOW_PANE = "pane_flow"
+const FLOW_NAME = "MM_FLOW"
 const LOG_YAXIS = "mm-log"
+
+const UP_COLOR = "#16a34a"
+const DOWN_COLOR = "#dc2626"
 
 type Timeframe = "day" | "week" | "month"
 const TIMEFRAMES: { id: Timeframe; label: string }[] = [
@@ -99,6 +104,32 @@ registerIndicator({
     dataList.map((d) => ({
       ...((d as { prices?: Record<string, number> }).prices ?? {}),
     })),
+})
+
+/**
+ * Net transaction flow per bar, in USD: buys draw up from zero (green), sells
+ * down (red). The signed USD value is stashed on each point as `flow`.
+ */
+registerIndicator({
+  name: FLOW_NAME,
+  shortName: "Net flow",
+  precision: 0,
+  figures: [
+    {
+      key: "flow",
+      title: "Net: ",
+      type: "bar",
+      baseValue: 0,
+      styles: (figureData) => ({
+        color:
+          ((figureData.current?.indicatorData as { flow?: number })?.flow ?? 0) >= 0
+            ? UP_COLOR
+            : DOWN_COLOR,
+      }),
+    },
+  ],
+  calc: (dataList) =>
+    dataList.map((d) => ({ flow: (d as { flow?: number }).flow ?? 0 })),
 })
 
 const fmtAxisTick = (v: number): string => {
@@ -176,6 +207,8 @@ interface Merged {
   precision: number
   /** y-axis tick decimals, driven by the largest-priced coin */
   axisPrecision: number
+  /** at least one priced coin has a transaction that values > $0 */
+  hasFlow: boolean
   stale: boolean
 }
 
@@ -183,14 +216,28 @@ interface Merged {
 function buildMerged(
   histories: Map<string, CandleHistory>,
   coins: string[],
+  txns: BinanceTransaction[],
 ): Merged {
   const priced = coins.filter((c) => (histories.get(c)?.candles.length ?? 0) > 0)
   const unpriced = coins.filter((c) => !priced.includes(c))
+
+  // Transactions for priced coins, snapped to a UTC day.
+  const parsedTxns = txns
+    .map((t) => {
+      const d = parseFlexibleDate(t.Time)
+      const coin = String(t.Coin ?? "").trim()
+      const change = Number(t.Change)
+      return d && priced.includes(coin) && Number.isFinite(change) && change !== 0
+        ? { day: Math.floor(d.getTime() / DAY_MS) * DAY_MS, coin, change }
+        : null
+    })
+    .filter((x): x is { day: number; coin: string; change: number } => x != null)
 
   const days = new Set<number>()
   for (const c of priced) {
     for (const candle of histories.get(c)!.candles) days.add(candle.timestamp)
   }
+  for (const t of parsedTxns) days.add(t.day)
   const sorted = [...days].sort((a, b) => a - b)
 
   // Per coin: carry the last known close forward, but stay blank before listing.
@@ -231,13 +278,34 @@ function buildMerged(
   const lo = Number.isFinite(gMin) ? gMin : 0
   const hi = Number.isFinite(gMax) ? gMax : 0
 
+  // Net USD flow per day: sum of (Δcoin × that coin's price on the day). A txn
+  // before the coin's price history is valued at its earliest known close.
+  const flowByDay = new Map<number, number>()
+  let hasFlow = false
+  for (const t of parsedTxns) {
+    const m = byCoinDay.get(t.coin)
+    if (!m) continue
+    const price = m.get(t.day) ?? m.values().next().value
+    if (typeof price !== "number" || !(price > 0)) continue
+    flowByDay.set(t.day, (flowByDay.get(t.day) ?? 0) + t.change * price)
+    hasFlow = true
+  }
+
   const klineData: KLineData[] = sorted.map((day) => {
     const prices: Record<string, number> = {}
     for (const coin of priced) {
       const v = byCoinDay.get(coin)?.get(day)
       if (v != null && Number.isFinite(v)) prices[coin] = v
     }
-    return { timestamp: day, open: lo, high: hi, low: lo, close: hi, prices }
+    return {
+      timestamp: day,
+      open: lo,
+      high: hi,
+      low: lo,
+      close: hi,
+      prices,
+      flow: flowByDay.get(day) ?? 0,
+    }
   })
 
   const lastPrices = priced
@@ -269,6 +337,7 @@ function buildMerged(
     coveredFrom: Number.isFinite(coveredFrom) ? coveredFrom : 0,
     precision,
     axisPrecision,
+    hasFlow,
     stale,
   }
 }
@@ -282,13 +351,21 @@ function periodStart(ms: number, tf: Timeframe): number {
   return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() - isoDow)
 }
 
-/** Down-sample daily points to one per week/month (the period's last close). */
+/**
+ * Down-sample daily points to one per week/month: prices are the period's last
+ * close (points arrive ascending), transaction flow is summed over the period.
+ */
 function bucketKline(kline: KLineData[], tf: Timeframe): KLineData[] {
   if (tf === "day") return kline
   const byPeriod = new Map<number, KLineData>()
   for (const pt of kline) {
     const t = periodStart(pt.timestamp, tf)
-    byPeriod.set(t, { ...pt, timestamp: t })
+    const prevFlow = (byPeriod.get(t) as { flow?: number } | undefined)?.flow ?? 0
+    byPeriod.set(t, {
+      ...pt,
+      timestamp: t,
+      flow: prevFlow + ((pt as { flow?: number }).flow ?? 0),
+    })
   }
   return [...byPeriod.values()].sort((a, b) => a.timestamp - b.timestamp)
 }
@@ -402,9 +479,18 @@ export function AssetPriceKlineChart({ data }: AssetPriceKlineChartProps) {
   )
   const plotKey = plotCoins.join(",")
 
-  // Fetch every plotted coin's history and merge; keyed so a stale response
-  // for an old filter can't land on the current one.
-  const [result, setResult] = React.useState<{ key: string; merged: Merged } | null>(null)
+  // Transactions for the plotted coins — drives the net-flow bars.
+  const txns = React.useMemo(
+    () => data.filter((r) => plotCoins.includes(String(r.Coin ?? "").trim())),
+    [data, plotCoins],
+  )
+
+  // Fetch every plotted coin's price history; keyed so a stale response for an
+  // old filter can't land on the current one.
+  const [histories, setHistories] = React.useState<{
+    key: string
+    map: Map<string, CandleHistory>
+  } | null>(null)
   React.useEffect(() => {
     if (plotCoins.length === 0) return
     let alive = true
@@ -412,15 +498,20 @@ export function AssetPriceKlineChart({ data }: AssetPriceKlineChartProps) {
       const since = earliest[coin] ?? Date.now() - 365 * DAY_MS
       return [coin, await fetchPriceCandles(coin, since)] as const
     }).then((entries) => {
-      if (!alive) return
-      setResult({ key: plotKey, merged: buildMerged(new Map(entries), plotCoins) })
+      if (alive) setHistories({ key: plotKey, map: new Map(entries) })
     })
     return () => {
       alive = false
     }
   }, [plotKey, plotCoins, earliest])
 
-  const merged = result?.key === plotKey ? result.merged : null
+  const merged = React.useMemo(
+    () =>
+      histories?.key === plotKey
+        ? buildMerged(histories.map, plotCoins, txns)
+        : null,
+    [histories, plotKey, plotCoins, txns],
+  )
   const loading = plotCoins.length > 0 && !merged
   const hasLines = (merged?.priced.length ?? 0) > 0
 
@@ -464,12 +555,19 @@ export function AssetPriceKlineChart({ data }: AssetPriceKlineChartProps) {
     chart.setPriceVolumePrecision(merged?.axisPrecision ?? 2, 2)
     chart.applyNewData(viewData)
     chart.removeIndicator(CANDLE_PANE, INDICATOR_NAME)
+    chart.removeIndicator(FLOW_PANE, FLOW_NAME)
     if (lines.length > 0 && merged) {
       chart.createIndicator(
         { name: INDICATOR_NAME, calcParams: lines, precision: merged.precision },
         true,
         { id: CANDLE_PANE },
       )
+      if (merged.hasFlow) {
+        chart.createIndicator({ name: FLOW_NAME }, false, {
+          id: FLOW_PANE,
+          height: 104,
+        })
+      }
       // Open on the whole history rather than the most recent bars. Runs after
       // layout so clientWidth is real.
       const n = viewData.length
@@ -521,7 +619,10 @@ export function AssetPriceKlineChart({ data }: AssetPriceKlineChartProps) {
       )}
 
       <div className="relative">
-        <div ref={containerRef} className="h-[360px] w-full" />
+        <div
+          ref={containerRef}
+          className={cn("w-full", merged?.hasFlow ? "h-[440px]" : "h-[360px]")}
+        />
         {plotCoins.length === 0 && (
           <div className="absolute inset-0 flex items-center justify-center bg-background px-4 text-center text-xs text-muted-foreground">
             {stableCoins.length > 0
@@ -556,6 +657,24 @@ export function AssetPriceKlineChart({ data }: AssetPriceKlineChartProps) {
                 {coinLabel(coin)}
               </span>
             ))}
+            {merged.hasFlow && (
+              <>
+                <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                  <span
+                    className="inline-block h-2 w-2 shrink-0 rounded-[2px]"
+                    style={{ backgroundColor: UP_COLOR }}
+                  />
+                  bought
+                </span>
+                <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                  <span
+                    className="inline-block h-2 w-2 shrink-0 rounded-[2px]"
+                    style={{ backgroundColor: DOWN_COLOR }}
+                  />
+                  sold
+                </span>
+              </>
+            )}
           </div>
           <p className="text-[10px] text-muted-foreground">
             {timeframe === "day" ? "Daily" : timeframe === "week" ? "Weekly" : "Monthly"}{" "}
@@ -568,6 +687,8 @@ export function AssetPriceKlineChart({ data }: AssetPriceKlineChartProps) {
             {logScale
               ? "Log axis."
               : "Lines share one linear USD axis — turn on Log scale or filter the Coin column to compare assets of different price."}
+            {merged.hasFlow &&
+              " Lower pane: net USD bought (green) / sold (red) per period."}
             {merged.unpriced.length > 0 &&
               ` No quote for: ${merged.unpriced.map(coinLabel).join(", ")}.`}
             {stableCoins.length > 0 &&
