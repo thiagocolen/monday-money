@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import {
+  ActionType,
   dispose,
   init,
   registerIndicator,
@@ -24,9 +25,20 @@ import { fetchPriceCandles } from "@/lib/price-candles"
 import type { CandleHistory } from "@/lib/price-candles"
 import { cn } from "@/lib/utils"
 
+export interface DateSnapshot {
+  /** epoch ms of the picked bar */
+  timestamp: number
+  /** USD value held per coin as of that bar */
+  holdings: Record<string, number>
+}
+
 interface AssetPriceKlineChartProps {
   /** rows currently visible in the table (already column-filtered) */
   data: BinanceTransaction[]
+  /** bar the user picked (drives the allocation pie); null = none */
+  selectedTimestamp?: number | null
+  /** fired when a bar is clicked (or the same one again → null) */
+  onDateSelect?: (snapshot: DateSnapshot | null) => void
 }
 
 const DAY_MS = 86_400_000
@@ -532,9 +544,18 @@ const fmtDay = (ms: number) =>
     day: "numeric",
   })
 
-export function AssetPriceKlineChart({ data }: AssetPriceKlineChartProps) {
+export function AssetPriceKlineChart({
+  data,
+  selectedTimestamp,
+  onDateSelect,
+}: AssetPriceKlineChartProps) {
   const { coins, earliest } = React.useMemo(() => coinsFromRows(data), [data])
   const isDark = useIsDark()
+
+  const onDateSelectRef = React.useRef(onDateSelect)
+  React.useEffect(() => {
+    onDateSelectRef.current = onDateSelect
+  })
 
   const [timeframe, setTimeframe] = React.useState<Timeframe>(
     () => (["day", "week", "month"] as const).find((t) => t === safeGet(TF_KEY)) ?? "day",
@@ -606,18 +627,67 @@ export function AssetPriceKlineChart({ data }: AssetPriceKlineChartProps) {
   // Chart instance lifecycle.
   const containerRef = React.useRef<HTMLDivElement>(null)
   const chartRef = React.useRef<Chart | null>(null)
+  const pickedRef = React.useRef<number | null>(null)
   React.useEffect(() => {
     const el = containerRef.current
     if (!el) return
-    chartRef.current = init(el)
+    const chart = init(el)
+    chartRef.current = chart
+    const onBarClick = (payload?: { data?: KLineData }) => {
+      const kd = payload?.data
+      if (!kd || typeof kd.timestamp !== "number") return
+      const ts = kd.timestamp
+      if (pickedRef.current === ts) {
+        pickedRef.current = null
+        onDateSelectRef.current?.(null)
+      } else {
+        pickedRef.current = ts
+        onDateSelectRef.current?.({
+          timestamp: ts,
+          holdings: {
+            ...((kd as { holdings?: Record<string, number> }).holdings ?? {}),
+          },
+        })
+      }
+    }
+    chart?.subscribeAction(ActionType.OnCandleBarClick, onBarClick)
     const ro = new ResizeObserver(() => chartRef.current?.resize())
     ro.observe(el)
     return () => {
       ro.disconnect()
+      chart?.unsubscribeAction(ActionType.OnCandleBarClick, onBarClick)
       dispose(el)
       chartRef.current = null
     }
   }, [])
+
+  // A locked vertical line marking the picked bar.
+  const markerRef = React.useRef<string | null>(null)
+  React.useEffect(() => {
+    const chart = chartRef.current
+    if (!chart) return
+    if (markerRef.current) {
+      chart.removeOverlay(markerRef.current)
+      markerRef.current = null
+    }
+    if (selectedTimestamp != null) {
+      const id = chart.createOverlay({
+        name: "verticalStraightLine",
+        points: [{ timestamp: selectedTimestamp }],
+        lock: true,
+      })
+      markerRef.current = typeof id === "string" ? id : null
+    }
+    pickedRef.current = selectedTimestamp ?? null
+  }, [selectedTimestamp])
+
+  // Changing the timeframe / filter invalidates any picked bar.
+  React.useEffect(() => {
+    if (pickedRef.current != null) {
+      pickedRef.current = null
+      onDateSelectRef.current?.(null)
+    }
+  }, [timeframe, plotKey])
 
   // Push data, theme, scale and the per-coin line set.
   React.useEffect(() => {

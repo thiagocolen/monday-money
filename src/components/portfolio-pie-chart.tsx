@@ -11,16 +11,25 @@ import { coinColor, coinLabel } from "@/lib/coins"
 import { fetchUsdQuotes } from "@/lib/prices"
 import type { UsdQuotes } from "@/lib/prices"
 
+interface DateSnapshot {
+  timestamp: number
+  holdings: Record<string, number>
+}
+
 interface PortfolioPieChartProps {
   /** rows currently visible in the table (already column-filtered) */
   data: BinanceTransaction[]
+  /** when set, show allocation as of this picked date instead of today */
+  snapshot?: DateSnapshot | null
+  /** reset back to today */
+  onClearSnapshot?: () => void
 }
 
 interface Slice {
   coin: string
   /** USD value of the holding */
   usd: number
-  /** underlying token quantity */
+  /** underlying token quantity (NaN in snapshot mode) */
   qty: number
   share: number
   color: string
@@ -40,13 +49,35 @@ const fmtQty = (v: number) => {
   const digits = abs !== 0 && abs < 1 ? 6 : abs < 1000 ? 3 : 2
   return v.toLocaleString("en-US", { maximumFractionDigits: digits })
 }
+const fmtDate = (ms: number) =>
+  new Date(ms).toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  })
 
-function buildSlices(
+function toSlices(
+  priced: { coin: string; usd: number; qty: number }[],
+): { slices: Slice[]; totalUsd: number } {
+  priced.sort((a, b) => b.usd - a.usd)
+  const totalUsd = priced.reduce((sum, h) => sum + h.usd, 0)
+  if (totalUsd <= 0) return { slices: [], totalUsd: 0 }
+  const slices: Slice[] = priced.map((h) => ({
+    coin: h.coin,
+    usd: h.usd,
+    qty: h.qty,
+    share: h.usd / totalUsd,
+    color: coinColor(h.coin),
+  }))
+  return { slices, totalUsd }
+}
+
+/** Live allocation: current balances valued at CoinGecko spot. */
+function buildLive(
   data: BinanceTransaction[],
   price: Record<string, number>,
 ): { slices: Slice[]; totalUsd: number; unpriced: string[] } {
   const balances = currentCoinBalances(data)
-
   const priced: { coin: string; usd: number; qty: number }[] = []
   const unpriced: string[] = []
   for (const [coin, qty] of Object.entries(balances)) {
@@ -55,22 +86,19 @@ function buildSlices(
     if (typeof p === "number" && p > 0) priced.push({ coin, usd: qty * p, qty })
     else unpriced.push(coin)
   }
-  priced.sort((a, b) => b.usd - a.usd)
+  return { ...toSlices(priced), unpriced: unpriced.sort() }
+}
 
-  const totalUsd = priced.reduce((sum, h) => sum + h.usd, 0)
-  if (totalUsd <= 0) return { slices: [], totalUsd: 0, unpriced: unpriced.sort() }
-
-  // Every priced holding gets its own slice — no "Other" folding. The table's
-  // Coin filter already decides which assets are in scope; whatever survives it
-  // (or all of them, when nothing is filtered) is shown in full.
-  const slices: Slice[] = priced.map((h) => ({
-    coin: h.coin,
-    usd: h.usd,
-    qty: h.qty,
-    share: h.usd / totalUsd,
-    color: coinColor(h.coin),
-  }))
-  return { slices, totalUsd, unpriced: unpriced.sort() }
+/** Historical allocation: pre-valued USD holdings from the price chart. */
+function buildSnapshot(holdings: Record<string, number>): {
+  slices: Slice[]
+  totalUsd: number
+  unpriced: string[]
+} {
+  const priced = Object.entries(holdings)
+    .filter(([, usd]) => usd > 0)
+    .map(([coin, usd]) => ({ coin, usd, qty: NaN }))
+  return { ...toSlices(priced), unpriced: [] }
 }
 
 function SliceTooltip({
@@ -99,10 +127,15 @@ function SliceTooltip({
   )
 }
 
-export function PortfolioPieChart({ data }: PortfolioPieChartProps) {
+export function PortfolioPieChart({
+  data,
+  snapshot,
+  onClearSnapshot,
+}: PortfolioPieChartProps) {
   const [quotes, setQuotes] = React.useState<UsdQuotes | null>(null)
 
   React.useEffect(() => {
+    if (snapshot) return // snapshot mode carries its own USD values
     let alive = true
     fetchUsdQuotes().then((q) => {
       if (alive) setQuotes(q)
@@ -110,11 +143,14 @@ export function PortfolioPieChart({ data }: PortfolioPieChartProps) {
     return () => {
       alive = false
     }
-  }, [])
+  }, [snapshot])
 
   const { slices, totalUsd, unpriced } = React.useMemo(
-    () => buildSlices(data, quotes?.price ?? {}),
-    [data, quotes],
+    () =>
+      snapshot
+        ? buildSnapshot(snapshot.holdings)
+        : buildLive(data, quotes?.price ?? {}),
+    [snapshot, data, quotes],
   )
 
   const config = React.useMemo<ChartConfig>(
@@ -125,9 +161,22 @@ export function PortfolioPieChart({ data }: PortfolioPieChartProps) {
     [slices],
   )
 
-  if (!quotes) {
+  const header = snapshot ? (
+    <div className="flex items-center justify-between gap-2 text-[11px]">
+      <span className="font-medium text-foreground">{fmtDate(snapshot.timestamp)}</span>
+      <button
+        type="button"
+        onClick={onClearSnapshot}
+        className="text-primary hover:underline"
+      >
+        Back to today
+      </button>
+    </div>
+  ) : null
+
+  if (!snapshot && !quotes) {
     return (
-      <div className="flex h-[360px] items-center justify-center text-xs text-muted-foreground">
+      <div className="flex h-[300px] items-center justify-center text-xs text-muted-foreground">
         Fetching live USD quotes…
       </div>
     )
@@ -135,19 +184,23 @@ export function PortfolioPieChart({ data }: PortfolioPieChartProps) {
 
   if (slices.length === 0) {
     return (
-      <div className="flex h-[360px] items-center justify-center px-4 text-center text-xs text-muted-foreground">
-        {quotes.stale && Object.keys(quotes.price).length === 0
-          ? "Could not reach CoinGecko for USD quotes."
-          : "No priced positive balances to allocate."}
+      <div className="space-y-2">
+        {header}
+        <div className="flex h-[260px] items-center justify-center px-4 text-center text-xs text-muted-foreground">
+          {snapshot
+            ? `No priced holdings on ${fmtDate(snapshot.timestamp)}.`
+            : quotes?.stale && Object.keys(quotes.price).length === 0
+              ? "Could not reach CoinGecko for USD quotes."
+              : "No priced positive balances to allocate."}
+        </div>
       </div>
     )
   }
 
-  const updated = new Date(quotes.fetchedAt)
-
   return (
     <div className="space-y-2">
-      <ChartContainer config={config} className="mx-auto aspect-square h-[260px]">
+      {header}
+      <ChartContainer config={config} className="mx-auto aspect-square h-[220px]">
         <PieChart>
           <Tooltip content={<SliceTooltip />} />
           <Pie
@@ -196,7 +249,9 @@ export function PortfolioPieChart({ data }: PortfolioPieChartProps) {
 
       <div className="flex flex-col gap-1">
         <div className="flex items-center justify-between gap-2 border-b pb-1 text-[11px] font-medium">
-          <span className="text-foreground">Total ({slices.length} asset{slices.length === 1 ? "" : "s"})</span>
+          <span className="text-foreground">
+            Total ({slices.length} asset{slices.length === 1 ? "" : "s"})
+          </span>
           <span className="font-mono tabular-nums text-foreground">{fmtUsd(totalUsd)}</span>
         </div>
         {slices.map((s) => (
@@ -220,10 +275,20 @@ export function PortfolioPieChart({ data }: PortfolioPieChartProps) {
       </div>
 
       <p className="text-[10px] text-muted-foreground">
-        Live USD value via CoinGecko
-        {quotes.stale ? " (offline — last known)" : ` · updated ${updated.toLocaleTimeString()}`}
-        .
-        {unpriced.length > 0 && ` No quote for: ${unpriced.map(coinLabel).join(", ")}.`}
+        {snapshot ? (
+          `Value on ${fmtDate(snapshot.timestamp)} · Coinbase / CoinGecko history. Click the price chart to pick another day.`
+        ) : (
+          <>
+            Live USD value via CoinGecko
+            {quotes?.stale
+              ? " (offline — last known)"
+              : quotes?.fetchedAt
+                ? ` · updated ${new Date(quotes.fetchedAt).toLocaleTimeString()}`
+                : ""}
+            . Click the price chart to see a past day.
+            {unpriced.length > 0 && ` No quote for: ${unpriced.map(coinLabel).join(", ")}.`}
+          </>
+        )}
       </p>
     </div>
   )
