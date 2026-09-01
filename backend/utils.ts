@@ -59,7 +59,28 @@ export function getSettings(): { exportPath?: string, rawCsvFolderPath?: string 
   return {};
 }
 
+/**
+ * Rejects values that can't be a real filesystem path: not a non-empty
+ * string, or containing NUL / control characters. This is intentionally
+ * permissive about which *printable* characters are allowed (Windows paths
+ * legitimately allow quotes, ampersands, semicolons, etc.) — the actual
+ * defense against these values reaching a shell lives at the point they're
+ * used (see backend/backup-data.ts), this is just a sanity guard.
+ */
+function assertValidPathSetting(value: string, label: string): void {
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    throw new Error(`${label} must be a non-empty string`);
+  }
+  // eslint-disable-next-line no-control-regex -- intentional: matching control chars is the point
+  if (/[\x00-\x08\x0B\x0C\x0E-\x1F]/.test(value)) {
+    throw new Error(`${label} contains invalid control characters`);
+  }
+}
+
 export function saveSettings(settings: { exportPath?: string, rawCsvFolderPath?: string }) {
+  if (settings.exportPath !== undefined) assertValidPathSetting(settings.exportPath, 'exportPath');
+  if (settings.rawCsvFolderPath !== undefined) assertValidPathSetting(settings.rawCsvFolderPath, 'rawCsvFolderPath');
+
   const settingsPath = getSettingsPath();
   const currentSettings = getSettings();
   const newSettings = { ...currentSettings, ...settings };
@@ -126,8 +147,13 @@ export function resolveSafePath(baseDir: string, ...parts: string[]): string {
   );
 
   const resolvedPath = path.resolve(baseDir, ...sanitizedParts);
+  const normalizedBase = path.resolve(baseDir);
+  const boundary = normalizedBase.endsWith(path.sep) ? normalizedBase : normalizedBase + path.sep;
 
-  if (!resolvedPath.startsWith(baseDir)) {
+  // Require a path-separator boundary, not just a string prefix — otherwise
+  // a sibling directory that merely starts with the same characters (e.g.
+  // `baseDir-evil` vs `baseDir`) would incorrectly pass the check.
+  if (resolvedPath !== normalizedBase && !resolvedPath.startsWith(boundary)) {
     throw new Error(
       `Security Violation: Path traversal detected. Attempted to access ${resolvedPath} outside of ${baseDir}`,
     );

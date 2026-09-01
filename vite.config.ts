@@ -62,6 +62,22 @@ export default defineConfig(({ mode }) => {
         configureServer(server: ViteDevServer) {
         server.middlewares.use(async (req, res, next) => {
           try {
+            // Dev-only API surface, including destructive endpoints
+            // (reset-app, restore-backup, import-file). It has no auth, so a
+            // malicious page open in the developer's browser could otherwise
+            // reach it cross-origin (CSRF / DNS rebinding) while `npm run
+            // dev` is running. Reject any state-changing request whose
+            // Origin doesn't match this dev server.
+            if (req.url?.startsWith("/api/") && req.method !== "GET") {
+              const origin = req.headers.origin
+              const expected = `${req.headers["x-forwarded-proto"] || "http"}://${req.headers.host}`
+              if (origin && origin !== expected) {
+                res.statusCode = 403
+                res.end(JSON.stringify({ success: false, error: "Cross-origin request blocked" }))
+                return
+              }
+            }
+
             if (req.url?.startsWith("/api/data/")) {
               const fileName = req.url.replace("/api/data/", "").split("?")[0]
               const data = await handleGetCsvData(fileName)
