@@ -22,6 +22,38 @@ function normalizeAmount(val: string): string {
   return trimmed;
 }
 
+/**
+ * Binance exports the same timestamp in several shapes (`YY-MM-DD HH:MM:SS`,
+ * `YYYY-MM-DD HH:MM:SS`, date only, single-digit parts). Store one canonical
+ * `YYYY-MM-DD HH:MM:SS` form so the column has a single, sortable format.
+ */
+function normalizeTimestamp(val: string): string {
+  const raw = String(val ?? '').trim();
+  const m = raw.match(
+    /^(\d{2}|\d{4})-(\d{1,2})-(\d{1,2})(?:[ T](\d{1,2}):(\d{1,2})(?::(\d{1,2}))?)?/
+  );
+  if (!m) return raw;
+  const [, y, mo, d, hh = '0', mi = '0', ss = '0'] = m;
+  const year = y.length === 2 ? `20${y}` : y;
+  const p = (n: string) => n.padStart(2, '0');
+  return `${year}-${p(mo)}-${p(d)} ${p(hh)}:${p(mi)}:${p(ss)}`;
+}
+
+/**
+ * Tickers Binance rebranded 1:1 — old symbol -> current symbol. Rows are stored
+ * under the current name so both exports fold into one coin.
+ */
+const COIN_RENAMES: Record<string, string> = {
+  MKR: 'SKY',
+  RNDR: 'RENDER',
+  MATIC: 'POL',
+};
+
+function canonicalCoin(val: string): string {
+  const c = String(val ?? '').trim();
+  return COIN_RENAMES[c.toUpperCase()] ?? c;
+}
+
 export const PARSERS: FileParser[] = [
   {
     name: 'MercadoPago',
@@ -128,11 +160,11 @@ export const PARSERS: FileParser[] = [
         const originalValue = getVal('change');
         const change = normalizeAmount(originalValue);
         return {
-          'User ID': getVal('user id'), 
-          Time: getVal('time'), 
-          Account: getVal('account'), 
-          Operation: getVal('operation'), 
-          Coin: getVal('coin'), 
+          'User ID': getVal('user id'),
+          Time: normalizeTimestamp(getVal('time')),
+          Account: getVal('account'),
+          Operation: getVal('operation'),
+          Coin: canonicalCoin(getVal('coin')),
           Change: change, 
           Remark: getVal('remark'), 
           owner
@@ -168,9 +200,9 @@ export const PARSERS: FileParser[] = [
         const amount = normalizeAmount(originalValue);
 
         return {
-          Time: getVal('time'), 
-          Coin: getVal('coin'), 
-          Network: getVal('network'), 
+          Time: getVal('time'),
+          Coin: canonicalCoin(getVal('coin')),
+          Network: getVal('network'),
           Amount: amount, 
           Fee: normalizeAmount(getVal('fee') || '0'), 
           Address: getVal('address'), 
@@ -315,6 +347,65 @@ export function dataImportRegistration() {
   const identityColumnFor = (destFile: string): string | null =>
     destFile === 'binance-fiat-deposit-withdraw-history.csv' ? 'Transaction ID' : null;
 
+  // Binance "Transaction History" exports carry no per-row transaction id, and a
+  // single trade routinely produces several byte-identical sub-fills (same time,
+  // account, operation, coin, change). Deduping such a file by row-hash would
+  // collapse those legitimate repeats into one. Instead we dedupe by
+  // *multiplicity* of a normalised identity key: an incoming file only
+  // contributes occurrences of a key beyond the number already present, so
+  // overlapping exports never re-add a transaction while every genuine repeat
+  // within an export is kept. Normalisation absorbs the volatile formatting
+  // Binance varies between exports (2- vs 4-digit years, amount notation).
+  type Row = Record<string, unknown>;
+  const SEP = '\x1f'; // unit separator — safe delimiter for composite identity keys
+  const multiplicityKeyFor = (destFile: string): ((row: Row) => string | null) | null => {
+    if (destFile !== 'binance-transaction-history.csv') return null;
+    const norm = (v: unknown) => String(v ?? '').trim().replace(/\s+/g, ' ');
+    const normNum = (v: unknown) => {
+      const n = parseFloat(String(v ?? '').replace(/\s+/g, ''));
+      return Number.isFinite(n) ? String(n) : norm(v);
+    };
+    const normTime = (v: unknown) => {
+      const s = norm(v);
+      return /^\d{2}-\d{1,2}-\d{1,2}/.test(s) ? `20${s}` : s;
+    };
+    return (row: Row) => {
+      const get = (k: string) => row[k] ?? row[k.toLowerCase()] ?? '';
+      const coin = norm(get('Coin'));
+      const time = normTime(get('Time'));
+      if (!coin || coin === 'seed' || coin === 'chain' || !time) return null;
+      return [
+        norm(get('User ID')),
+        time,
+        norm(get('Account')),
+        norm(get('Operation')),
+        coin,
+        normNum(get('Change')),
+      ].join(SEP);
+    };
+  };
+
+  const existingKeyCountsCache = new Map<string, Map<string, number>>();
+
+  const getExistingKeyCounts = (
+    destFile: string,
+    keyFn: (row: Row) => string | null
+  ): Map<string, number> => {
+    if (existingKeyCountsCache.has(destFile)) return existingKeyCountsCache.get(destFile)!;
+    const counts = new Map<string, number>();
+    const destPath = path.join(dataDir, destFile);
+    if (fs.existsSync(destPath)) {
+      const content = fs.readFileSync(destPath, 'utf8');
+      const data = Papa.parse<Row>(content, { header: true, skipEmptyLines: true }).data;
+      for (const row of data) {
+        const key = keyFn(row);
+        if (key != null) counts.set(key, (counts.get(key) ?? 0) + 1);
+      }
+    }
+    existingKeyCountsCache.set(destFile, counts);
+    return counts;
+  };
+
   const existingIdsCache = new Map<string, Set<string>>();
 
   const getExistingIds = (destFile: string): Set<string> => {
@@ -369,18 +460,34 @@ export function dataImportRegistration() {
       const existingHashes = getExistingHashes(destFile);
       const existingIds = getExistingIds(destFile);
       const idCol = identityColumnFor(destFile);
+      const multiplicityKey = multiplicityKeyFor(destFile);
+      const keyCounts = multiplicityKey ? getExistingKeyCounts(destFile, multiplicityKey) : null;
+      const fileKeyCounts = new Map<string, number>();
       const linesToAppend: string[] = [];
 
       for (const row of rows) {
         const propsForHash = Object.values(row).map(v => String(v));
         const rowHash = getSha256(propsForHash.join(','));
 
-        if (existingHashes.has(rowHash)) continue;
+        if (multiplicityKey && keyCounts) {
+          // Multiplicity dedupe: keep this occurrence only if the file has now
+          // shown the key more times than the data already holds it.
+          const key = multiplicityKey(row);
+          if (key != null) {
+            const seenInFile = (fileKeyCounts.get(key) ?? 0) + 1;
+            fileKeyCounts.set(key, seenInFile);
+            const heldInData = keyCounts.get(key) ?? 0;
+            if (seenInFile <= heldInData) continue;
+            keyCounts.set(key, heldInData + 1);
+          }
+        } else {
+          if (existingHashes.has(rowHash)) continue;
 
-        if (idCol) {
-          const id = String(row[idCol] ?? '').trim();
-          if (id && existingIds.has(id)) continue;
-          if (id) existingIds.add(id);
+          if (idCol) {
+            const id = String(row[idCol] ?? '').trim();
+            if (id && existingIds.has(id)) continue;
+            if (id) existingIds.add(id);
+          }
         }
 
         const rowValues = propsForHash.map(strVal => (strVal.includes(',') || strVal.includes('"')) ? `"${strVal.replace(/"/g, '""')}"` : strVal);

@@ -14,13 +14,18 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { RotateCcw, Trash2 } from 'lucide-react'
-import type { ColumnDef, FilterFn } from '@tanstack/react-table'
+import type { ColumnDef, Row } from '@tanstack/react-table'
 import { toast } from 'sonner'
-import { parseFlexibleDate } from '@/lib/date'
+import { parseFlexibleDate, formatTimestamp } from '@/lib/date'
 import type { DateRangeFilterValue } from '@/components/date-range-filter'
 import { FiatFlowChart } from '@/components/fiat-flow-chart'
+import { AssetPriceKlineChart } from '@/components/asset-price-kline-chart'
+import type { DateSnapshot } from '@/components/asset-price-kline-chart'
+import { PortfolioPieChart } from '@/components/portfolio-pie-chart'
+import { canonicalCoin, coinLabel, formatCoinAmount, renamedCoinNote } from '@/lib/coins'
 
-const dateRangeFilter: FilterFn<BinanceFiatDepositWithdraw> = (row, columnId, value: DateRangeFilterValue) => {
+/** Inclusive epoch-ms range filter over a flexibly-formatted timestamp column. */
+function dateRangeFilterFn<T>(row: Row<T>, columnId: string, value: DateRangeFilterValue | undefined): boolean {
   if (!value || (value.from == null && value.to == null)) return true
   const date = parseFlexibleDate(row.getValue(columnId))
   if (!date) return false
@@ -30,7 +35,8 @@ const dateRangeFilter: FilterFn<BinanceFiatDepositWithdraw> = (row, columnId, va
   return true
 }
 
-const multiSelectFilter: FilterFn<BinanceFiatDepositWithdraw> = (row, columnId, value: string[]) => {
+/** Keeps rows whose cell value is one of the selected values (empty selection = show all). */
+function multiSelectFilterFn<T>(row: Row<T>, columnId: string, value: string[] | undefined): boolean {
   if (!value || value.length === 0) return true
   return value.includes(String(row.getValue(columnId) ?? ''))
 }
@@ -59,8 +65,16 @@ export function InvestmentsPage() {
         return values.some(v => internalMarkers.includes(v));
       }
 
-      setHistoryData(history.filter(d => !isInternal(d)))
-      setCryptoData(crypto.filter(d => !isInternal(d)))
+      setHistoryData(
+        history
+          .filter(d => !isInternal(d))
+          .map(d => ({ ...d, Coin: canonicalCoin(d.Coin) })),
+      )
+      setCryptoData(
+        crypto
+          .filter(d => !isInternal(d))
+          .map(d => ({ ...d, Coin: canonicalCoin(d.Coin) })),
+      )
       setFiatData(fiat.filter(d => !isInternal(d)))
     } catch (error) {
       toast.error("Failed to load investment data")
@@ -90,6 +104,15 @@ export function InvestmentsPage() {
   const filteredCrypto = useMemo(() => filterData(cryptoData), [cryptoData, filterData]);
   const filteredFiat = useMemo(() => filterData(fiatData), [fiatData, filterData]);
 
+  const historyCoinNote = useMemo(
+    () => renamedCoinNote(historyData.map(d => d.Coin)),
+    [historyData],
+  );
+  const cryptoCoinNote = useMemo(
+    () => renamedCoinNote(cryptoData.map(d => d.Coin)),
+    [cryptoData],
+  );
+
   // Rows currently visible in the Fiat Flow table (after its column filters); drives the chart.
   const [fiatChartRows, setFiatChartRows] = useState<BinanceFiatDepositWithdraw[]>([]);
   const [fiatSynced, setFiatSynced] = useState(false);
@@ -98,29 +121,91 @@ export function InvestmentsPage() {
     setFiatSynced(true);
   }, []);
 
+  // A date picked on the price chart; the allocation pie then shows that day
+  // instead of today, and its rows are highlighted in the table. `null` = today.
+  const [allocSnapshot, setAllocSnapshot] = useState<DateSnapshot | null>(null);
+
+  const isHistoryRowSelectedDay = useCallback(
+    (row: BinanceTransaction) => {
+      if (!allocSnapshot) return false;
+      const t = parseFlexibleDate(row.Time)?.getTime();
+      return t != null && t >= allocSnapshot.timestamp && t < allocSnapshot.end;
+    },
+    [allocSnapshot],
+  );
+
+  // Rows currently visible in the Transaction History table (after its column filters); drives the chart.
+  const [historyChartRows, setHistoryChartRows] = useState<BinanceTransaction[]>([]);
+  const [historySynced, setHistorySynced] = useState(false);
+  const handleHistoryFilteredRows = useCallback((rows: BinanceTransaction[]) => {
+    setHistoryChartRows(rows);
+    setHistorySynced(true);
+    setAllocSnapshot(null); // filter changed — the picked-date snapshot no longer applies
+  }, []);
+
   const historyColumns = useMemo<ColumnDef<BinanceTransaction>[]>(() => [
     { accessorKey: 'User ID', header: 'User ID' },
-    { accessorKey: 'Time', header: 'Time' },
-    { accessorKey: 'Account', header: 'Account' },
-    { accessorKey: 'Operation', header: 'Operation' },
-    { accessorKey: 'Coin', header: 'Coin' },
-    { 
-      accessorKey: 'Change', 
+    {
+      accessorKey: 'Time',
+      header: 'Time',
+      filterFn: dateRangeFilterFn,
+      meta: { filterVariant: 'dateRange' },
+      cell: ({ row }) => (
+        <span className="font-mono whitespace-nowrap">{formatTimestamp(row.getValue('Time'))}</span>
+      ),
+    },
+    {
+      accessorKey: 'Account',
+      header: 'Account',
+      filterFn: multiSelectFilterFn,
+      meta: { filterVariant: 'multiSelect' },
+    },
+    {
+      accessorKey: 'Operation',
+      header: 'Operation',
+      filterFn: multiSelectFilterFn,
+      meta: { filterVariant: 'multiSelect' },
+    },
+    {
+      accessorKey: 'Coin',
+      header: 'Coin',
+      filterFn: multiSelectFilterFn,
+      meta: { filterVariant: 'multiSelect' },
+      cell: ({ row }) => coinLabel(row.getValue('Coin')),
+    },
+    {
+      accessorKey: 'Change',
       header: 'Change',
+      footer: ({ table }) => {
+        const total = table.getFilteredRowModel().rows.reduce((sum, row) => {
+          const val = parseFloat(row.getValue('Change'))
+          return sum + (isNaN(val) ? 0 : val)
+        }, 0)
+        const rounded = Number(total.toFixed(8))
+        return (
+          <span className={rounded < 0 ? 'text-destructive' : 'text-emerald-600'}>
+            {rounded > 0 ? `+${formatCoinAmount(rounded)}` : formatCoinAmount(rounded)}
+          </span>
+        )
+      },
       cell: ({ row }) => {
         const value = parseFloat(row.getValue('Change'))
         return <span className={`font-mono font-medium ${value < 0 ? "text-destructive" : "text-emerald-600"}`}>
-          {value > 0 ? `+${value}` : value}
+          {value > 0 ? `+${formatCoinAmount(value)}` : formatCoinAmount(value)}
         </span>
       }
     },
-    { accessorKey: 'Remark', header: 'Remark' },
-    { accessorKey: 'owner', header: 'Owner' },
+    {
+      accessorKey: 'owner',
+      header: 'Owner',
+      filterFn: multiSelectFilterFn,
+      meta: { filterVariant: 'multiSelect' },
+    },
   ], [])
 
   const cryptoColumns = useMemo<ColumnDef<BinanceDepositWithdraw>[]>(() => [
     { accessorKey: 'Time', header: 'Time' },
-    { accessorKey: 'Coin', header: 'Coin' },
+    { accessorKey: 'Coin', header: 'Coin', cell: ({ row }) => coinLabel(row.getValue('Coin')) },
     { accessorKey: 'Network', header: 'Network' },
     { 
       accessorKey: 'Amount', 
@@ -147,7 +232,7 @@ export function InvestmentsPage() {
     {
       accessorKey: 'Time',
       header: 'Time',
-      filterFn: dateRangeFilter,
+      filterFn: dateRangeFilterFn,
       meta: { filterVariant: 'dateRange' },
     },
     { accessorKey: 'Method', header: 'Method' },
@@ -169,13 +254,13 @@ export function InvestmentsPage() {
     {
       accessorKey: 'Status',
       header: 'Status',
-      filterFn: multiSelectFilter,
+      filterFn: multiSelectFilterFn,
       meta: { filterVariant: 'multiSelect' },
     },
     {
       accessorKey: 'Type',
       header: 'Type',
-      filterFn: multiSelectFilter,
+      filterFn: multiSelectFilterFn,
       meta: { filterVariant: 'multiSelect' },
     },
   ], [])
@@ -229,11 +314,52 @@ export function InvestmentsPage() {
         </TabsList>
         
         <TabsContent value="history" className="border-none p-0 outline-none">
-          <DataTable columns={historyColumns} data={filteredHistory} filterable paginated pageSize={20} loading={loading} />
+          <div className="space-y-4">
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_300px]">
+              <div className="rounded-md border p-4">
+                <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+                  Historical USD price
+                </p>
+                <AssetPriceKlineChart
+                  data={historySynced ? historyChartRows : filteredHistory}
+                  selectedTimestamp={allocSnapshot?.timestamp ?? null}
+                  onDateSelect={setAllocSnapshot}
+                />
+              </div>
+              <div className="rounded-md border p-4">
+                <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+                  Allocation
+                </p>
+                <PortfolioPieChart
+                  data={historySynced ? historyChartRows : filteredHistory}
+                  snapshot={allocSnapshot}
+                  onClearSnapshot={() => setAllocSnapshot(null)}
+                />
+              </div>
+            </div>
+            <DataTable
+              columns={historyColumns}
+              data={filteredHistory}
+              filterable
+              paginated={false}
+              loading={loading}
+              onFilteredRowsChange={handleHistoryFilteredRows}
+              isRowHighlighted={isHistoryRowSelectedDay}
+              persistFiltersKey="investments.history.columnFilters"
+            />
+            {historyCoinNote && (
+              <p className="text-[10px] text-muted-foreground">{historyCoinNote}</p>
+            )}
+          </div>
         </TabsContent>
         
         <TabsContent value="crypto" className="border-none p-0 outline-none">
-          <DataTable columns={cryptoColumns} data={filteredCrypto} filterable paginated={false} loading={loading} />
+          <div className="space-y-4">
+            <DataTable columns={cryptoColumns} data={filteredCrypto} filterable paginated={false} loading={loading} />
+            {cryptoCoinNote && (
+              <p className="text-[10px] text-muted-foreground">{cryptoCoinNote}</p>
+            )}
+          </div>
         </TabsContent>
         
         <TabsContent value="fiat" className="border-none p-0 outline-none">
