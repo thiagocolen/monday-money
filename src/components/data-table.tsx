@@ -54,6 +54,8 @@ interface DataTableProps<TData, TValue> {
   loading?: boolean
   /** Fires with the row data currently passing all column filters (post-filter, pre-pagination). */
   onFilteredRowsChange?: (rows: TData[]) => void
+  /** When it returns true for a row, that row gets a highlighted background. */
+  isRowHighlighted?: (row: TData) => boolean
   /**
    * When set, column filters (coin selection, date range, …) are saved to
    * localStorage under this key and restored on the next mount — so the choice
@@ -89,6 +91,7 @@ export function DataTable<TData, TValue>({
   meta,
   loading = false,
   onFilteredRowsChange,
+  isRowHighlighted,
   persistFiltersKey,
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = React.useState<SortingState>([])
@@ -258,12 +261,21 @@ export function DataTable<TData, TValue>({
                 </TableCell>
               </TableRow>
             ) : table.getRowModel().rows?.length ? (
-              table.getRowModel().rows.map((row) => (
+              table.getRowModel().rows.map((row) => {
+                const highlighted = isRowHighlighted?.(row.original) ?? false
+                return (
                 <TableRow
                   key={row.id}
                   data-state={row.getIsSelected() && "selected"}
+                  data-highlighted={highlighted || undefined}
                   onClick={() => onRowClick?.(row.original)}
-                  className={onRowClick ? "cursor-pointer hover:bg-muted/30 transition-colors" : "hover:bg-muted/30 transition-colors"}
+                  className={cn(
+                    "transition-colors",
+                    onRowClick && "cursor-pointer",
+                    highlighted
+                      ? "bg-primary/10 hover:bg-primary/15"
+                      : "hover:bg-muted/30",
+                  )}
                 >
                   {row.getVisibleCells().map((cell) => (
                     <TableCell 
@@ -274,7 +286,8 @@ export function DataTable<TData, TValue>({
                     </TableCell>
                   ))}
                 </TableRow>
-              ))
+                )
+              })
             ) : (
               <TableRow>
                 <TableCell colSpan={columns.length} className="h-24 text-center">

@@ -120,12 +120,26 @@ export function InvestmentsPage() {
     setFiatSynced(true);
   }, []);
 
+  // A date picked on the price chart; the allocation pie then shows that day
+  // instead of today, and its rows are highlighted in the table. `null` = today.
+  const [allocSnapshot, setAllocSnapshot] = useState<DateSnapshot | null>(null);
+
+  const isHistoryRowSelectedDay = useCallback(
+    (row: BinanceTransaction) => {
+      if (!allocSnapshot) return false;
+      const t = parseFlexibleDate(row.Time)?.getTime();
+      return t != null && t >= allocSnapshot.timestamp && t < allocSnapshot.end;
+    },
+    [allocSnapshot],
+  );
+
   // Rows currently visible in the Transaction History table (after its column filters); drives the chart.
   const [historyChartRows, setHistoryChartRows] = useState<BinanceTransaction[]>([]);
   const [historySynced, setHistorySynced] = useState(false);
   const handleHistoryFilteredRows = useCallback((rows: BinanceTransaction[]) => {
     setHistoryChartRows(rows);
     setHistorySynced(true);
+    setAllocSnapshot(null); // filter changed — the picked-date snapshot no longer applies
   }, []);
 
   const historyColumns = useMemo<ColumnDef<BinanceTransaction>[]>(() => [
@@ -300,18 +314,26 @@ export function InvestmentsPage() {
         
         <TabsContent value="history" className="border-none p-0 outline-none">
           <div className="space-y-4">
-            <div className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_300px]">
               <div className="rounded-md border p-4">
                 <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-                  Price &amp; trade volume
+                  Historical USD price
                 </p>
-                <AssetPriceVolumeChart data={historySynced ? historyChartRows : filteredHistory} />
+                <AssetPriceKlineChart
+                  data={historySynced ? historyChartRows : filteredHistory}
+                  selectedTimestamp={allocSnapshot?.timestamp ?? null}
+                  onDateSelect={setAllocSnapshot}
+                />
               </div>
               <div className="rounded-md border p-4">
                 <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-                  Today's allocation
+                  Allocation
                 </p>
-                <PortfolioPieChart data={historySynced ? historyChartRows : filteredHistory} />
+                <PortfolioPieChart
+                  data={historySynced ? historyChartRows : filteredHistory}
+                  snapshot={allocSnapshot}
+                  onClearSnapshot={() => setAllocSnapshot(null)}
+                />
               </div>
             </div>
             <DataTable
@@ -321,6 +343,7 @@ export function InvestmentsPage() {
               paginated={false}
               loading={loading}
               onFilteredRowsChange={handleHistoryFilteredRows}
+              isRowHighlighted={isHistoryRowSelectedDay}
               persistFiltersKey="investments.history.columnFilters"
             />
             {historyCoinNote && (
