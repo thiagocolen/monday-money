@@ -1,8 +1,13 @@
-import { app, BrowserWindow, ipcMain, dialog } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, session, shell } from 'electron';
 import path from 'path';
 import { fileURLToPath } from "url";
 
-// Disable sandbox to prevent startup crashes (0x80000003) on some Windows environments
+// Disable sandbox to prevent startup crashes (0x80000003) on some Windows environments.
+// SECURITY NOTE: this weakens process isolation (a renderer compromise runs with full
+// user privileges instead of being contained by the Chromium sandbox). Left in place
+// deliberately — removing it without access to the affected Windows environments risks
+// reintroducing the documented crash. Mitigated by CSP, navigation lockdown, and the
+// preload IPC allowlist below; revisit if a narrower workaround for the crash is found.
 app.commandLine.appendSwitch('no-sandbox');
 import { 
   handleGetCsvData,
@@ -43,8 +48,72 @@ function initializeCore() {
   }
 }
 
+// Origins the renderer legitimately needs for price data (see src/lib/price-history.ts, src/lib/prices.ts).
+const ALLOWED_CONNECT_ORIGINS = [
+  'https://api.exchange.coinbase.com',
+  'https://api.coingecko.com',
+];
+
+function isDev(): boolean {
+  return Boolean(process.env.VITE_DEV_SERVER_URL);
+}
+
+/**
+ * Content-Security-Policy for the packaged app. Skipped in dev, since the
+ * Vite dev server needs inline scripts / eval / a websocket connection for
+ * HMR that would otherwise have to be special-cased here.
+ */
+function applyContentSecurityPolicy() {
+  if (isDev()) return;
+  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+    callback({
+      responseHeaders: {
+        ...details.responseHeaders,
+        'Content-Security-Policy': [
+          "default-src 'self'",
+          "script-src 'self'",
+          // chart.tsx injects a small <style> tag for per-series colors.
+          "style-src 'self' 'unsafe-inline'",
+          "img-src 'self' data:",
+          "font-src 'self' data:",
+          `connect-src 'self' ${ALLOWED_CONNECT_ORIGINS.join(' ')}`,
+          "object-src 'none'",
+          "base-uri 'none'",
+          "form-action 'none'",
+          "frame-ancestors 'none'",
+        ].join('; '),
+      },
+    });
+  });
+}
+
+/** Deny opening new BrowserWindows and block navigation away from the app. */
+function lockDownNavigation(win: BrowserWindow) {
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    // Let genuine external https links open in the user's normal browser
+    // instead of a new, less-restricted Electron window.
+    if (/^https:\/\//i.test(url)) {
+      shell.openExternal(url);
+    }
+    return { action: 'deny' };
+  });
+
+  win.webContents.on('will-navigate', (event, url) => {
+    let allowed = false;
+    try {
+      const target = new URL(url);
+      if (isDev() && target.origin === new URL(process.env.VITE_DEV_SERVER_URL!).origin) allowed = true;
+      if (!isDev() && target.protocol === 'file:') allowed = true;
+    } catch {
+      allowed = false;
+    }
+    if (!allowed) event.preventDefault();
+  });
+}
+
 function createWindow() {
   initializeCore();
+  applyContentSecurityPolicy();
 
   const win = new BrowserWindow({
     width: 1200,
@@ -55,6 +124,8 @@ function createWindow() {
       contextIsolation: true,
     },
   });
+
+  lockDownNavigation(win);
 
   if (process.env.VITE_DEV_SERVER_URL) {
     win.loadURL(process.env.VITE_DEV_SERVER_URL);
