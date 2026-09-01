@@ -9,8 +9,11 @@
  * only exposes a close price (rendered as flat candles) and whose public tier
  * caps history at the last 365 days.
  *
- * Results are served from a 12-hour localStorage cache; on a network failure the
- * last good snapshot is returned flagged `stale`.
+ * Past daily candles are immutable, so the localStorage cache is treated as
+ * permanent history: a stale Coinbase series is refreshed incrementally — only
+ * the still-forming trailing edge is re-fetched, plus older days when a caller
+ * asks for a wider window — instead of re-paging the whole thing. On a network
+ * failure the last good snapshot is returned flagged `stale`.
  */
 
 import { COINGECKO_IDS, FIAT_SYMBOLS } from "./prices"
@@ -40,7 +43,8 @@ export interface CandleHistory {
 }
 
 const DAY_MS = 86_400_000
-const TTL_MS = 12 * 60 * 60_000
+/** how often the still-forming trailing edge of the series is re-fetched */
+const EDGE_TTL_MS = 12 * 60 * 60_000
 /** don't page Coinbase back further than this from now */
 const MAX_LOOKBACK_MS = 12 * 365 * DAY_MS
 const cacheKey = (ticker: string) => `mm.pricecandles.v1.${ticker.toUpperCase()}`
@@ -58,6 +62,12 @@ interface CacheShape {
   coveredFrom: number
   fetchedAt: number
 }
+
+/**
+ * In-flight resolutions keyed by ticker + requested window, so concurrent
+ * component mounts asking for the same series share one network round-trip.
+ */
+const inFlight = new Map<string, Promise<CandleHistory>>()
 
 function readCache(ticker: string): CacheShape | null {
   try {
@@ -80,19 +90,25 @@ function writeCache(ticker: string, v: CacheShape) {
 }
 
 /**
- * Daily OHLC candles from Coinbase, paged back to `fromMs`. Coinbase returns
- * rows as `[time, low, high, open, close, volume]`, newest-first, max 300 rows
- * per call. `null` = pair not listed (HTTP 404).
+ * Daily OHLC candles from Coinbase for the day-range `[fromMs, toMs]`, paged
+ * newest-first, max 300 rows per call. Coinbase returns rows as
+ * `[time, low, high, open, close, volume]`. `null` = pair not listed (HTTP 404)
+ * or the request failed before any data came back; `[]` = listed but nothing in
+ * range.
  */
-async function fetchCoinbase(ticker: string, fromMs: number): Promise<Candle[] | null> {
+async function fetchCoinbaseWindow(
+  ticker: string,
+  fromMs: number,
+  toMs: number,
+): Promise<Candle[] | null> {
   const product = `${ticker.trim().toUpperCase()}-USD`
   const floor = Math.max(fromMs, Date.now() - MAX_LOOKBACK_MS)
   const byDay = new Map<number, Candle>()
-  let end = Date.now()
+  let end = toMs
   let productExists = false
 
   for (let guard = 0; guard < 48 && end > floor; guard++) {
-    const start = end - 300 * DAY_MS
+    const start = Math.max(end - 300 * DAY_MS, floor)
     const url =
       `https://api.exchange.coinbase.com/products/${product}/candles` +
       `?granularity=86400&start=${new Date(start).toISOString()}&end=${new Date(end).toISOString()}`
@@ -128,7 +144,7 @@ async function fetchCoinbase(ticker: string, fromMs: number): Promise<Candle[] |
     await sleep(160)
   }
 
-  if (!productExists || byDay.size === 0) return productExists ? [] : null
+  if (!productExists) return null
   return [...byDay.values()].sort((a, b) => a.timestamp - b.timestamp)
 }
 
@@ -198,21 +214,65 @@ async function fetchFrankfurter(ticker: string, fromMs: number): Promise<Candle[
 }
 
 /**
- * Daily USD candle history for `ticker`, reaching back to at least `sinceMs`
- * (clamped to 12 years). Cached for 12h; a cache that already covers the
- * requested window is reused. Returns `{ candles: [] }` when the asset can't be
- * priced and there is no cache.
+ * Incrementally extend/refresh an existing Coinbase series: backfill older days
+ * only when `wanted` reaches past what's cached, and re-fetch the trailing edge
+ * only once it's older than `EDGE_TTL_MS`. Returns `null` when the cache is not a
+ * usable Coinbase series (caller should do a full fetch instead).
  */
-export async function fetchPriceCandles(ticker: string, sinceMs: number): Promise<CandleHistory> {
-  const cached = readCache(ticker)
-  const wanted = Math.max(sinceMs, Date.now() - MAX_LOOKBACK_MS)
-  const fresh = cached && Date.now() - cached.fetchedAt < TTL_MS
-  const covers = cached && cached.coveredFrom <= wanted + DAY_MS
+async function refreshCoinbaseCache(
+  ticker: string,
+  cached: CacheShape,
+  wanted: number,
+): Promise<CandleHistory | null> {
+  if (!cached.candles.length || cached.source !== "coinbase") return null
 
-  if (cached && fresh && covers) {
-    return { ...cached, stale: false }
+  const covers = cached.coveredFrom <= wanted + DAY_MS
+  const edgeFresh = Date.now() - cached.fetchedAt < EDGE_TTL_MS
+  if (covers && edgeFresh) return { ...cached, stale: false }
+
+  const byDay = new Map(cached.candles.map((c) => [c.timestamp, c]))
+  let failed = false
+
+  if (!covers) {
+    const older = await fetchCoinbaseWindow(ticker, wanted, cached.coveredFrom)
+    if (older === null) failed = true
+    else for (const c of older) byDay.set(c.timestamp, c)
   }
 
+  if (!edgeFresh) {
+    const lastTs = cached.candles[cached.candles.length - 1].timestamp
+    const recent = await fetchCoinbaseWindow(ticker, lastTs - DAY_MS, Date.now())
+    if (recent === null) failed = true
+    else for (const c of recent) byDay.set(c.timestamp, c)
+  }
+
+  const candles = [...byDay.values()].sort((a, b) => a.timestamp - b.timestamp)
+  const result: CacheShape = {
+    candles,
+    source: "coinbase",
+    coveredFrom: candles[0].timestamp,
+    // Keep the old timestamp on failure so the next call retries the edge.
+    fetchedAt: failed ? cached.fetchedAt : Date.now(),
+  }
+  writeCache(ticker, result)
+  return { ...result, stale: failed }
+}
+
+async function resolvePriceCandles(ticker: string, sinceMs: number): Promise<CandleHistory> {
+  const cached = readCache(ticker)
+  const wanted = Math.max(sinceMs, Date.now() - MAX_LOOKBACK_MS)
+
+  if (cached) {
+    const incremental = await refreshCoinbaseCache(ticker, cached, wanted)
+    if (incremental) return incremental
+
+    // Non-Coinbase cache that's still fresh and covers the window — reuse it.
+    const fresh = Date.now() - cached.fetchedAt < EDGE_TTL_MS
+    const covers = cached.coveredFrom <= wanted + DAY_MS
+    if (cached.candles.length && fresh && covers) return { ...cached, stale: false }
+  }
+
+  // No usable cache (or a stale CoinGecko/Frankfurter one) — page the full window.
   let candles: Candle[] | null = null
   let source: CandleSource = null
 
@@ -223,7 +283,7 @@ export async function fetchPriceCandles(ticker: string, sinceMs: number): Promis
   }
 
   if (!candles || candles.length === 0) {
-    candles = await fetchCoinbase(ticker, sinceMs)
+    candles = await fetchCoinbaseWindow(ticker, sinceMs, Date.now())
     source = candles && candles.length ? "coinbase" : null
   }
 
@@ -248,4 +308,20 @@ export async function fetchPriceCandles(ticker: string, sinceMs: number): Promis
   }
   writeCache(ticker, result)
   return { ...result, stale: false }
+}
+
+/**
+ * Daily USD candle history for `ticker`, reaching back to at least `sinceMs`
+ * (clamped to 12 years). A Coinbase series is cached permanently and only
+ * top-up-fetched; other sources use a 12h TTL. Returns `{ candles: [] }` when the
+ * asset can't be priced and there is no cache.
+ */
+export async function fetchPriceCandles(ticker: string, sinceMs: number): Promise<CandleHistory> {
+  const wanted = Math.max(sinceMs, Date.now() - MAX_LOOKBACK_MS)
+  const key = `${ticker.trim().toUpperCase()}|${Math.floor(wanted / DAY_MS)}`
+  const existing = inFlight.get(key)
+  if (existing) return existing
+  const p = resolvePriceCandles(ticker, sinceMs).finally(() => inFlight.delete(key))
+  inFlight.set(key, p)
+  return p
 }
