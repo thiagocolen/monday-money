@@ -1,4 +1,5 @@
 import path from "path"
+import { readFileSync } from "fs"
 import { fileURLToPath } from "url"
 import { defineConfig, type ViteDevServer } from "vite"
 import react, { reactCompilerPreset } from "@vitejs/plugin-react"
@@ -25,12 +26,17 @@ import {
 
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
 
+const pkg = JSON.parse(readFileSync(path.resolve(currentDir, "package.json"), "utf-8"));
+
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
   const isWeb = mode === 'web'
 
   return {
     base: './',
+    define: {
+      __APP_VERSION__: JSON.stringify(pkg.version),
+    },
     optimizeDeps: {
       include: ["@phosphor-icons/react"],
     },

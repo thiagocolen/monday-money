@@ -38,3 +38,5 @@ release
 
 # Real Task temporary files
 real-task-*.*
+
+.antigravitycli/

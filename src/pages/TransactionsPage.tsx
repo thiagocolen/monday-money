@@ -15,7 +15,7 @@ import { YearlyTransactionChart } from '../components/yearly-transaction-chart'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { addMonths, format, addYears } from 'date-fns'
-import { ChevronLeft, ChevronRight, Edit3, Trash2, Info, Plus, X, Check, Search, Loader2, CalendarDays, CalendarRange } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Edit3, Trash2, Info, Plus, X, Check, Search, Loader2, CalendarDays, CalendarRange, Undo2, Redo2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -80,6 +80,10 @@ export function TransactionsPage() {
   const [bulkActiveTab, setBulkActiveTab] = useState<string>("categories")
   const [bulkSearch, setBulkSearch] = useState("")
   const [editingItem, setEditingItem] = useState<{ name: string, color: string, isNew?: boolean, isDefault?: boolean } | null>(null)
+
+  type TransactionUpdate = { transactionHash: string; category?: string; tags?: string; previousCategory?: string; previousTags?: string };
+  const [undoStack, setUndoStack] = useState<TransactionUpdate[][]>([])
+  const [redoStack, setRedoStack] = useState<TransactionUpdate[][]>([])
 
   const [isPeriodHovered, setIsPeriodHovered] = useState(false)
 
@@ -336,7 +340,11 @@ export function TransactionsPage() {
     setIsSaving(true)
 
     const updates = selectedRows.map(row => {
-      const update: any = { transactionHash: row.rowHash }
+      const update: any = { 
+        transactionHash: row.rowHash,
+        previousCategory: row.category || '',
+        previousTags: row.tags || ''
+      }
       if (type === 'categories') {
         update.category = action === 'remove' ? '' : value
       } else {
@@ -356,6 +364,8 @@ export function TransactionsPage() {
 
     const success = await bulkSaveMetadata(updates)
     if (success) {
+      setUndoStack(prev => [...prev, updates])
+      setRedoStack([])
       toast.success(`Updated ${selectedRows.length} transactions`)
       loadData(false)
     } else {
@@ -363,6 +373,60 @@ export function TransactionsPage() {
     }
     setIsSaving(false)
   }
+
+  const handleUndo = async () => {
+    if (undoStack.length === 0) return;
+    setIsSaving(true);
+    const lastUpdate = undoStack[undoStack.length - 1];
+    const newUndoStack = undoStack.slice(0, -1);
+    
+    // Reverse the updates
+    const reverseUpdates = lastUpdate.map(update => ({
+      transactionHash: update.transactionHash,
+      category: update.previousCategory,
+      tags: update.previousTags,
+      previousCategory: update.category, // for redo
+      previousTags: update.tags // for redo
+    }));
+
+    const success = await bulkSaveMetadata(reverseUpdates);
+    if (success) {
+      setUndoStack(newUndoStack);
+      setRedoStack(prev => [...prev, reverseUpdates]);
+      toast.success(`Undid changes on ${lastUpdate.length} transactions`);
+      loadData(false);
+    } else {
+      toast.error("Failed to undo changes");
+    }
+    setIsSaving(false);
+  };
+
+  const handleRedo = async () => {
+    if (redoStack.length === 0) return;
+    setIsSaving(true);
+    const lastRedo = redoStack[redoStack.length - 1];
+    const newRedoStack = redoStack.slice(0, -1);
+    
+    // Reverse the undo updates to redo
+    const redoUpdates = lastRedo.map(update => ({
+      transactionHash: update.transactionHash,
+      category: update.previousCategory,
+      tags: update.previousTags,
+      previousCategory: update.category, // for undo
+      previousTags: update.tags // for undo
+    }));
+
+    const success = await bulkSaveMetadata(redoUpdates);
+    if (success) {
+      setRedoStack(newRedoStack);
+      setUndoStack(prev => [...prev, redoUpdates]);
+      toast.success(`Redid changes on ${lastRedo.length} transactions`);
+      loadData(false);
+    } else {
+      toast.error("Failed to redo changes");
+    }
+    setIsSaving(false);
+  };
 
   const currentPeriodLabel = useMemo(() => {
     const now = new Date()
@@ -477,12 +541,18 @@ export function TransactionsPage() {
         } else {
           toast.error("Select transactions first to bulk edit (or press 'A' to select all)", { duration: 2000 })
         }
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        handleUndo();
+      } else if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === 'y' || (e.key.toLowerCase() === 'z' && e.shiftKey))) {
+        e.preventDefault();
+        handleRedo();
       }
     }
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [filteredData, selectedRows.length, resetFilters, isBulkEditDialogOpen, rowSelection, filterLayers, dayFilter])
+  }, [filteredData, selectedRows.length, resetFilters, isBulkEditDialogOpen, rowSelection, filterLayers, dayFilter, undoStack, redoStack])
 
   const handlePeriodChange = (offsetUpdate: number | ((prev: number) => number)) => {
     setIsVisualPending(true)
@@ -698,6 +768,26 @@ export function TransactionsPage() {
                 </div>
 
                 <div className="ml-auto flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                    onClick={handleUndo}
+                    disabled={undoStack.length === 0 || isSaving}
+                    aria-label="Undo"
+                  >
+                    <Undo2 className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                    onClick={handleRedo}
+                    disabled={redoStack.length === 0 || isSaving}
+                    aria-label="Redo"
+                  >
+                    <Redo2 className="h-4 w-4" />
+                  </Button>
                   {selectedRows.length > 0 && (
                     <Button 
                       variant="default" 

@@ -10,7 +10,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { FolderOpen, Upload, Database, CheckCircle2 } from "lucide-react";
-import { selectDirectory, selectZipFile, setExportPath, restoreBackup } from "@/lib/api";
+import { selectDirectory, selectZipFile, setExportPath, restoreBackup, setRawCsvFolderPath } from "@/lib/api";
 import { toast } from "sonner";
 
 interface StartupDialogProps {
@@ -20,14 +20,26 @@ interface StartupDialogProps {
 
 export function StartupDialog({ open, onConfigured }: StartupDialogProps) {
   const [path, setPath] = useState("");
+  const [rawPath, setRawPath] = useState("");
   const [saving, setSaving] = useState(false);
   const [restoring, setRestoring] = useState(false);
 
   const handleBrowse = async () => {
     try {
-      const selectedPath = await selectDirectory();
+      const selectedPath = await selectDirectory("Select Export Folder");
       if (selectedPath) {
         setPath(selectedPath);
+      }
+    } catch (error) {
+      toast.error("Failed to open folder picker");
+    }
+  };
+
+  const handleBrowseRaw = async () => {
+    try {
+      const selectedPath = await selectDirectory("Select Raw CSV Folder");
+      if (selectedPath) {
+        setRawPath(selectedPath);
       }
     } catch (error) {
       toast.error("Failed to open folder picker");
@@ -39,14 +51,20 @@ export function StartupDialog({ open, onConfigured }: StartupDialogProps) {
       toast.error("Please select an export folder");
       return;
     }
+    if (!rawPath) {
+      toast.error("Please select a raw CSV folder");
+      return;
+    }
     setSaving(true);
-    const result = await setExportPath(path);
+    const resultExport = await setExportPath(path);
+    const resultRaw = await setRawCsvFolderPath(rawPath);
     setSaving(false);
-    if (result.success) {
+    
+    if (resultExport.success && resultRaw.success) {
       toast.success("Configuration saved");
       onConfigured();
     } else {
-      toast.error(result.error || "Failed to save configuration");
+      toast.error(resultExport.error || resultRaw.error || "Failed to save configuration");
     }
   };
 
@@ -127,12 +145,33 @@ export function StartupDialog({ open, onConfigured }: StartupDialogProps) {
               This folder is only used for exporting .zip backups.
             </p>
           </div>
+
+          <div className="flex flex-col gap-3">
+            <label htmlFor="rawPath" className="text-sm font-medium">
+              Raw CSV Folder Path
+            </label>
+            <div className="flex gap-2">
+              <Input
+                id="rawPath"
+                value={rawPath}
+                onChange={(e) => setRawPath(e.target.value)}
+                placeholder="C:\Downloads\BankStatements"
+                className="flex-1"
+              />
+              <Button variant="outline" size="icon" onClick={handleBrowseRaw} disabled={saving || restoring}>
+                <FolderOpen className="h-4 w-4" />
+              </Button>
+            </div>
+            <p className="text-[11px] text-muted-foreground bg-muted/50 p-2 rounded border border-dashed">
+              <strong>Note:</strong> This folder should contain subfolders (owners) with your .csv statement files.
+            </p>
+          </div>
         </div>
 
         <DialogFooter>
           <Button 
             onClick={handleSave} 
-            disabled={saving || !path || restoring}
+            disabled={saving || !path || !rawPath || restoring}
             className="w-full bg-indigo-600 hover:bg-indigo-700 text-white gap-2 h-11"
           >
             {saving ? "Saving..." : (

@@ -409,9 +409,13 @@ export async function handleRestoreBackup(zipPath: string): Promise<{ success: b
 
 export async function handleResetApp(): Promise<{ success: boolean; error?: string }> {
   try {
+    // Small delay to allow file handles to settle
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
     const coreDir = getCoreDir();
     if (fs.existsSync(coreDir)) {
-      fs.rmSync(coreDir, { recursive: true, force: true });
+      // RESET: Clear contents instead of deleting root folder to avoid EPERM on Windows
+      await safeEmptyDirAsync(coreDir);
     }
     ensureCoreStructure(coreDir);
     deleteSettings();
@@ -430,6 +434,106 @@ export async function handleSetExportPath(exportPath: string): Promise<{ success
   } catch (error) {
     console.error('Error in handleSetExportPath:', error);
     return { success: false, error: String(error) };
+  }
+}
+
+export async function handleGetRawCsvFolderPath(): Promise<string> {
+  const settings = getSettings();
+  return settings.rawCsvFolderPath || "";
+}
+
+export async function handleSetRawCsvFolderPath(rawCsvFolderPath: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    if (!rawCsvFolderPath) throw new Error('No path provided');
+    saveSettings({ rawCsvFolderPath });
+    return { success: true };
+  } catch (error) {
+    console.error('Error in handleSetRawCsvFolderPath:', error);
+    return { success: false, error: String(error) };
+  }
+}
+
+async function safeEmptyDirAsync(dir: string, retries = 5, delay = 200) {
+  if (!fs.existsSync(dir)) return;
+
+  for (let i = 0; i < retries; i++) {
+    try {
+      const files = fs.readdirSync(dir);
+      for (const file of files) {
+        const fullPath = path.join(dir, file);
+        if (fs.statSync(fullPath).isDirectory()) {
+          // RECURSIVELY EMPTY SUBDIRECTORY
+          await safeEmptyDirAsync(fullPath, retries, delay);
+          // TRY TO REMOVE THE SUBDIRECTORY ITSELF
+          try {
+            fs.rmSync(fullPath, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+          } catch (e) {
+            // Ignore if we can't remove the empty dir
+            console.warn(`Could not remove empty directory: ${fullPath}`, e);
+          }
+        } else {
+          // REMOVE FILE
+          fs.unlinkSync(fullPath);
+        }
+      }
+      return; // Success
+    } catch (error) {
+      if (i === retries - 1) throw error;
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+}
+
+export async function handleScanFolder(): Promise<{ success: boolean; error?: string }> {
+  await acquireLock();
+  try {
+    const settings = getSettings();
+    if (!settings.rawCsvFolderPath) throw new Error('Raw CSV folder path not configured');
+
+    if (!fs.existsSync(settings.rawCsvFolderPath)) {
+      throw new Error(`Folder not found: ${settings.rawCsvFolderPath}`);
+    }
+
+    const { rawStatementFilesDir, coreDir } = getPaths();
+
+    // Ensure structure exists first
+    ensureCoreStructure(coreDir);
+
+    // RESET: Clear previous generated ledger files and all raw statement files
+    clearLedger();
+    await safeEmptyDirAsync(rawStatementFilesDir);
+
+    const ownerDirs = fs.readdirSync(settings.rawCsvFolderPath).filter(f => fs.statSync(path.join(settings.rawCsvFolderPath!, f)).isDirectory());
+
+    for (const ownerName of ownerDirs) {
+      const sourceOwnerPath = path.join(settings.rawCsvFolderPath, ownerName);
+      const targetOwnerPath = resolveSafePath(rawStatementFilesDir, ownerName);
+
+      if (!fs.existsSync(targetOwnerPath)) {
+        fs.mkdirSync(targetOwnerPath, { recursive: true });
+      }
+
+      const files = fs.readdirSync(sourceOwnerPath).filter(f => f.endsWith('.csv'));
+      for (const file of files) {
+        const sourceFilePath = path.join(sourceOwnerPath, file);
+        const targetFilePath = path.join(targetOwnerPath, file);
+        
+        // Copy every file (reset means we start fresh)
+        fs.copyFileSync(sourceFilePath, targetFilePath);
+      }
+    }
+
+    // Run pipeline: re-initialize since we cleared data
+    createSeedTransaction();
+    dataImportRegistration();
+    integrityCheck();
+
+    return { success: true };
+  } catch (error) {
+    console.error('Error in handleScanFolder:', error);
+    return { success: false, error: String(error) };
+  } finally {
+    releaseLock();
   }
 }
 

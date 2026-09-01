@@ -4,7 +4,6 @@ import { Layout } from './components/Layout'
 import { TransactionsPage } from './pages/TransactionsPage'
 import { InvestmentsPage } from './pages/InvestmentsPage'
 import { ImportPage } from './pages/ImportPage'
-import BackupPage from './pages/BackupPage'
 import { Toaster } from 'sonner'
 import { TooltipProvider } from './components/ui/tooltip'
 import { useEffect, useState } from 'react'
@@ -31,10 +30,6 @@ const router = createMemoryRouter([
       {
         path: 'import',
         element: <ImportPage />,
-      },
-      {
-        path: 'backup',
-        element: <BackupPage />,
       },
     ],
   },

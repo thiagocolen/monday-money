@@ -1,6 +1,9 @@
 import { app, BrowserWindow, ipcMain, dialog } from 'electron';
 import path from 'path';
 import { fileURLToPath } from "url";
+
+// Disable sandbox to prevent startup crashes (0x80000003) on some Windows environments
+app.commandLine.appendSwitch('no-sandbox');
 import { 
   handleGetCsvData,
   handleGetOwners,
@@ -134,12 +137,12 @@ ipcMain.handle('get-settings', async () => {
   }
 });
 
-ipcMain.handle('select-directory', async (event) => {
+ipcMain.handle('select-directory', async (event, title = 'Select Folder') => {
   try {
     const win = BrowserWindow.fromWebContents(event.sender);
     const result = await dialog.showOpenDialog(win!, {
       properties: ['openDirectory'],
-      title: 'Select Export Folder',
+      title: title,
       buttonLabel: 'Select Folder'
     });
     if (result.canceled) {
@@ -180,5 +183,20 @@ ipcMain.handle('set-export-path', async (event, exportPath) => {
     console.error('Main: Error in set-export-path', error);
     return { success: false, error: String(error) };
   }
+});
+
+ipcMain.handle('get-raw-csv-folder-path', async () => {
+  const { handleGetRawCsvFolderPath } = await import('../backend/index.js');
+  return handleGetRawCsvFolderPath();
+});
+
+ipcMain.handle('set-raw-csv-folder-path', async (event, path) => {
+  const { handleSetRawCsvFolderPath } = await import('../backend/index.js');
+  return handleSetRawCsvFolderPath(path);
+});
+
+ipcMain.handle('scan-folder', async () => {
+  const { handleScanFolder } = await import('../backend/index.js');
+  return handleScanFolder();
 });
 

@@ -97,26 +97,6 @@ export async function importRawCSV(page: Page) {
   }
 }
 
-export async function deleteImportedRawCSV(page: Page) {
-  await navigateTo(page, "Import");
-  
-  // Wait for history to load
-  const main = page.getByRole("main");
-  await expect(main).not.toContainText("Loading...");
-  
-  const row = page.getByRole("row").filter({ hasText: "Nubank_2026-01-09.csv" }).filter({ hasText: "test" });
-  
-  // Conditional check allows cleanup to be idempotent and resilient to previous test failures
-  if (await row.count() > 0) {
-    await row.first().getByRole("button").click();
-    await page.getByRole("button", { name: "Remove and Reprocess" }).click();
-    
-    // Fix strict mode violation: there are two "Close" buttons (the button and the X icon)
-    await page.getByRole("button", { name: "Close" }).first().click();
-    
-    await expect(row).toBeHidden();
-  }
-}
 
 export async function searchForTransaction(page: Page, minTransactions: number = 1) {
   await navigateTo(page, "Transactions");
