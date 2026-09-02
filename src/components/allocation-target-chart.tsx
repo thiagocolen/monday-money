@@ -346,7 +346,10 @@ export function AllocationTargetChart({ data, quotes }: AllocationTargetChartPro
               {/* drift bar: current vs. target */}
               <div className="flex items-center gap-1.5 pl-3.5 text-[10px]">
                 <div className="relative h-2.5 flex-1">
-                  <div className="absolute inset-y-0 left-1/2 w-px bg-border" />
+                  {/* full-width track — the blue/amber bar reads against it */}
+                  <div className="absolute inset-x-0 inset-y-[2px] rounded-[1px] bg-muted" />
+                  {/* zero line at centre */}
+                  <div className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-border" />
                   <div
                     className="absolute inset-y-[2px] rounded-[1px]"
                     style={{
