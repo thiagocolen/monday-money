@@ -140,7 +140,7 @@ export function PortfolioPieChart({
   return (
     <div className="space-y-2">
       {header}
-      <ChartContainer config={config} className="mx-auto aspect-square h-[220px]">
+      <ChartContainer config={config} className="mx-auto aspect-square h-[260px]">
         <PieChart>
           <Tooltip content={<SliceTooltip />} />
           <Pie

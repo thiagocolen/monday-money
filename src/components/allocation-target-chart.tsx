@@ -188,11 +188,11 @@ export function AllocationTargetChart({ data, quotes }: AllocationTargetChartPro
   return (
     <div className="space-y-3">
       {pieData.length === 0 ? (
-        <div className="flex h-[200px] items-center justify-center px-4 text-center text-xs text-muted-foreground">
+        <div className="flex h-[240px] items-center justify-center px-4 text-center text-xs text-muted-foreground">
           Set a target weight below to see your allocation and today's drift from it.
         </div>
       ) : (
-      <ChartContainer config={config} className="mx-auto aspect-square h-[200px]">
+      <ChartContainer config={config} className="mx-auto aspect-square h-[240px]">
         <PieChart>
           <Tooltip
             content={({ active, payload }) => {

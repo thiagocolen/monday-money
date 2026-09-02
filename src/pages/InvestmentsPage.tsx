@@ -315,7 +315,7 @@ export function InvestmentsPage() {
         
         <TabsContent value="history" className="border-none p-0 outline-none">
           <div className="space-y-4">
-            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_300px]">
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_380px]">
               <div className="rounded-md border p-4">
                 <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
                   Historical USD price
