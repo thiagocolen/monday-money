@@ -63,11 +63,6 @@ export function AllocationTargetChart({ data, quotes }: AllocationTargetChartPro
   const [target, setTarget] = React.useState<AllocationTarget>(() =>
     loadAllocationTarget(),
   )
-  // Coins that get a row even when they carry no weight and aren't held — so a
-  // row doesn't vanish while its input is transiently empty mid-edit.
-  const [pinned, setPinned] = React.useState<string[]>(() =>
-    Object.keys(loadAllocationTarget()),
-  )
   const [pickerKey, setPickerKey] = React.useState(0)
 
   const commit = React.useCallback((next: AllocationTarget) => {
@@ -75,6 +70,8 @@ export function AllocationTargetChart({ data, quotes }: AllocationTargetChartPro
     saveAllocationTarget(next)
   }, [])
 
+  // A weight of 0 (or a cleared field) drops the coin from the target — a held
+  // coin keeps its row regardless, an added one disappears.
   const setWeight = (coin: string, raw: string) => {
     const n = Number(raw)
     const next = { ...target }
@@ -83,15 +80,9 @@ export function AllocationTargetChart({ data, quotes }: AllocationTargetChartPro
     commit(next)
   }
 
-  const removeRow = (coin: string) => {
-    const next = { ...target }
-    delete next[coin]
-    commit(next)
-    setPinned((p) => p.filter((c) => c !== coin))
-  }
-
+  // Picked from the "add asset" dropdown — seeds at 1%.
   const addCoin = (coin: string) => {
-    setPinned((p) => (p.includes(coin) ? p : [...p, coin]))
+    if (!(coin in target)) commit({ ...target, [coin]: 1 })
     setPickerKey((k) => k + 1)
   }
 
@@ -99,7 +90,6 @@ export function AllocationTargetChart({ data, quotes }: AllocationTargetChartPro
     const next: AllocationTarget = {}
     for (const s of slices) next[s.coin.toUpperCase()] = Math.round(s.share * 1000) / 10
     commit(next)
-    setPinned(Object.keys(next))
   }
 
   const total = targetTotal(target)
@@ -108,8 +98,10 @@ export function AllocationTargetChart({ data, quotes }: AllocationTargetChartPro
     const byCoin = new Map(slices.map((s) => [s.coin.toUpperCase(), s]))
     const order: string[] = []
     for (const s of slices) order.push(s.coin.toUpperCase()) // held first, usd desc
-    for (const c of Object.keys(target)) if (!order.includes(c)) order.push(c)
-    for (const c of pinned) if (!order.includes(c)) order.push(c)
+    // then added (non-held) coins that carry a weight, heaviest first
+    for (const c of Object.keys(target).sort((a, b) => target[b] - target[a])) {
+      if (!order.includes(c)) order.push(c)
+    }
 
     return order.map((coin) => {
       const s = byCoin.get(coin)
@@ -131,7 +123,7 @@ export function AllocationTargetChart({ data, quotes }: AllocationTargetChartPro
         held: !!s,
       }
     })
-  }, [slices, target, pinned, total, totalUsd])
+  }, [slices, target, total, totalUsd])
 
   const pieData = React.useMemo(() => {
     const parts = rows
@@ -331,16 +323,6 @@ export function AllocationTargetChart({ data, quotes }: AllocationTargetChartPro
                   />
                   <span className="text-[11px] text-muted-foreground">%</span>
                 </div>
-                {!r.held && (
-                  <button
-                    type="button"
-                    onClick={() => removeRow(r.coin)}
-                    className="shrink-0 text-muted-foreground hover:text-destructive"
-                    aria-label={`Remove ${r.coin}`}
-                  >
-                    ×
-                  </button>
-                )}
               </div>
 
               {/* drift bar: current vs. target */}
@@ -375,13 +357,18 @@ export function AllocationTargetChart({ data, quotes }: AllocationTargetChartPro
             </div>
           )
         })}
-      </div>
 
-      {/* controls */}
-      <div className="flex items-center gap-2">
+        {/* add an asset to the target list — seeds at 1% */}
         <Select key={pickerKey} onValueChange={addCoin}>
-          <SelectTrigger className="h-7 flex-1 text-xs" disabled={available.length === 0}>
-            <SelectValue placeholder="Add coin…" />
+          <SelectTrigger
+            className="mt-1 h-7 w-full text-xs"
+            disabled={available.length === 0}
+          >
+            <SelectValue
+              placeholder={
+                available.length === 0 ? "All priced assets added" : "+ Add asset…"
+              }
+            />
           </SelectTrigger>
           <SelectContent>
             {available.map((c) => (
@@ -391,20 +378,21 @@ export function AllocationTargetChart({ data, quotes }: AllocationTargetChartPro
             ))}
           </SelectContent>
         </Select>
+      </div>
+
+      {/* controls */}
+      <div className="flex items-center gap-2">
         <button
           type="button"
           onClick={matchCurrent}
-          className="shrink-0 rounded border px-2 py-1 text-[11px] text-muted-foreground hover:bg-muted hover:text-foreground"
+          className="flex-1 rounded border px-2 py-1 text-[11px] text-muted-foreground hover:bg-muted hover:text-foreground"
         >
           Match current
         </button>
         <button
           type="button"
-          onClick={() => {
-            commit({})
-            setPinned([])
-          }}
-          className="shrink-0 rounded border px-2 py-1 text-[11px] text-muted-foreground hover:bg-muted hover:text-foreground"
+          onClick={() => commit({})}
+          className="flex-1 rounded border px-2 py-1 text-[11px] text-muted-foreground hover:bg-muted hover:text-foreground"
         >
           Clear
         </button>
@@ -414,8 +402,8 @@ export function AllocationTargetChart({ data, quotes }: AllocationTargetChartPro
         Bars show today's drift from target — {""}
         <span style={{ color: OVER_COLOR }}>amber = trim</span>,{" "}
         <span style={{ color: UNDER_COLOR }}>blue = add</span>. Rebalance amounts value
-        the target against today's {fmtUsd(totalUsd, true)} priced portfolio. Saved on this
-        device.
+        the target against today's {fmtUsd(totalUsd, true)} priced portfolio. Set an added
+        asset to 0% to drop it. Saved on this device.
         {unpriced.length > 0 && ` No quote for: ${unpriced.map(coinLabel).join(", ")}.`}
       </p>
     </div>
