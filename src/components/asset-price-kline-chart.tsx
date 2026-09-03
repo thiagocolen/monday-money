@@ -4,6 +4,7 @@ import * as React from "react"
 import {
   dispose,
   init,
+  LineType,
   registerIndicator,
   registerYAxis,
   TooltipShowRule,
@@ -12,6 +13,7 @@ import {
 import type {
   Chart,
   DeepPartial,
+  IndicatorFigureStyle,
   KLineData,
   Styles,
   TooltipLegend,
@@ -45,9 +47,15 @@ interface AssetPriceKlineChartProps {
 const DAY_MS = 86_400_000
 const CANDLE_PANE = "candle_pane"
 const INDICATOR_NAME = "MM_PRICE_LINES"
+const EMA_NAME = "MM_PRICE_EMA"
 const HOLDINGS_PANE = "pane_holdings"
 const HOLDINGS_NAME = "MM_HOLDINGS"
 const LOG_YAXIS = "mm-log"
+
+/** EMA period presets offered when a single asset is charted. */
+const EMA_PERIODS = [9, 21, 50] as const
+const EMA_PERIOD_KEY = "mm.history.klineEmaPeriod"
+const EMA_ON_KEY = "mm.history.klineEmaOn"
 
 const fmtUsdShort = (v: number): string =>
   v.toLocaleString("en-US", {
@@ -128,6 +136,54 @@ registerIndicator({
     dataList.map((d) => ({
       ...((d as { prices?: Record<string, number> }).prices ?? {}),
     })),
+})
+
+/**
+ * Exponential moving average of the single charted coin's USD close, drawn as a
+ * dashed line on the candle pane's shared axis. Only mounted when exactly one
+ * asset is plotted, so each bar carries at most one price in `prices`.
+ * `calcParams` is `[period, lineColor]` — the colour is themed by the caller and
+ * threaded through so `regenerateFigures` can paint the line.
+ */
+registerIndicator<{ ema?: number }>({
+  name: EMA_NAME,
+  shortName: "EMA",
+  precision: 2,
+  calcParams: [EMA_PERIODS[1], "#888888"],
+  figures: [{ key: "ema", title: "EMA: ", type: "line" }],
+  regenerateFigures: (params) => {
+    const period = Math.round(Number((params as unknown[])[0]) || EMA_PERIODS[1])
+    const color = String((params as unknown[])[1] ?? "#888888")
+    return [
+      {
+        key: "ema",
+        title: `EMA ${period}: `,
+        type: "line",
+        // klinecharts mistypes IndicatorFigureStyle["style"] — cast past it.
+        styles: () =>
+          ({
+            color,
+            style: LineType.Dashed,
+            dashedValue: [4, 3],
+          }) as unknown as IndicatorFigureStyle,
+      },
+    ]
+  },
+  calc: (dataList, indicator) => {
+    const period = Math.max(
+      1,
+      Math.round(Number((indicator.calcParams as unknown[])?.[0]) || EMA_PERIODS[1]),
+    )
+    const k = 2 / (period + 1)
+    let ema: number | undefined
+    return dataList.map((d) => {
+      const prices = (d as { prices?: Record<string, number> }).prices ?? {}
+      const price = Object.values(prices)[0]
+      if (typeof price !== "number" || !(price > 0)) return { ema }
+      ema = ema == null ? price : price * k + ema * (1 - k)
+      return { ema }
+    })
+  },
 })
 
 /**
@@ -573,6 +629,11 @@ export function AssetPriceKlineChart({
     () => (["day", "week", "month"] as const).find((t) => t === safeGet(TF_KEY)) ?? "day",
   )
   const [logScale, setLogScale] = React.useState(() => safeGet(LOG_KEY) === "1")
+  const [emaOn, setEmaOn] = React.useState(() => safeGet(EMA_ON_KEY) === "1")
+  const [emaPeriod, setEmaPeriod] = React.useState<number>(() => {
+    const v = Number(safeGet(EMA_PERIOD_KEY))
+    return (EMA_PERIODS as readonly number[]).includes(v) ? v : EMA_PERIODS[1]
+  })
   const chooseTimeframe = React.useCallback((tf: Timeframe) => {
     setTimeframe(tf)
     safeSet(TF_KEY, tf)
@@ -582,6 +643,16 @@ export function AssetPriceKlineChart({
       safeSet(LOG_KEY, v ? "0" : "1")
       return !v
     })
+  }, [])
+  const toggleEma = React.useCallback(() => {
+    setEmaOn((v) => {
+      safeSet(EMA_ON_KEY, v ? "0" : "1")
+      return !v
+    })
+  }, [])
+  const chooseEmaPeriod = React.useCallback((p: number) => {
+    setEmaPeriod(p)
+    safeSet(EMA_PERIOD_KEY, String(p))
   }, [])
 
   // Stablecoins are dropped from the plot; everything else is a line.
@@ -630,6 +701,10 @@ export function AssetPriceKlineChart({
   )
   const loading = plotCoins.length > 0 && !merged
   const hasLines = (merged?.priced.length ?? 0) > 0
+  /** the EMA overlay only makes sense against a single asset's price line */
+  const singleAsset = plotCoins.length === 1
+  const showEma = singleAsset && emaOn && (merged?.priced.length ?? 0) === 1
+  const emaColor = isDark ? "#e5e7eb" : "#1f2937"
 
   const viewData = React.useMemo(
     () => (merged ? bucketKline(merged.klineData, timeframe) : []),
@@ -732,6 +807,7 @@ export function AssetPriceKlineChart({
     chart.setPriceVolumePrecision(merged?.axisPrecision ?? 2, 2)
     chart.applyNewData(viewData)
     chart.removeIndicator(CANDLE_PANE, INDICATOR_NAME)
+    chart.removeIndicator(CANDLE_PANE, EMA_NAME)
     chart.removeIndicator(HOLDINGS_PANE, HOLDINGS_NAME)
     if (lines.length > 0 && merged) {
       chart.createIndicator(
@@ -739,6 +815,17 @@ export function AssetPriceKlineChart({
         true,
         { id: CANDLE_PANE },
       )
+      if (showEma) {
+        chart.createIndicator(
+          {
+            name: EMA_NAME,
+            calcParams: [emaPeriod, emaColor],
+            precision: merged.precision,
+          },
+          true,
+          { id: CANDLE_PANE },
+        )
+      }
       if (merged.hasHoldings) {
         chart.createIndicator(
           { name: HOLDINGS_NAME, calcParams: merged.stackOrder },
@@ -757,7 +844,7 @@ export function AssetPriceKlineChart({
         c.scrollToRealTime()
       })
     }
-  }, [merged, viewData, isDark, logScale])
+  }, [merged, viewData, isDark, logScale, showEma, emaPeriod, emaColor])
 
   // Vertical line on the picked bar, falling back to the latest bar ("today")
   // when nothing is picked. Runs after the data push so the overlay's timestamp
@@ -818,6 +905,41 @@ export function AssetPriceKlineChart({
           >
             Log scale
           </button>
+
+          {singleAsset && (
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={toggleEma}
+                aria-pressed={emaOn}
+                className={cn(
+                  "border px-2 py-0.5 text-[11px] transition-colors",
+                  emaOn
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : "border-border text-muted-foreground hover:bg-muted hover:text-foreground",
+                )}
+              >
+                EMA
+              </button>
+              {emaOn &&
+                EMA_PERIODS.map((p) => (
+                  <button
+                    key={p}
+                    type="button"
+                    onClick={() => chooseEmaPeriod(p)}
+                    aria-pressed={p === emaPeriod}
+                    className={cn(
+                      "border px-1.5 py-0.5 text-[11px] tabular-nums transition-colors",
+                      p === emaPeriod
+                        ? "border-primary bg-primary text-primary-foreground"
+                        : "border-border text-muted-foreground hover:bg-muted hover:text-foreground",
+                    )}
+                  >
+                    {p}
+                  </button>
+                ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -860,6 +982,15 @@ export function AssetPriceKlineChart({
                 {coinLabel(coin)}
               </span>
             ))}
+            {showEma && (
+              <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                <span
+                  className="inline-block h-0 w-3 shrink-0 border-t-2 border-dashed"
+                  style={{ borderColor: emaColor }}
+                />
+                EMA {emaPeriod}
+              </span>
+            )}
           </div>
           <p className="text-[10px] text-muted-foreground">
             {timeframe === "day" ? "Daily" : timeframe === "week" ? "Weekly" : "Monthly"}{" "}
@@ -878,6 +1009,10 @@ export function AssetPriceKlineChart({
             {logScale
               ? "Log axis."
               : "Lines share one linear USD axis — turn on Log scale or filter the Coin column to compare assets of different price."}
+            {showEma &&
+              ` Dashed line: ${emaPeriod}-period exponential moving average of the ${
+                timeframe === "day" ? "daily" : timeframe === "week" ? "weekly" : "monthly"
+              } close.`}
             {merged.hasHoldings &&
               " Lower pane: USD value of holdings, stacked by asset."}
             {merged.unpriced.length > 0 &&
