@@ -16,6 +16,8 @@ import {
   handleBulkSaveMetadata,
   handleGetMetadata,
   handleSaveMetadata,
+  handleGetAllocationTarget,
+  handleSaveAllocationTarget,
   handleFullBackup,
   handleGetBackupInfo,
   handleRestoreBackup,
@@ -192,6 +194,32 @@ export default defineConfig(({ mode }) => {
                 try {
                   const { type, data } = JSON.parse(body)
                   const result = await handleSaveMetadata(type, data)
+                  res.statusCode = 200
+                  res.setHeader("Content-Type", "application/json")
+                  res.end(JSON.stringify(result))
+                } catch (e: any) {
+                  res.statusCode = 400
+                  res.end(JSON.stringify({ success: false, error: e.message }))
+                }
+              })
+              return
+            }
+
+            if (req.url === "/api/allocation-target" && req.method === "GET") {
+              const target = await handleGetAllocationTarget()
+              res.statusCode = 200
+              res.setHeader("Content-Type", "application/json")
+              res.end(JSON.stringify(target))
+              return
+            }
+
+            if (req.url === "/api/allocation-target" && req.method === "POST") {
+              let body = ""
+              req.on("data", (chunk: Buffer) => { body += chunk.toString() })
+              req.on("end", async () => {
+                try {
+                  const target = JSON.parse(body)
+                  const result = await handleSaveAllocationTarget(target)
                   res.statusCode = 200
                   res.setHeader("Content-Type", "application/json")
                   res.end(JSON.stringify(result))

@@ -21,7 +21,7 @@ import type { DateRangeFilterValue } from '@/components/date-range-filter'
 import { FiatFlowChart } from '@/components/fiat-flow-chart'
 import { AssetPriceKlineChart } from '@/components/asset-price-kline-chart'
 import type { DateSnapshot } from '@/components/asset-price-kline-chart'
-import { PortfolioPieChart } from '@/components/portfolio-pie-chart'
+import { AllocationPanel } from '@/components/allocation-panel'
 import { canonicalCoin, coinLabel, formatCoinAmount, renamedCoinNote } from '@/lib/coins'
 
 /** Inclusive epoch-ms range filter over a flexibly-formatted timestamp column. */
@@ -315,7 +315,7 @@ export function InvestmentsPage() {
         
         <TabsContent value="history" className="border-none p-0 outline-none">
           <div className="space-y-4">
-            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_300px]">
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_380px]">
               <div className="rounded-md border p-4">
                 <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
                   Historical USD price
@@ -330,7 +330,7 @@ export function InvestmentsPage() {
                 <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
                   Allocation
                 </p>
-                <PortfolioPieChart
+                <AllocationPanel
                   data={historySynced ? historyChartRows : filteredHistory}
                   snapshot={allocSnapshot}
                   onClearSnapshot={() => setAllocSnapshot(null)}

@@ -392,6 +392,42 @@ export async function saveMetadataConfig(type: 'tags' | 'categories', data: any[
   }
 }
 
+/**
+ * Target allocation weights (percent per coin), persisted server-side in
+ * `core/data/allocation-target.json` so they travel with the full backup.
+ */
+export async function fetchAllocationTarget(): Promise<Record<string, number>> {
+  try {
+    if (window.electron) {
+      return await invoke('get-allocation-target');
+    }
+    const response = await fetch('/api/allocation-target');
+    return await response.json();
+  } catch (error) {
+    console.error('Error fetching allocation target:', error);
+    return {};
+  }
+}
+
+export async function saveAllocationTargetRemote(target: Record<string, number>): Promise<boolean> {
+  try {
+    if (window.electron) {
+      const result = await invoke<{ success: boolean }>('save-allocation-target', target);
+      return result.success;
+    }
+    const response = await fetch('/api/allocation-target', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(target),
+    });
+    const result = await response.json();
+    return result.success;
+  } catch (error) {
+    console.error('Error saving allocation target:', error);
+    return false;
+  }
+}
+
 export async function fullBackup(): Promise<{ success: boolean; fileName?: string; error?: string }> {
   try {
     if (window.electron) {

@@ -19,6 +19,8 @@ import {
   handleBulkSaveMetadata,
   handleGetMetadata,
   handleSaveMetadata,
+  handleGetAllocationTarget,
+  handleSaveAllocationTarget,
   handleFullBackup,
   handleRestoreBackup,
   handleResetApp,
@@ -196,6 +198,14 @@ ipcMain.handle('get-metadata', async () => {
 
 ipcMain.handle('save-metadata', async (event, { type, data }) => {
   return handleSaveMetadata(type, data);
+});
+
+ipcMain.handle('get-allocation-target', async () => {
+  return handleGetAllocationTarget();
+});
+
+ipcMain.handle('save-allocation-target', async (event, target) => {
+  return handleSaveAllocationTarget(target);
 });
 
 ipcMain.handle('get-settings', async () => {
