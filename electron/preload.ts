@@ -22,6 +22,8 @@ const ALLOWED_CHANNELS = new Set([
   'bulk-save-metadata',
   'get-metadata',
   'save-metadata',
+  'get-allocation-target',
+  'save-allocation-target',
   'get-settings',
   'select-directory',
   'select-zip-file',

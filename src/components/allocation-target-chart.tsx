@@ -16,6 +16,7 @@ import {
 import type { BinanceTransaction } from "@/lib/api"
 import { buildLiveAllocation, fmtUsd } from "@/lib/allocation"
 import {
+  fetchAllocationTarget,
   loadAllocationTarget,
   saveAllocationTarget,
   targetTotal,
@@ -65,13 +66,29 @@ export function AllocationTargetChart({ data, quotes }: AllocationTargetChartPro
   )
   const [pickerKey, setPickerKey] = React.useState(0)
 
+  // Local edits win over a late-arriving server copy.
+  const dirtyRef = React.useRef(false)
+
   const commit = React.useCallback((next: AllocationTarget) => {
+    dirtyRef.current = true
     setTarget(next)
     saveAllocationTarget(next)
   }, [])
 
-  // A weight of 0 (or a cleared field) drops the coin from the target — a held
-  // coin keeps its row regardless, an added one disappears.
+  // Hydrate from the authoritative server copy (the one that rides along in the
+  // full backup); the localStorage seed above keeps the first paint instant.
+  React.useEffect(() => {
+    let alive = true
+    fetchAllocationTarget().then((remote) => {
+      if (alive && !dirtyRef.current) setTarget(remote)
+    })
+    return () => {
+      alive = false
+    }
+  }, [])
+
+  // A weight of 0 (or a cleared field) drops the coin from the target, which
+  // removes its row and returns it to the "add asset" dropdown — held or not.
   const setWeight = (coin: string, raw: string) => {
     const n = Number(raw)
     const next = { ...target }
@@ -88,7 +105,10 @@ export function AllocationTargetChart({ data, quotes }: AllocationTargetChartPro
 
   const matchCurrent = () => {
     const next: AllocationTarget = {}
-    for (const s of slices) next[s.coin.toUpperCase()] = Math.round(s.share * 1000) / 10
+    for (const s of slices) {
+      const pct = Math.round(s.share * 1000) / 10
+      if (pct > 0) next[s.coin.toUpperCase()] = pct
+    }
     commit(next)
   }
 
@@ -97,10 +117,14 @@ export function AllocationTargetChart({ data, quotes }: AllocationTargetChartPro
   const rows = React.useMemo<Row[]>(() => {
     const byCoin = new Map(slices.map((s) => [s.coin.toUpperCase(), s]))
     const order: string[] = []
-    for (const s of slices) order.push(s.coin.toUpperCase()) // held first, usd desc
+    // only assets with a target weight above 0 get a row — held ones first, usd desc
+    for (const s of slices) {
+      const c = s.coin.toUpperCase()
+      if ((target[c] ?? 0) > 0) order.push(c)
+    }
     // then added (non-held) coins that carry a weight, heaviest first
     for (const c of Object.keys(target).sort((a, b) => target[b] - target[a])) {
-      if (!order.includes(c)) order.push(c)
+      if ((target[c] ?? 0) > 0 && !order.includes(c)) order.push(c)
     }
 
     return order.map((coin) => {
@@ -402,8 +426,8 @@ export function AllocationTargetChart({ data, quotes }: AllocationTargetChartPro
         Bars show today's drift from target — {""}
         <span style={{ color: OVER_COLOR }}>amber = trim</span>,{" "}
         <span style={{ color: UNDER_COLOR }}>blue = add</span>. Rebalance amounts value
-        the target against today's {fmtUsd(totalUsd, true)} priced portfolio. Set an added
-        asset to 0% to drop it. Saved on this device.
+        the target against today's {fmtUsd(totalUsd, true)} priced portfolio. Set an asset
+        to 0% to drop it. Saved on this device.
         {unpriced.length > 0 && ` No quote for: ${unpriced.map(coinLabel).join(", ")}.`}
       </p>
     </div>
