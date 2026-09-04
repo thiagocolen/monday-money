@@ -53,7 +53,7 @@ const HOLDINGS_NAME = "MM_HOLDINGS"
 const LOG_YAXIS = "mm-log"
 
 /** EMA period presets offered when a single asset is charted. */
-const EMA_PERIODS = [9, 21, 50] as const
+const EMA_PERIODS = [9, 21, 50, 100, 200] as const
 const EMA_PERIOD_KEY = "mm.history.klineEmaPeriod"
 const EMA_ON_KEY = "mm.history.klineEmaOn"
 
