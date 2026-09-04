@@ -614,7 +614,7 @@ export function AssetPriceKlineChart({
   selectedTimestamp,
   onDateSelect,
 }: AssetPriceKlineChartProps) {
-  const { coins, earliest } = React.useMemo(() => coinsFromRows(data), [data])
+  const { coins } = React.useMemo(() => coinsFromRows(data), [data])
   const isDark = useIsDark()
 
   const onDateSelectRef = React.useRef(onDateSelect)
@@ -681,16 +681,18 @@ export function AssetPriceKlineChart({
   React.useEffect(() => {
     if (plotCoins.length === 0) return
     let alive = true
+    // Pull each asset's full listed history (capped at ~12y inside the fetch),
+    // not just back to the first transaction — the price context before you
+    // held the asset is worth showing.
     mapLimit(plotCoins, 4, async (coin) => {
-      const since = earliest[coin] ?? Date.now() - 365 * DAY_MS
-      return [coin, await fetchPriceCandles(coin, since)] as const
+      return [coin, await fetchPriceCandles(coin, 0)] as const
     }).then((entries) => {
       if (alive) setHistories({ key: plotKey, map: new Map(entries) })
     })
     return () => {
       alive = false
     }
-  }, [plotKey, plotCoins, earliest])
+  }, [plotKey, plotCoins])
 
   const merged = React.useMemo(
     () =>
@@ -788,26 +790,20 @@ export function AssetPriceKlineChart({
     }
   }, [timeframe, plotKey])
 
-  // Push data, theme, scale and the per-coin line set.
+  // (1) Data + the per-coin lines and holdings bars. Rebuilt only when the
+  // underlying series changes — a timeframe switch, a different coin filter, or
+  // a fresh fetch. Style and overlay toggles are handled by the effects below
+  // so they never call `applyNewData` and yank the pan/zoom back to "now".
   React.useEffect(() => {
     const chart = chartRef.current
     if (!chart) return
     const lines = merged?.priced ?? []
-    const family = containerRef.current
-      ? getComputedStyle(containerRef.current).fontFamily
-      : "monospace"
 
-    chart.setStyles(klineStyles(isDark, family, logScale))
-    chart.setPaneOptions({
-      id: CANDLE_PANE,
-      axisOptions: { name: logScale ? LOG_YAXIS : "default" },
-    })
     // Linear ticks stay at 2 decimals for dollar-plus assets: klinecharts'
     // built-in generator mis-scales a wide range at higher precision.
     chart.setPriceVolumePrecision(merged?.axisPrecision ?? 2, 2)
     chart.applyNewData(viewData)
     chart.removeIndicator(CANDLE_PANE, INDICATOR_NAME)
-    chart.removeIndicator(CANDLE_PANE, EMA_NAME)
     chart.removeIndicator(HOLDINGS_PANE, HOLDINGS_NAME)
     if (lines.length > 0 && merged) {
       chart.createIndicator(
@@ -815,17 +811,6 @@ export function AssetPriceKlineChart({
         true,
         { id: CANDLE_PANE },
       )
-      if (showEma) {
-        chart.createIndicator(
-          {
-            name: EMA_NAME,
-            calcParams: [emaPeriod, emaColor],
-            precision: merged.precision,
-          },
-          true,
-          { id: CANDLE_PANE },
-        )
-      }
       if (merged.hasHoldings) {
         chart.createIndicator(
           { name: HOLDINGS_NAME, calcParams: merged.stackOrder },
@@ -833,8 +818,10 @@ export function AssetPriceKlineChart({
           { id: HOLDINGS_PANE, height: 108 },
         )
       }
-      // Open on the whole history rather than the most recent bars. Runs after
-      // layout so clientWidth is real.
+      // Frame as much history as fits. A daily series is usually longer than
+      // the pane can show at the 1px-per-bar floor, so it opens scrolled to
+      // today; weekly/monthly fit the whole range. Runs after layout so
+      // clientWidth is real.
       const n = viewData.length
       requestAnimationFrame(() => {
         const c = chartRef.current
@@ -844,7 +831,41 @@ export function AssetPriceKlineChart({
         c.scrollToRealTime()
       })
     }
-  }, [merged, viewData, isDark, logScale, showEma, emaPeriod, emaColor])
+  }, [merged, viewData])
+
+  // (2) Theme + linear/log scale — restyle in place, no data touch.
+  React.useEffect(() => {
+    const chart = chartRef.current
+    if (!chart) return
+    const family = containerRef.current
+      ? getComputedStyle(containerRef.current).fontFamily
+      : "monospace"
+    chart.setStyles(klineStyles(isDark, family, logScale))
+    chart.setPaneOptions({
+      id: CANDLE_PANE,
+      axisOptions: { name: logScale ? LOG_YAXIS : "default" },
+    })
+  }, [isDark, logScale])
+
+  // (3) EMA overlay — attach/detach the dashed line only, no data touch, so
+  // toggling it or switching its period keeps the current pan/zoom. `merged` is
+  // a dep for its precision and to re-sync the line when the coin set changes.
+  React.useEffect(() => {
+    const chart = chartRef.current
+    if (!chart) return
+    chart.removeIndicator(CANDLE_PANE, EMA_NAME)
+    if (showEma && merged) {
+      chart.createIndicator(
+        {
+          name: EMA_NAME,
+          calcParams: [emaPeriod, emaColor],
+          precision: merged.precision,
+        },
+        true,
+        { id: CANDLE_PANE },
+      )
+    }
+  }, [showEma, emaPeriod, emaColor, merged])
 
   // Vertical line on the picked bar, falling back to the latest bar ("today")
   // when nothing is picked. Runs after the data push so the overlay's timestamp
