@@ -23,6 +23,7 @@ import {
 } from "@/lib/allocation-target"
 import type { AllocationTarget } from "@/lib/allocation-target"
 import { coinColor, coinLabel } from "@/lib/coins"
+import { useCoinColorVersion } from "@/lib/use-coin-colors"
 import { COINGECKO_IDS } from "@/lib/prices"
 import type { UsdQuotes } from "@/lib/prices"
 
@@ -56,10 +57,11 @@ interface Row {
 }
 
 export function AllocationTargetChart({ data, quotes }: AllocationTargetChartProps) {
-  const { slices, totalUsd, unpriced } = React.useMemo(
-    () => buildLiveAllocation(data, quotes?.price ?? {}),
-    [data, quotes],
-  )
+  const colorVersion = useCoinColorVersion()
+  const { slices, totalUsd, unpriced } = React.useMemo(() => {
+    void colorVersion // re-slice (colours are baked into slices) on a palette shuffle
+    return buildLiveAllocation(data, quotes?.price ?? {})
+  }, [data, quotes, colorVersion])
 
   const [target, setTarget] = React.useState<AllocationTarget>(() =>
     loadAllocationTarget(),

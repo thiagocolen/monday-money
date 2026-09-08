@@ -16,6 +16,7 @@ import {
 } from "@/lib/allocation"
 import type { AllocSlice } from "@/lib/allocation"
 import { coinLabel } from "@/lib/coins"
+import { useCoinColorVersion } from "@/lib/use-coin-colors"
 import { fetchUsdQuotes } from "@/lib/prices"
 import type { UsdQuotes } from "@/lib/prices"
 
@@ -73,6 +74,7 @@ export function PortfolioPieChart({
 }: PortfolioPieChartProps) {
   const [fetched, setFetched] = React.useState<UsdQuotes | null>(null)
   const quotes = quotesProp !== undefined ? quotesProp : fetched
+  const colorVersion = useCoinColorVersion()
 
   React.useEffect(() => {
     if (snapshot || quotesProp !== undefined) return // snapshot carries USD; prop wins
@@ -85,13 +87,12 @@ export function PortfolioPieChart({
     }
   }, [snapshot, quotesProp])
 
-  const { slices, totalUsd, unpriced } = React.useMemo(
-    () =>
-      snapshot
-        ? buildSnapshotAllocation(snapshot.holdings)
-        : buildLiveAllocation(data, quotes?.price ?? {}),
-    [snapshot, data, quotes],
-  )
+  const { slices, totalUsd, unpriced } = React.useMemo(() => {
+    void colorVersion // re-slice (colours are baked into slices) on a palette shuffle
+    return snapshot
+      ? buildSnapshotAllocation(snapshot.holdings)
+      : buildLiveAllocation(data, quotes?.price ?? {})
+  }, [snapshot, data, quotes, colorVersion])
 
   const config = React.useMemo<ChartConfig>(
     () =>

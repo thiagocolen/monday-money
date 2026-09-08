@@ -19,8 +19,11 @@ import type {
   TooltipLegend,
 } from "klinecharts"
 
+import { Palette } from "lucide-react"
+
 import type { BinanceTransaction } from "@/lib/api"
-import { coinColor, coinLabel, renamedCoinNote } from "@/lib/coins"
+import { coinColor, coinLabel, renamedCoinNote, shuffleCoinColors } from "@/lib/coins"
+import { useCoinColorVersion } from "@/lib/use-coin-colors"
 import { parseFlexibleDate } from "@/lib/date"
 import { fetchPriceCandles } from "@/lib/price-candles"
 import type { CandleHistory } from "@/lib/price-candles"
@@ -616,6 +619,7 @@ export function AssetPriceKlineChart({
 }: AssetPriceKlineChartProps) {
   const { coins } = React.useMemo(() => coinsFromRows(data), [data])
   const isDark = useIsDark()
+  const colorVersion = useCoinColorVersion()
 
   const onDateSelectRef = React.useRef(onDateSelect)
   React.useEffect(() => {
@@ -833,7 +837,10 @@ export function AssetPriceKlineChart({
     }
   }, [merged, viewData])
 
-  // (2) Theme + linear/log scale — restyle in place, no data touch.
+  // (2) Theme + linear/log scale — restyle in place, no data touch. Also re-runs
+  // on a palette shuffle: `setStyles` forces a full redraw, and the per-coin
+  // line and bar colours are resolved from `coinColor` at draw time, so the new
+  // palette lands without an `applyNewData` (which would reset pan/zoom).
   React.useEffect(() => {
     const chart = chartRef.current
     if (!chart) return
@@ -845,7 +852,7 @@ export function AssetPriceKlineChart({
       id: CANDLE_PANE,
       axisOptions: { name: logScale ? LOG_YAXIS : "default" },
     })
-  }, [isDark, logScale])
+  }, [isDark, logScale, colorVersion])
 
   // (3) EMA overlay — attach/detach the dashed line only, no data touch, so
   // toggling it or switching its period keeps the current pan/zoom. `merged` is
@@ -926,6 +933,15 @@ export function AssetPriceKlineChart({
           >
             Log scale
           </button>
+          <button
+            type="button"
+            onClick={() => shuffleCoinColors(coins)}
+            title="Shuffle asset colours — reroll the palette for a clearer combination"
+            aria-label="Shuffle asset colours"
+            className="border border-border px-2 py-[3px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          >
+            <Palette className="h-3.5 w-3.5" />
+          </button>
 
           {singleAsset && (
             <div className="flex items-center gap-1">
@@ -990,7 +1006,7 @@ export function AssetPriceKlineChart({
 
       {hasLines && merged && (
         <>
-          <div className="flex flex-wrap gap-x-3 gap-y-1">
+          <div key={colorVersion} className="flex flex-wrap gap-x-3 gap-y-1">
             {merged.priced.map((coin) => (
               <span
                 key={coin}
