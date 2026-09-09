@@ -338,7 +338,6 @@ registerOverlay({
             { x, y: bounding.height },
           ],
         },
-        styles: { size: 2 },
       },
       {
         type: "text",
@@ -350,7 +349,6 @@ registerOverlay({
           align: "center",
           baseline: "bottom",
         },
-        styles: { size: 10, paddingTop: 3, paddingBottom: 3 },
       },
     ]
   },
@@ -581,8 +579,18 @@ function bucketKline(kline: KLineData[], tf: Timeframe): KLineData[] {
   return [...byPeriod.values()].sort((a, b) => a.timestamp - b.timestamp)
 }
 
+/**
+ * Ink for chart annotations drawn over the price — the EMA line and the
+ * picked-day marker. Near-black on light, near-white on dark, so it reads as
+ * the foreground against either background.
+ */
+const inkColor = (dark: boolean) => (dark ? "#e5e7eb" : "#1f2937")
+/** Legible against `inkColor` — text sitting on an ink-filled tag. */
+const onInkColor = (dark: boolean) => (dark ? "#1f2937" : "#ffffff")
+
 function klineStyles(dark: boolean, family: string, log: boolean): DeepPartial<Styles> {
   const grid = dark ? "#26262b" : "#ededed"
+  const ink = inkColor(dark)
   const text = dark ? "#8f8f96" : "#76808f"
   const axisLine = dark ? "#3a3a42" : "#dcdcdc"
   const crosshairBg = dark ? "#3a3a42" : "#686d76"
@@ -632,6 +640,22 @@ function klineStyles(dark: boolean, family: string, log: boolean): DeepPartial<S
     crosshair: {
       horizontal: { text: { backgroundColor: crosshairBg, family, size: 10 } },
       vertical: { text: { backgroundColor: crosshairBg, family, size: 10 } },
+    },
+    // The picked-day marker is the only overlay on this chart. Styling it here
+    // rather than per-figure keeps it on the chart's own font and re-themes it
+    // through the same restyle effect as everything else — klinecharts' default
+    // is a 1px blue line with a blue Helvetica tag.
+    overlay: {
+      line: { color: ink, size: 2 },
+      text: {
+        family,
+        size: 10,
+        color: onInkColor(dark),
+        backgroundColor: ink,
+        borderColor: ink,
+        paddingTop: 3,
+        paddingBottom: 3,
+      },
     },
     separator: { color: grid },
   }
@@ -780,7 +804,7 @@ export function AssetPriceKlineChart({
   /** the EMA overlay only makes sense against a single asset's price line */
   const singleAsset = plotCoins.length === 1
   const showEma = singleAsset && emaOn && (merged?.priced.length ?? 0) === 1
-  const emaColor = isDark ? "#e5e7eb" : "#1f2937"
+  const emaColor = inkColor(isDark)
 
   const viewData = React.useMemo(
     () => (merged ? bucketKline(merged.klineData, timeframe) : []),
