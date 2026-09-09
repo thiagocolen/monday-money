@@ -4,15 +4,11 @@ import * as React from "react"
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import type { BinanceTransaction } from "@/lib/api"
+import type { DateSnapshot } from "@/lib/allocation"
 import { fetchUsdQuotes } from "@/lib/prices"
 import type { UsdQuotes } from "@/lib/prices"
 import { AllocationTargetChart } from "@/components/allocation-target-chart"
 import { PortfolioPieChart } from "@/components/portfolio-pie-chart"
-
-interface DateSnapshot {
-  timestamp: number
-  holdings: Record<string, number>
-}
 
 interface AllocationPanelProps {
   data: BinanceTransaction[]

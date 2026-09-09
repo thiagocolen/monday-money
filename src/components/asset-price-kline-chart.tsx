@@ -22,21 +22,13 @@ import type {
 import { Palette } from "lucide-react"
 
 import type { BinanceTransaction } from "@/lib/api"
+import type { DateSnapshot } from "@/lib/allocation"
 import { coinColor, coinLabel, renamedCoinNote, shuffleCoinColors } from "@/lib/coins"
-import { useCoinColorVersion } from "@/lib/use-coin-colors"
+import { useCoinColor, useCoinPalette } from "@/lib/use-coin-colors"
 import { parseFlexibleDate } from "@/lib/date"
 import { fetchPriceCandles } from "@/lib/price-candles"
 import type { CandleHistory } from "@/lib/price-candles"
 import { cn } from "@/lib/utils"
-
-export interface DateSnapshot {
-  /** epoch ms of the picked bar (start of its day/week/month period) */
-  timestamp: number
-  /** exclusive end of the picked bar's period, epoch ms */
-  end: number
-  /** USD value held per coin as of that bar */
-  holdings: Record<string, number>
-}
 
 interface AssetPriceKlineChartProps {
   /** rows currently visible in the table (already column-filtered) */
@@ -422,6 +414,9 @@ function buildMerged(
   const txnsByDay = [...parsedTxns].sort((a, b) => a.day - b.day)
   const balance = new Map<string, number>()
   const holdingsByDay = new Map<number, Record<string, number>>()
+  // The quantities behind those USD values, same keys — the allocation snapshot
+  // shows them next to each asset's total.
+  const balancesByDay = new Map<number, Record<string, number>>()
   let hasHoldings = false
   let ti = 0
   for (const day of sorted) {
@@ -431,6 +426,7 @@ function buildMerged(
       ti++
     }
     const rec: Record<string, number> = {}
+    const qty: Record<string, number> = {}
     for (const coin of priced) {
       const bal = balance.get(coin) ?? 0
       if (bal <= 0) continue
@@ -438,10 +434,12 @@ function buildMerged(
       const price = m?.get(day) ?? m?.values().next().value
       if (typeof price === "number" && price > 0) {
         rec[coin] = bal * price
+        qty[coin] = bal
         hasHoldings = true
       }
     }
     holdingsByDay.set(day, rec)
+    balancesByDay.set(day, qty)
   }
 
   // Stack the biggest current holding at the bottom.
@@ -464,6 +462,7 @@ function buildMerged(
       close: hi,
       prices,
       holdings: holdingsByDay.get(day) ?? {},
+      balances: balancesByDay.get(day) ?? {},
     }
   })
 
@@ -619,7 +618,8 @@ export function AssetPriceKlineChart({
 }: AssetPriceKlineChartProps) {
   const { coins } = React.useMemo(() => coinsFromRows(data), [data])
   const isDark = useIsDark()
-  const colorVersion = useCoinColorVersion()
+  const palette = useCoinPalette()
+  const colorOf = useCoinColor()
 
   const onDateSelectRef = React.useRef(onDateSelect)
   React.useEffect(() => {
@@ -764,6 +764,9 @@ export function AssetPriceKlineChart({
           holdings: {
             ...((kd as { holdings?: Record<string, number> }).holdings ?? {}),
           },
+          balances: {
+            ...((kd as { balances?: Record<string, number> }).balances ?? {}),
+          },
         })
       }
     }
@@ -852,7 +855,7 @@ export function AssetPriceKlineChart({
       id: CANDLE_PANE,
       axisOptions: { name: logScale ? LOG_YAXIS : "default" },
     })
-  }, [isDark, logScale, colorVersion])
+  }, [isDark, logScale, palette])
 
   // (3) EMA overlay — attach/detach the dashed line only, no data touch, so
   // toggling it or switching its period keeps the current pan/zoom. `merged` is
@@ -1006,7 +1009,7 @@ export function AssetPriceKlineChart({
 
       {hasLines && merged && (
         <>
-          <div key={colorVersion} className="flex flex-wrap gap-x-3 gap-y-1">
+          <div className="flex flex-wrap gap-x-3 gap-y-1">
             {merged.priced.map((coin) => (
               <span
                 key={coin}
@@ -1014,7 +1017,7 @@ export function AssetPriceKlineChart({
               >
                 <span
                   className="inline-block h-2 w-2 shrink-0 rounded-[2px]"
-                  style={{ backgroundColor: coinColor(coin) }}
+                  style={{ backgroundColor: colorOf(coin) }}
                 />
                 {coinLabel(coin)}
               </span>

@@ -59,12 +59,10 @@ function loadColorOverrides(): Record<string, string> {
 }
 
 let colorOverrides = loadColorOverrides()
-let paletteVersion = 0
 const paletteListeners = new Set<() => void>()
 
 function commitPalette(next: Record<string, string>) {
   colorOverrides = next
-  paletteVersion++
   try {
     localStorage.setItem(COLOR_OVERRIDE_KEY, JSON.stringify(next))
   } catch {
@@ -73,15 +71,22 @@ function commitPalette(next: Record<string, string>) {
   for (const fn of paletteListeners) fn()
 }
 
-/** Subscribe to palette changes — pairs with `coinColorVersion` for `useSyncExternalStore`. */
+/** Subscribe to palette changes — pairs with `coinPalette` for `useSyncExternalStore`. */
 export function subscribeCoinColors(listener: () => void): () => void {
   paletteListeners.add(listener)
   return () => paletteListeners.delete(listener)
 }
 
-/** Monotonic counter that bumps on every shuffle/reset — the store snapshot. */
-export function coinColorVersion(): number {
-  return paletteVersion
+/**
+ * The palette itself — a fresh object identity on every shuffle/reset, stable
+ * in between, so it doubles as the `useSyncExternalStore` snapshot. React
+ * consumers read colours through this (see `useCoinColor`) rather than calling
+ * `coinColor` behind a hand-written dependency: the React Compiler infers a
+ * memo's dependencies from what it actually reads and drops dead statements, so
+ * a `void version` line is silently deleted and the memo never recomputes.
+ */
+export function coinPalette(): Readonly<Record<string, string>> {
+  return colorOverrides
 }
 
 /**
@@ -92,8 +97,14 @@ export function coinColorVersion(): number {
  * close. Repaint consumers via `subscribeCoinColors`.
  */
 export function shuffleCoinColors(coins: Iterable<string>): void {
+  // Every coin already holding an override joins the reroll, so shuffling while
+  // the Coin column is filtered rerolls the filtered set instead of dropping
+  // the rest of the palette (a commit replaces the whole map).
   const uniq = [
-    ...new Set(Array.from(coins, (c) => String(c ?? '').trim().toUpperCase())),
+    ...new Set([
+      ...Array.from(coins, (c) => String(c ?? '').trim().toUpperCase()),
+      ...Object.keys(colorOverrides),
+    ]),
   ].filter(Boolean)
   if (uniq.length === 0) return
 
@@ -126,7 +137,15 @@ export function resetCoinColors(): void {
  * a coin keeps its colour regardless of which others share the chart.
  */
 export function coinColor(coin: string): string {
-  return colorOverrides[coin.toUpperCase()] ?? hashedCoinColor(coin)
+  return coinColorIn(colorOverrides, coin)
+}
+
+/** `coinColor` against an explicit palette snapshot — see `coinPalette`. */
+export function coinColorIn(
+  palette: Readonly<Record<string, string>>,
+  coin: string,
+): string {
+  return palette[coin.toUpperCase()] ?? hashedCoinColor(coin)
 }
 
 /** Fold a rebranded ticker onto its current symbol. */
