@@ -6,6 +6,7 @@ import {
   init,
   LineType,
   registerIndicator,
+  registerOverlay,
   registerYAxis,
   TooltipShowRule,
   YAxisType,
@@ -19,21 +20,19 @@ import type {
   TooltipLegend,
 } from "klinecharts"
 
+import { CalendarBlank, X } from "@phosphor-icons/react"
+import { Palette } from "lucide-react"
+
+import { Calendar } from "@/components/ui/calendar"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import type { BinanceTransaction } from "@/lib/api"
-import { coinColor, coinLabel, renamedCoinNote } from "@/lib/coins"
+import type { DateSnapshot } from "@/lib/allocation"
+import { coinColor, coinLabel, renamedCoinNote, shuffleCoinColors } from "@/lib/coins"
+import { useCoinColor, useCoinPalette } from "@/lib/use-coin-colors"
 import { parseFlexibleDate } from "@/lib/date"
 import { fetchPriceCandles } from "@/lib/price-candles"
 import type { CandleHistory } from "@/lib/price-candles"
 import { cn } from "@/lib/utils"
-
-export interface DateSnapshot {
-  /** epoch ms of the picked bar (start of its day/week/month period) */
-  timestamp: number
-  /** exclusive end of the picked bar's period, epoch ms */
-  end: number
-  /** USD value held per coin as of that bar */
-  holdings: Record<string, number>
-}
 
 interface AssetPriceKlineChartProps {
   /** rows currently visible in the table (already column-filtered) */
@@ -51,6 +50,7 @@ const EMA_NAME = "MM_PRICE_EMA"
 const HOLDINGS_PANE = "pane_holdings"
 const HOLDINGS_NAME = "MM_HOLDINGS"
 const LOG_YAXIS = "mm-log"
+const PICKED_MARK = "mm-picked-day"
 
 /** EMA period presets offered when a single asset is charted. */
 const EMA_PERIODS = [9, 21, 50, 100, 200] as const
@@ -312,6 +312,48 @@ registerYAxis({
   },
 })
 
+/**
+ * The marker on the picked bar: a vertical line down the candle pane with the
+ * bar's date on a tag at its foot. The label rides in `extendData` so the
+ * marker can be recreated with new text without a bespoke overlay per date.
+ * Not user-drawable — the chart creates it locked, from a click or the date
+ * picker in the toolbar.
+ */
+registerOverlay({
+  name: PICKED_MARK,
+  totalStep: 2,
+  needDefaultPointFigure: false,
+  needDefaultXAxisFigure: false,
+  needDefaultYAxisFigure: false,
+  createPointFigures: ({ overlay, coordinates, bounding }) => {
+    const x = coordinates[0]?.x
+    if (typeof x !== "number") return []
+    const label = String(overlay.extendData ?? "")
+    return [
+      {
+        type: "line",
+        attrs: {
+          coordinates: [
+            { x, y: 0 },
+            { x, y: bounding.height },
+          ],
+        },
+      },
+      {
+        type: "text",
+        ignoreEvent: true,
+        attrs: {
+          x,
+          y: bounding.height - 4,
+          text: label,
+          align: "center",
+          baseline: "bottom",
+        },
+      },
+    ]
+  },
+})
+
 /** Distinct coins in the filtered rows and the earliest instant each appears. */
 function coinsFromRows(data: BinanceTransaction[]): {
   coins: string[]
@@ -419,6 +461,9 @@ function buildMerged(
   const txnsByDay = [...parsedTxns].sort((a, b) => a.day - b.day)
   const balance = new Map<string, number>()
   const holdingsByDay = new Map<number, Record<string, number>>()
+  // The quantities behind those USD values, same keys — the allocation snapshot
+  // shows them next to each asset's total.
+  const balancesByDay = new Map<number, Record<string, number>>()
   let hasHoldings = false
   let ti = 0
   for (const day of sorted) {
@@ -428,6 +473,7 @@ function buildMerged(
       ti++
     }
     const rec: Record<string, number> = {}
+    const qty: Record<string, number> = {}
     for (const coin of priced) {
       const bal = balance.get(coin) ?? 0
       if (bal <= 0) continue
@@ -435,10 +481,12 @@ function buildMerged(
       const price = m?.get(day) ?? m?.values().next().value
       if (typeof price === "number" && price > 0) {
         rec[coin] = bal * price
+        qty[coin] = bal
         hasHoldings = true
       }
     }
     holdingsByDay.set(day, rec)
+    balancesByDay.set(day, qty)
   }
 
   // Stack the biggest current holding at the bottom.
@@ -461,6 +509,7 @@ function buildMerged(
       close: hi,
       prices,
       holdings: holdingsByDay.get(day) ?? {},
+      balances: balancesByDay.get(day) ?? {},
     }
   })
 
@@ -530,8 +579,18 @@ function bucketKline(kline: KLineData[], tf: Timeframe): KLineData[] {
   return [...byPeriod.values()].sort((a, b) => a.timestamp - b.timestamp)
 }
 
+/**
+ * Ink for chart annotations drawn over the price — the EMA line and the
+ * picked-day marker. Near-black on light, near-white on dark, so it reads as
+ * the foreground against either background.
+ */
+const inkColor = (dark: boolean) => (dark ? "#e5e7eb" : "#1f2937")
+/** Legible against `inkColor` — text sitting on an ink-filled tag. */
+const onInkColor = (dark: boolean) => (dark ? "#1f2937" : "#ffffff")
+
 function klineStyles(dark: boolean, family: string, log: boolean): DeepPartial<Styles> {
   const grid = dark ? "#26262b" : "#ededed"
+  const ink = inkColor(dark)
   const text = dark ? "#8f8f96" : "#76808f"
   const axisLine = dark ? "#3a3a42" : "#dcdcdc"
   const crosshairBg = dark ? "#3a3a42" : "#686d76"
@@ -582,6 +641,22 @@ function klineStyles(dark: boolean, family: string, log: boolean): DeepPartial<S
       horizontal: { text: { backgroundColor: crosshairBg, family, size: 10 } },
       vertical: { text: { backgroundColor: crosshairBg, family, size: 10 } },
     },
+    // The picked-day marker is the only overlay on this chart. Styling it here
+    // rather than per-figure keeps it on the chart's own font and re-themes it
+    // through the same restyle effect as everything else — klinecharts' default
+    // is a 1px blue line with a blue Helvetica tag.
+    overlay: {
+      line: { color: ink, size: 2 },
+      text: {
+        family,
+        size: 10,
+        color: onInkColor(dark),
+        backgroundColor: ink,
+        borderColor: ink,
+        paddingTop: 3,
+        paddingBottom: 3,
+      },
+    },
     separator: { color: grid },
   }
 }
@@ -609,6 +684,27 @@ const fmtDay = (ms: number) =>
     day: "numeric",
   })
 
+/**
+ * Label for a picked bar. Bar timestamps are UTC period starts, so read them in
+ * UTC — a local-time read shifts the day for anyone west of Greenwich.
+ */
+const fmtBarLabel = (ms: number, tf: Timeframe): string =>
+  new Date(ms).toLocaleDateString("en-US", {
+    timeZone: "UTC",
+    year: "numeric",
+    ...(tf === "month" ? { month: "long" } : { month: "short", day: "numeric" }),
+  })
+
+/** Bar timestamp (UTC period start) → the same calendar day as a local Date. */
+const toLocalDay = (ms: number): Date => {
+  const d = new Date(ms)
+  return new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate())
+}
+
+/** A calendar's local Date → the UTC day the chart keys its bars by. */
+const fromLocalDay = (d: Date): number =>
+  Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())
+
 export function AssetPriceKlineChart({
   data,
   selectedTimestamp,
@@ -616,6 +712,8 @@ export function AssetPriceKlineChart({
 }: AssetPriceKlineChartProps) {
   const { coins } = React.useMemo(() => coinsFromRows(data), [data])
   const isDark = useIsDark()
+  const palette = useCoinPalette()
+  const colorOf = useCoinColor()
 
   const onDateSelectRef = React.useRef(onDateSelect)
   React.useEffect(() => {
@@ -706,7 +804,7 @@ export function AssetPriceKlineChart({
   /** the EMA overlay only makes sense against a single asset's price line */
   const singleAsset = plotCoins.length === 1
   const showEma = singleAsset && emaOn && (merged?.priced.length ?? 0) === 1
-  const emaColor = isDark ? "#e5e7eb" : "#1f2937"
+  const emaColor = inkColor(isDark)
 
   const viewData = React.useMemo(
     () => (merged ? bucketKline(merged.klineData, timeframe) : []),
@@ -759,6 +857,9 @@ export function AssetPriceKlineChart({
           end: periodEnd(ts, timeframeRef.current),
           holdings: {
             ...((kd as { holdings?: Record<string, number> }).holdings ?? {}),
+          },
+          balances: {
+            ...((kd as { balances?: Record<string, number> }).balances ?? {}),
           },
         })
       }
@@ -833,7 +934,10 @@ export function AssetPriceKlineChart({
     }
   }, [merged, viewData])
 
-  // (2) Theme + linear/log scale — restyle in place, no data touch.
+  // (2) Theme + linear/log scale — restyle in place, no data touch. Also re-runs
+  // on a palette shuffle: `setStyles` forces a full redraw, and the per-coin
+  // line and bar colours are resolved from `coinColor` at draw time, so the new
+  // palette lands without an `applyNewData` (which would reset pan/zoom).
   React.useEffect(() => {
     const chart = chartRef.current
     if (!chart) return
@@ -845,7 +949,7 @@ export function AssetPriceKlineChart({
       id: CANDLE_PANE,
       axisOptions: { name: logScale ? LOG_YAXIS : "default" },
     })
-  }, [isDark, logScale])
+  }, [isDark, logScale, palette])
 
   // (3) EMA overlay — attach/detach the dashed line only, no data touch, so
   // toggling it or switching its period keeps the current pan/zoom. `merged` is
@@ -883,14 +987,54 @@ export function AssetPriceKlineChart({
     }
     if (markTs != null) {
       const id = chart.createOverlay({
-        name: "verticalStraightLine",
+        name: PICKED_MARK,
         points: [{ timestamp: markTs }],
+        extendData: fmtBarLabel(markTs, timeframe),
         lock: true,
       })
       markerRef.current = typeof id === "string" ? id : null
     }
     pickedRef.current = selectedTimestamp ?? null
-  }, [selectedTimestamp, lastBarTs, viewData])
+  }, [selectedTimestamp, lastBarTs, viewData, timeframe])
+
+  // Picking a day from the toolbar calendar — the same selection a click on the
+  // chart makes, so it goes through the same bar lookup and snapshot shape.
+  const [dateOpen, setDateOpen] = React.useState(false)
+  const firstBarTs = viewData.length ? viewData[0].timestamp : null
+  /** last day the calendar may offer — the end of the final bar's period */
+  const lastPickableTs =
+    lastBarTs != null ? periodEnd(lastBarTs, timeframe) - DAY_MS : null
+
+  const pickDay = React.useCallback(
+    (dayMs: number) => {
+      if (viewData.length === 0) return
+      const target = periodStart(dayMs, timeframe)
+      // The exact bar if the series has one, else the last bar before it — the
+      // calendar can land on a gap (a day with no candle anywhere).
+      let bar = viewData[0]
+      for (const b of viewData) {
+        if (b.timestamp > target) break
+        bar = b
+      }
+      const kd = bar as KLineData & {
+        holdings?: Record<string, number>
+        balances?: Record<string, number>
+      }
+      pickedRef.current = kd.timestamp
+      onDateSelect?.({
+        timestamp: kd.timestamp,
+        end: periodEnd(kd.timestamp, timeframe),
+        holdings: { ...(kd.holdings ?? {}) },
+        balances: { ...(kd.balances ?? {}) },
+      })
+    },
+    [viewData, timeframe, onDateSelect],
+  )
+
+  const clearPick = React.useCallback(() => {
+    pickedRef.current = null
+    onDateSelect?.(null)
+  }, [onDateSelect])
 
   return (
     <div className="space-y-2">
@@ -925,6 +1069,79 @@ export function AssetPriceKlineChart({
             )}
           >
             Log scale
+          </button>
+          <div className="flex">
+            <Popover open={dateOpen} onOpenChange={setDateOpen}>
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  disabled={viewData.length === 0}
+                  aria-label="Pick a date on the chart"
+                  className={cn(
+                    "flex items-center gap-1.5 border px-2 py-0.5 text-[11px] transition-colors disabled:opacity-50",
+                    selectedTimestamp != null
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : "border-border text-muted-foreground hover:bg-muted hover:text-foreground",
+                  )}
+                >
+                  <CalendarBlank className="h-3 w-3 shrink-0" />
+                  {selectedTimestamp != null
+                    ? fmtBarLabel(selectedTimestamp, timeframe)
+                    : "Pick date"}
+                </button>
+              </PopoverTrigger>
+              <PopoverContent align="start" className="w-auto p-0">
+                <Calendar
+                  mode="single"
+                  autoFocus
+                  defaultMonth={
+                    // never null while the trigger is enabled
+                    (selectedTimestamp ?? lastBarTs) != null
+                      ? toLocalDay((selectedTimestamp ?? lastBarTs) as number)
+                      : undefined
+                  }
+                  selected={
+                    selectedTimestamp != null ? toLocalDay(selectedTimestamp) : undefined
+                  }
+                  onSelect={(d) => {
+                    if (d) pickDay(fromLocalDay(d))
+                    setDateOpen(false)
+                  }}
+                  startMonth={firstBarTs != null ? toLocalDay(firstBarTs) : undefined}
+                  endMonth={
+                    lastPickableTs != null ? toLocalDay(lastPickableTs) : undefined
+                  }
+                  disabled={
+                    firstBarTs != null && lastPickableTs != null
+                      ? {
+                          before: toLocalDay(firstBarTs),
+                          after: toLocalDay(lastPickableTs),
+                        }
+                      : undefined
+                  }
+                />
+              </PopoverContent>
+            </Popover>
+            {selectedTimestamp != null && (
+              <button
+                type="button"
+                onClick={clearPick}
+                title="Clear the picked date"
+                aria-label="Clear the picked date"
+                className="border border-l-0 border-border px-1.5 py-[3px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={() => shuffleCoinColors(coins)}
+            title="Shuffle asset colours — reroll the palette for a clearer combination"
+            aria-label="Shuffle asset colours"
+            className="border border-border px-2 py-[3px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          >
+            <Palette className="h-3.5 w-3.5" />
           </button>
 
           {singleAsset && (
@@ -998,7 +1215,7 @@ export function AssetPriceKlineChart({
               >
                 <span
                   className="inline-block h-2 w-2 shrink-0 rounded-[2px]"
-                  style={{ backgroundColor: coinColor(coin) }}
+                  style={{ backgroundColor: colorOf(coin) }}
                 />
                 {coinLabel(coin)}
               </span>

@@ -22,7 +22,8 @@ import {
   targetTotal,
 } from "@/lib/allocation-target"
 import type { AllocationTarget } from "@/lib/allocation-target"
-import { coinColor, coinLabel } from "@/lib/coins"
+import { coinLabel } from "@/lib/coins"
+import { useCoinColor } from "@/lib/use-coin-colors"
 import { COINGECKO_IDS } from "@/lib/prices"
 import type { UsdQuotes } from "@/lib/prices"
 
@@ -56,10 +57,12 @@ interface Row {
 }
 
 export function AllocationTargetChart({ data, quotes }: AllocationTargetChartProps) {
-  const { slices, totalUsd, unpriced } = React.useMemo(
-    () => buildLiveAllocation(data, quotes?.price ?? {}),
-    [data, quotes],
-  )
+  // `colorOf` carries the palette — a shuffle changes its identity, so both the
+  // slices and the target rows below recolour.
+  const colorOf = useCoinColor()
+  const { slices, totalUsd, unpriced } = React.useMemo(() => {
+    return buildLiveAllocation(data, quotes?.price ?? {}, colorOf)
+  }, [data, quotes, colorOf])
 
   const [target, setTarget] = React.useState<AllocationTarget>(() =>
     loadAllocationTarget(),
@@ -136,7 +139,7 @@ export function AllocationTargetChart({ data, quotes }: AllocationTargetChartPro
       const targetUsd = (effPct / 100) * totalUsd
       return {
         coin,
-        color: coinColor(coin),
+        color: colorOf(coin),
         curShare,
         curUsd,
         rawPct,
@@ -147,7 +150,7 @@ export function AllocationTargetChart({ data, quotes }: AllocationTargetChartPro
         held: !!s,
       }
     })
-  }, [slices, target, total, totalUsd])
+  }, [slices, target, total, totalUsd, colorOf])
 
   const pieData = React.useMemo(() => {
     const parts = rows

@@ -20,7 +20,7 @@ import { parseFlexibleDate, formatTimestamp } from '@/lib/date'
 import type { DateRangeFilterValue } from '@/components/date-range-filter'
 import { FiatFlowChart } from '@/components/fiat-flow-chart'
 import { AssetPriceKlineChart } from '@/components/asset-price-kline-chart'
-import type { DateSnapshot } from '@/components/asset-price-kline-chart'
+import type { DateSnapshot } from '@/lib/allocation'
 import { AllocationPanel } from '@/components/allocation-panel'
 import { canonicalCoin, coinLabel, formatCoinAmount, renamedCoinNote } from '@/lib/coins'
 
