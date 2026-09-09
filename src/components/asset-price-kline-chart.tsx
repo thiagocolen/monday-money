@@ -6,6 +6,7 @@ import {
   init,
   LineType,
   registerIndicator,
+  registerOverlay,
   registerYAxis,
   TooltipShowRule,
   YAxisType,
@@ -19,8 +20,11 @@ import type {
   TooltipLegend,
 } from "klinecharts"
 
+import { CalendarBlank, X } from "@phosphor-icons/react"
 import { Palette } from "lucide-react"
 
+import { Calendar } from "@/components/ui/calendar"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import type { BinanceTransaction } from "@/lib/api"
 import type { DateSnapshot } from "@/lib/allocation"
 import { coinColor, coinLabel, renamedCoinNote, shuffleCoinColors } from "@/lib/coins"
@@ -46,6 +50,7 @@ const EMA_NAME = "MM_PRICE_EMA"
 const HOLDINGS_PANE = "pane_holdings"
 const HOLDINGS_NAME = "MM_HOLDINGS"
 const LOG_YAXIS = "mm-log"
+const PICKED_MARK = "mm-picked-day"
 
 /** EMA period presets offered when a single asset is charted. */
 const EMA_PERIODS = [9, 21, 50, 100, 200] as const
@@ -304,6 +309,50 @@ registerYAxis({
       const rate = (Math.log10(v) - from) / span
       return { value: v, text: fmtAxisTick(v), coord: Math.round((1 - rate) * height) }
     })
+  },
+})
+
+/**
+ * The marker on the picked bar: a vertical line down the candle pane with the
+ * bar's date on a tag at its foot. The label rides in `extendData` so the
+ * marker can be recreated with new text without a bespoke overlay per date.
+ * Not user-drawable — the chart creates it locked, from a click or the date
+ * picker in the toolbar.
+ */
+registerOverlay({
+  name: PICKED_MARK,
+  totalStep: 2,
+  needDefaultPointFigure: false,
+  needDefaultXAxisFigure: false,
+  needDefaultYAxisFigure: false,
+  createPointFigures: ({ overlay, coordinates, bounding }) => {
+    const x = coordinates[0]?.x
+    if (typeof x !== "number") return []
+    const label = String(overlay.extendData ?? "")
+    return [
+      {
+        type: "line",
+        attrs: {
+          coordinates: [
+            { x, y: 0 },
+            { x, y: bounding.height },
+          ],
+        },
+        styles: { size: 2 },
+      },
+      {
+        type: "text",
+        ignoreEvent: true,
+        attrs: {
+          x,
+          y: bounding.height - 4,
+          text: label,
+          align: "center",
+          baseline: "bottom",
+        },
+        styles: { size: 10, paddingTop: 3, paddingBottom: 3 },
+      },
+    ]
   },
 })
 
@@ -611,6 +660,27 @@ const fmtDay = (ms: number) =>
     day: "numeric",
   })
 
+/**
+ * Label for a picked bar. Bar timestamps are UTC period starts, so read them in
+ * UTC — a local-time read shifts the day for anyone west of Greenwich.
+ */
+const fmtBarLabel = (ms: number, tf: Timeframe): string =>
+  new Date(ms).toLocaleDateString("en-US", {
+    timeZone: "UTC",
+    year: "numeric",
+    ...(tf === "month" ? { month: "long" } : { month: "short", day: "numeric" }),
+  })
+
+/** Bar timestamp (UTC period start) → the same calendar day as a local Date. */
+const toLocalDay = (ms: number): Date => {
+  const d = new Date(ms)
+  return new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate())
+}
+
+/** A calendar's local Date → the UTC day the chart keys its bars by. */
+const fromLocalDay = (d: Date): number =>
+  Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())
+
 export function AssetPriceKlineChart({
   data,
   selectedTimestamp,
@@ -893,14 +963,54 @@ export function AssetPriceKlineChart({
     }
     if (markTs != null) {
       const id = chart.createOverlay({
-        name: "verticalStraightLine",
+        name: PICKED_MARK,
         points: [{ timestamp: markTs }],
+        extendData: fmtBarLabel(markTs, timeframe),
         lock: true,
       })
       markerRef.current = typeof id === "string" ? id : null
     }
     pickedRef.current = selectedTimestamp ?? null
-  }, [selectedTimestamp, lastBarTs, viewData])
+  }, [selectedTimestamp, lastBarTs, viewData, timeframe])
+
+  // Picking a day from the toolbar calendar — the same selection a click on the
+  // chart makes, so it goes through the same bar lookup and snapshot shape.
+  const [dateOpen, setDateOpen] = React.useState(false)
+  const firstBarTs = viewData.length ? viewData[0].timestamp : null
+  /** last day the calendar may offer — the end of the final bar's period */
+  const lastPickableTs =
+    lastBarTs != null ? periodEnd(lastBarTs, timeframe) - DAY_MS : null
+
+  const pickDay = React.useCallback(
+    (dayMs: number) => {
+      if (viewData.length === 0) return
+      const target = periodStart(dayMs, timeframe)
+      // The exact bar if the series has one, else the last bar before it — the
+      // calendar can land on a gap (a day with no candle anywhere).
+      let bar = viewData[0]
+      for (const b of viewData) {
+        if (b.timestamp > target) break
+        bar = b
+      }
+      const kd = bar as KLineData & {
+        holdings?: Record<string, number>
+        balances?: Record<string, number>
+      }
+      pickedRef.current = kd.timestamp
+      onDateSelect?.({
+        timestamp: kd.timestamp,
+        end: periodEnd(kd.timestamp, timeframe),
+        holdings: { ...(kd.holdings ?? {}) },
+        balances: { ...(kd.balances ?? {}) },
+      })
+    },
+    [viewData, timeframe, onDateSelect],
+  )
+
+  const clearPick = React.useCallback(() => {
+    pickedRef.current = null
+    onDateSelect?.(null)
+  }, [onDateSelect])
 
   return (
     <div className="space-y-2">
@@ -936,6 +1046,70 @@ export function AssetPriceKlineChart({
           >
             Log scale
           </button>
+          <div className="flex">
+            <Popover open={dateOpen} onOpenChange={setDateOpen}>
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  disabled={viewData.length === 0}
+                  aria-label="Pick a date on the chart"
+                  className={cn(
+                    "flex items-center gap-1.5 border px-2 py-0.5 text-[11px] transition-colors disabled:opacity-50",
+                    selectedTimestamp != null
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : "border-border text-muted-foreground hover:bg-muted hover:text-foreground",
+                  )}
+                >
+                  <CalendarBlank className="h-3 w-3 shrink-0" />
+                  {selectedTimestamp != null
+                    ? fmtBarLabel(selectedTimestamp, timeframe)
+                    : "Pick date"}
+                </button>
+              </PopoverTrigger>
+              <PopoverContent align="start" className="w-auto p-0">
+                <Calendar
+                  mode="single"
+                  autoFocus
+                  defaultMonth={
+                    // never null while the trigger is enabled
+                    (selectedTimestamp ?? lastBarTs) != null
+                      ? toLocalDay((selectedTimestamp ?? lastBarTs) as number)
+                      : undefined
+                  }
+                  selected={
+                    selectedTimestamp != null ? toLocalDay(selectedTimestamp) : undefined
+                  }
+                  onSelect={(d) => {
+                    if (d) pickDay(fromLocalDay(d))
+                    setDateOpen(false)
+                  }}
+                  startMonth={firstBarTs != null ? toLocalDay(firstBarTs) : undefined}
+                  endMonth={
+                    lastPickableTs != null ? toLocalDay(lastPickableTs) : undefined
+                  }
+                  disabled={
+                    firstBarTs != null && lastPickableTs != null
+                      ? {
+                          before: toLocalDay(firstBarTs),
+                          after: toLocalDay(lastPickableTs),
+                        }
+                      : undefined
+                  }
+                />
+              </PopoverContent>
+            </Popover>
+            {selectedTimestamp != null && (
+              <button
+                type="button"
+                onClick={clearPick}
+                title="Clear the picked date"
+                aria-label="Clear the picked date"
+                className="border border-l-0 border-border px-1.5 py-[3px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            )}
+          </div>
           <button
             type="button"
             onClick={() => shuffleCoinColors(coins)}
