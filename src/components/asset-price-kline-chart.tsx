@@ -3,6 +3,7 @@
 import * as React from "react"
 import {
   dispose,
+  DomPosition,
   init,
   LineType,
   registerIndicator,
@@ -12,6 +13,7 @@ import {
   YAxisType,
 } from "klinecharts"
 import type {
+  AxisTick,
   Chart,
   DeepPartial,
   IndicatorFigureStyle,
@@ -50,7 +52,30 @@ const EMA_NAME = "MM_PRICE_EMA"
 const HOLDINGS_PANE = "pane_holdings"
 const HOLDINGS_NAME = "MM_HOLDINGS"
 const LOG_YAXIS = "mm-log"
+const USD_YAXIS = "mm-usd"
 const PICKED_MARK = "mm-picked-day"
+const AVG_MARK = "mm-avg-price"
+
+/** Panes that carry a y-axis the user can grab (the x-axis pane has none). */
+const Y_AXIS_PANES = [CANDLE_PANE, HOLDINGS_PANE]
+
+/** Right-hand gap klinecharts leaves past the last bar by default, in px. */
+const DEFAULT_RIGHT_GAP = 80
+/**
+ * The gap auto-scale keeps instead — wide enough for the half of the picked-day
+ * tag that hangs right of a marker on the last bar (the longest of those reads
+ * "September 2026"). Everything else goes to the bars.
+ */
+const FIT_RIGHT_GAP = 52
+
+/**
+ * Padding a pane leaves above and below its data, as a fraction of the plotted
+ * range. klinecharts' own defaults (20% over, 10% under) spend nearly a third
+ * of the pane on empty space — a fitted pane keeps only enough that the line
+ * doesn't graze the edge.
+ */
+const ROOMY_GAP = { top: 0.2, bottom: 0.1 }
+const FIT_GAP = 0.04
 
 /** EMA period presets offered when a single asset is charted. */
 const EMA_PERIODS = [9, 21, 50, 100, 200] as const
@@ -65,6 +90,15 @@ const fmtUsdShort = (v: number): string =>
     maximumFractionDigits: v >= 10_000 ? 1 : 0,
   })
 
+/** Full USD, decimals scaled to the magnitude — reads as a price, not a total. */
+const fmtUsdPrice = (v: number): string =>
+  v.toLocaleString("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: v >= 1 ? 2 : 8,
+  })
+
 type Timeframe = "day" | "week" | "month"
 const TIMEFRAMES: { id: Timeframe; label: string }[] = [
   { id: "day", label: "Daily" },
@@ -74,6 +108,7 @@ const TIMEFRAMES: { id: Timeframe; label: string }[] = [
 
 const TF_KEY = "mm.history.klineTimeframe"
 const LOG_KEY = "mm.history.klineLog"
+const AUTO_KEY = "mm.history.klineAutoScale"
 
 function safeGet(key: string): string {
   try {
@@ -201,6 +236,10 @@ registerIndicator<HoldingsResult>({
   name: HOLDINGS_NAME,
   shortName: "Holdings",
   precision: 0,
+  // Anchor the axis at $0 so the stack is read against nothing-held, not against
+  // the smallest bar on screen. Paired with the pane's zero bottom gap below,
+  // $0 lands exactly on the floor of the pane and the bars sit on it.
+  minValue: 0,
   calcParams: [],
   figures: [{ key: "total", title: "Total: ", type: "bar" }],
   regenerateFigures: () => [{ key: "total", title: "Total: ", type: "bar" }],
@@ -290,6 +329,10 @@ function niceLogTicks(lo: number, hi: number): number[] {
   return out
 }
 
+/** Every axis on this chart reads dollars — say so on each tick. */
+const stampUsd = (ticks: AxisTick[]): AxisTick[] =>
+  ticks.map((tick) => ({ ...tick, text: `$${tick.text}` }))
+
 /**
  * klinecharts v9's built-in log axis positions lines correctly but generates
  * linearly-spaced tick *values* (0, 20k, 40k…) that pile up at the top. This
@@ -302,15 +345,142 @@ registerYAxis({
     const from = range.from
     const span = range.range
     const height = bounding.height
-    if (!(span > 0) || !(height > 0) || !(range.realFrom > 0)) return defaultTicks
+    if (!(span > 0) || !(height > 0) || !(range.realFrom > 0)) return stampUsd(defaultTicks)
     const values = niceLogTicks(range.realFrom, range.realTo)
-    if (values.length < 2) return defaultTicks
+    if (values.length < 2) return stampUsd(defaultTicks)
     return values.map((v) => {
       const rate = (Math.log10(v) - from) / span
-      return { value: v, text: fmtAxisTick(v), coord: Math.round((1 - rate) * height) }
+      return { value: v, text: `$${fmtAxisTick(v)}`, coord: Math.round((1 - rate) * height) }
     })
   },
 })
+
+/**
+ * The linear axis, klinecharts' own ticks with a dollar sign on each. Worn by
+ * both panes — the price lines and the holdings stack are both money — and the
+ * axis gutter widens to suit, since klinecharts measures the ticks it is handed.
+ */
+registerYAxis({
+  name: USD_YAXIS,
+  createTicks: ({ defaultTicks }) => stampUsd(defaultTicks),
+})
+
+/**
+ * Give the price lines and the holdings bars half the plot area each.
+ *
+ * klinecharts sizes panes from the bottom up — the candle pane keeps whatever
+ * the indicator panes and the x-axis leave — so setting the holdings pane to
+ * half of the two panes' *combined* height splits them evenly without having to
+ * know what the x-axis and separator take.
+ */
+function splitPanesEvenly(chart: Chart) {
+  const top = chart.getSize(CANDLE_PANE)?.height ?? 0
+  const bottom = chart.getSize(HOLDINGS_PANE)?.height ?? 0
+  if (top <= 0 || bottom <= 0) return
+  const half = Math.round((top + bottom) / 2)
+  if (Math.abs(bottom - half) <= 1) return
+  chart.setPaneOptions({ id: HOLDINGS_PANE, height: half })
+}
+
+/**
+ * Hand every pane's y-axis back to klinecharts' own fit-to-visible-data.
+ *
+ * Dragging a y-axis latches it to a fixed range, and v9 offers no public way
+ * out: a double-click on the axis clears it, and `setStyles({ yAxis: { type } })`
+ * clears the candle pane's alone. Auto-scale has to release the holdings pane
+ * too, so reach the panes directly — guarded, so a klinecharts upgrade that
+ * renames them costs the vertical refit and nothing else.
+ */
+function releaseYAxes(chart: Chart, paneId?: string) {
+  const inner = chart as unknown as {
+    _drawPanes?: Array<{
+      getId?: () => string
+      getAxisComponent?: () => { setAutoCalcTickFlag?: (on: boolean) => void }
+    }>
+    adjustPaneViewport?: (
+      height: boolean,
+      width: boolean,
+      update: boolean,
+      yAxis: boolean,
+    ) => void
+  }
+  if (!Array.isArray(inner._drawPanes)) return
+  let touched = false
+  for (const pane of inner._drawPanes) {
+    if (paneId != null && pane.getId?.() !== paneId) continue
+    pane.getAxisComponent?.().setAutoCalcTickFlag?.(true)
+    touched = true
+  }
+  // Re-measures and re-ticks the axes only — the time scale is never consulted,
+  // so the horizontal pan and zoom survive untouched.
+  if (touched) inner.adjustPaneViewport?.(false, true, true, true)
+}
+
+/**
+ * Vertical padding for a pane. The holdings stack is anchored on its $0 floor,
+ * so only its headroom ever moves.
+ */
+function paneGap(paneId: string, fit: boolean): { top: number; bottom: number } {
+  const top = fit ? FIT_GAP : ROOMY_GAP.top
+  if (paneId === HOLDINGS_PANE) return { top, bottom: 0 }
+  return { top, bottom: fit ? FIT_GAP : ROOMY_GAP.bottom }
+}
+
+/**
+ * Re-pad the panes without touching their ranges — a pane whose axis the user
+ * has dragged stays exactly where they left it, and simply keeps the new
+ * padding for whenever it next fits itself.
+ */
+function setPaneGaps(chart: Chart, fit: boolean) {
+  for (const id of Y_AXIS_PANES) {
+    if (chart.getSize(id) == null) continue
+    chart.setPaneOptions({ id, gap: paneGap(id, fit) })
+  }
+}
+
+/**
+ * Fit a pane's plot to its height: hand the axis back to klinecharts' own
+ * range-from-visible-data *and* tighten the padding, so the data actually fills
+ * the pane. Purely vertical — no pane here consults the time scale, so the
+ * horizontal pan and zoom come through untouched. `paneId` omitted fits both.
+ */
+function fitVertically(chart: Chart, paneId?: string) {
+  for (const id of Y_AXIS_PANES) {
+    if (paneId != null && id !== paneId) continue
+    if (chart.getSize(id) == null) continue
+    releaseYAxes(chart, id)
+    chart.setPaneOptions({ id, gap: paneGap(id, true) })
+  }
+}
+
+/**
+ * The pane whose y-axis strip `target` sits in, or null for anywhere else on
+ * the chart. Used to keep axis clicks out of the date picker and to route a
+ * double-click to the right axis.
+ */
+function yAxisPaneAt(chart: Chart, target: EventTarget | null): string | null {
+  if (!(target instanceof Node)) return null
+  for (const id of Y_AXIS_PANES) {
+    if (chart.getDom(id, DomPosition.YAxis)?.contains(target)) return id
+  }
+  return null
+}
+
+/**
+ * Fit the whole series to the plot area: every bar across the pane's width, no
+ * gap past the last one, both y-axes back on auto. klinecharts won't draw a bar
+ * narrower than 1px, so a long daily series still opens scrolled to today —
+ * that's as much as fits.
+ */
+function fitToArea(chart: Chart, fallbackWidth: number) {
+  const n = chart.getDataList().length
+  if (n < 2) return
+  const width = chart.getSize(CANDLE_PANE, DomPosition.Main)?.width ?? fallbackWidth
+  chart.setOffsetRightDistance(FIT_RIGHT_GAP)
+  chart.setBarSpace(Math.max(1, (width - FIT_RIGHT_GAP) / n))
+  chart.scrollToRealTime()
+  fitVertically(chart)
+}
 
 /**
  * The marker on the picked bar: a vertical line down the candle pane with the
@@ -354,6 +524,55 @@ registerOverlay({
   },
 })
 
+/**
+ * The average-price marker: a dotted line straight across the candle pane at
+ * one price, with its value on a tag. A price is a level, not a moment, so it
+ * reads horizontally — the vertical marker on this chart is the picked *day*.
+ * Colour and label ride in `extendData` so the same overlay re-themes without a
+ * bespoke registration per palette.
+ */
+registerOverlay({
+  name: AVG_MARK,
+  totalStep: 2,
+  needDefaultPointFigure: false,
+  needDefaultXAxisFigure: false,
+  needDefaultYAxisFigure: false,
+  createPointFigures: ({ overlay, coordinates, bounding }) => {
+    const y = coordinates[0]?.y
+    if (typeof y !== "number" || !Number.isFinite(y)) return []
+    const { label = "", color = "#888888" } = (overlay.extendData ?? {}) as {
+      label?: string
+      color?: string
+    }
+    return [
+      {
+        type: "line",
+        ignoreEvent: true,
+        attrs: {
+          coordinates: [
+            { x: 0, y },
+            { x: bounding.width, y },
+          ],
+        },
+        // Dotted and 1px against the EMA's 1px dash and the picked day's 2px
+        // solid — three strokes in the same ink, each its own texture.
+        styles: {
+          style: LineType.Dashed,
+          dashedValue: [1, 3],
+          size: 1,
+          color,
+        },
+      },
+      {
+        type: "text",
+        ignoreEvent: true,
+        attrs: { x: 4, y: y - 3, text: label, align: "left", baseline: "bottom" },
+        styles: { color, backgroundColor: "rgba(0, 0, 0, 0)", size: 10 },
+      },
+    ]
+  },
+})
+
 /** Distinct coins in the filtered rows and the earliest instant each appears. */
 function coinsFromRows(data: BinanceTransaction[]): {
   coins: string[]
@@ -387,6 +606,12 @@ interface Merged {
   hasHoldings: boolean
   /** holdings-bar stack order, bottom → top (largest current value first) */
   stackOrder: string[]
+  /**
+   * Quantity-weighted average USD price across every transaction in the plotted
+   * asset. Only set when exactly one asset is priced — an average over two
+   * assets' prices is not a number that means anything.
+   */
+  avgTxnPrice: number | null
   stale: boolean
 }
 
@@ -524,6 +749,27 @@ function buildMerged(
     minLast >= 1 ? 2 : minLast >= 0.01 ? 4 : minLast >= 0.0001 ? 6 : 8
   const axisPrecision = hi >= 100 ? 2 : hi >= 0.1 ? 4 : hi >= 0.001 ? 6 : 8
 
+  // Quantity-weighted average price paid/received across the asset's whole
+  // transaction history: each row's size (|Change|) against the asset's close on
+  // the day it landed. Rows from before the asset had a quote are skipped —
+  // there is no price to weigh them at.
+  let avgTxnPrice: number | null = null
+  if (priced.length === 1) {
+    const coin = priced[0]
+    const closes = byCoinDay.get(coin)!
+    let qty = 0
+    let usd = 0
+    for (const t of parsedTxns) {
+      if (t.coin !== coin) continue
+      const price = closes.get(t.day)
+      if (price == null || !(price > 0)) continue
+      const size = Math.abs(t.change)
+      qty += size
+      usd += size * price
+    }
+    if (qty > 0) avgTxnPrice = usd / qty
+  }
+
   const sources = new Set<"coinbase" | "coingecko" | "frankfurter">()
   let stale = false
   let coveredFrom = Infinity
@@ -544,6 +790,7 @@ function buildMerged(
     axisPrecision,
     hasHoldings,
     stackOrder,
+    avgTxnPrice,
     stale,
   }
 }
@@ -727,6 +974,12 @@ export function AssetPriceKlineChart({
     () => (["day", "week", "month"] as const).find((t) => t === safeGet(TF_KEY)) ?? "day",
   )
   const [logScale, setLogScale] = React.useState(() => safeGet(LOG_KEY) === "1")
+  // Fit-to-area is the default view; any hand-scaling drops out of it (below).
+  const [autoScale, setAutoScale] = React.useState(() => safeGet(AUTO_KEY) !== "0")
+  const autoScaleRef = React.useRef(autoScale)
+  React.useEffect(() => {
+    autoScaleRef.current = autoScale
+  })
   const [emaOn, setEmaOn] = React.useState(() => safeGet(EMA_ON_KEY) === "1")
   const [emaPeriod, setEmaPeriod] = React.useState<number>(() => {
     const v = Number(safeGet(EMA_PERIOD_KEY))
@@ -739,6 +992,13 @@ export function AssetPriceKlineChart({
   const toggleLog = React.useCallback(() => {
     setLogScale((v) => {
       safeSet(LOG_KEY, v ? "0" : "1")
+      return !v
+    })
+  }, [])
+  const toggleAutoScale = React.useCallback(() => {
+    setAutoScale((v) => {
+      safeSet(AUTO_KEY, v ? "0" : "1")
+      autoScaleRef.current = !v
       return !v
     })
   }, [])
@@ -826,15 +1086,42 @@ export function AssetPriceKlineChart({
     // click x onto the nearest bar and toggle it (same bar again → clear).
     let downX = 0
     let downY = 0
+    let dragging = false
+
+    /** Hand-scaling wins: any drag or wheel over the chart leaves auto-scale. */
+    const dropAutoScale = () => {
+      if (!autoScaleRef.current) return
+      autoScaleRef.current = false
+      safeSet(AUTO_KEY, "0")
+      setAutoScale(false)
+    }
+
     const onPointerDown = (e: PointerEvent) => {
       downX = e.clientX
       downY = e.clientY
+      dragging = true
+    }
+    const onPointerMove = (e: PointerEvent) => {
+      if (!dragging) return
+      // A pointerup outside the chart never reaches us — no buttons held means
+      // the drag is long over.
+      if (e.buttons === 0) {
+        dragging = false
+        return
+      }
+      if (Math.abs(e.clientX - downX) > 4 || Math.abs(e.clientY - downY) > 4) {
+        dropAutoScale()
+      }
     }
     const onPointerUp = (e: PointerEvent) => {
+      dragging = false
       // Ignore the click that ends a pan/zoom drag.
       if (Math.abs(e.clientX - downX) > 4 || Math.abs(e.clientY - downY) > 4) return
       const c = chartRef.current
       if (!c) return
+      // The y-axis strip is for scaling, not for picking a day — without this a
+      // double-click there fires two picks on its way to re-fitting the axis.
+      if (yAxisPaneAt(c, e.target) != null) return
       const list = c.getDataList()
       if (list.length === 0) return
       const rect = el.getBoundingClientRect()
@@ -855,6 +1142,7 @@ export function AssetPriceKlineChart({
         onDateSelectRef.current?.({
           timestamp: ts,
           end: periodEnd(ts, timeframeRef.current),
+          latest: kd === list[list.length - 1],
           holdings: {
             ...((kd as { holdings?: Record<string, number> }).holdings ?? {}),
           },
@@ -864,15 +1152,42 @@ export function AssetPriceKlineChart({
         })
       }
     }
-    el.addEventListener("pointerdown", onPointerDown)
-    el.addEventListener("pointerup", onPointerUp)
+    /**
+     * Double-click a y-axis strip to fit that pane to its height. klinecharts'
+     * own handler only un-latches an axis the user has dragged, and even then
+     * leaves a third of the pane empty; this fits for real, every time, and
+     * touches nothing horizontal.
+     */
+    const onDoubleClick = (e: MouseEvent) => {
+      const c = chartRef.current
+      if (!c) return
+      const paneId = yAxisPaneAt(c, e.target)
+      if (paneId != null) fitVertically(c, paneId)
+    }
 
-    const ro = new ResizeObserver(() => chartRef.current?.resize())
+    el.addEventListener("pointerdown", onPointerDown)
+    el.addEventListener("pointermove", onPointerMove)
+    el.addEventListener("pointerup", onPointerUp)
+    el.addEventListener("dblclick", onDoubleClick)
+    el.addEventListener("wheel", dropAutoScale, { passive: true })
+
+    // A resize invalidates both the even split and the fit — redo them once the
+    // chart has taken its new size.
+    const ro = new ResizeObserver(() => {
+      const c = chartRef.current
+      if (!c) return
+      c.resize()
+      splitPanesEvenly(c)
+      if (autoScaleRef.current) fitToArea(c, el.clientWidth)
+    })
     ro.observe(el)
     return () => {
       ro.disconnect()
       el.removeEventListener("pointerdown", onPointerDown)
+      el.removeEventListener("pointermove", onPointerMove)
       el.removeEventListener("pointerup", onPointerUp)
+      el.removeEventListener("dblclick", onDoubleClick)
+      el.removeEventListener("wheel", dropAutoScale)
       dispose(el)
       chartRef.current = null
     }
@@ -916,20 +1231,36 @@ export function AssetPriceKlineChart({
         chart.createIndicator(
           { name: HOLDINGS_NAME, calcParams: merged.stackOrder },
           false,
-          { id: HOLDINGS_PANE, height: 108 },
+          {
+            id: HOLDINGS_PANE,
+            // Roughly half the box, so the pane never flashes at some other
+            // size; `splitPanesEvenly` below makes it exact.
+            height: Math.max(60, Math.round((containerRef.current?.clientHeight ?? 560) / 2) - 20),
+            // No padding under the axis minimum — klinecharts' default 10%
+            // would float the $0 line above the pane floor. Headroom on top
+            // follows whichever fit is in force.
+            gap: paneGap(HOLDINGS_PANE, autoScaleRef.current),
+            axisOptions: { name: USD_YAXIS },
+          },
         )
       }
-      // Frame as much history as fits. A daily series is usually longer than
-      // the pane can show at the 1px-per-bar floor, so it opens scrolled to
-      // today; weekly/monthly fit the whole range. Runs after layout so
-      // clientWidth is real.
+      // Split the panes evenly, then frame the history. Auto-scale fits the
+      // whole series; otherwise a daily series is usually longer than the pane
+      // can show at the 1px-per-bar floor, so it opens scrolled to today while
+      // weekly/monthly fit the whole range. Runs after layout so the measured
+      // widths and pane heights are real.
       const n = viewData.length
       requestAnimationFrame(() => {
         const c = chartRef.current
         if (!c || n < 2) return
         const width = containerRef.current?.clientWidth ?? 720
-        c.setBarSpace(Math.min(16, Math.max(1, width / n)))
-        c.scrollToRealTime()
+        splitPanesEvenly(c)
+        if (autoScaleRef.current) {
+          fitToArea(c, width)
+        } else {
+          c.setBarSpace(Math.min(16, Math.max(1, width / n)))
+          c.scrollToRealTime()
+        }
       })
     }
   }, [merged, viewData])
@@ -947,9 +1278,25 @@ export function AssetPriceKlineChart({
     chart.setStyles(klineStyles(isDark, family, logScale))
     chart.setPaneOptions({
       id: CANDLE_PANE,
-      axisOptions: { name: logScale ? LOG_YAXIS : "default" },
+      axisOptions: { name: logScale ? LOG_YAXIS : USD_YAXIS },
     })
   }, [isDark, logScale, palette])
+
+  // (2b) Auto-scale. On, it refits the series to the pane and releases both
+  // y-axes; off, it hands klinecharts' right-hand gap back so panning past the
+  // last bar works the way it does everywhere else. Data and resize refits live
+  // with the effects that cause them.
+  React.useEffect(() => {
+    const chart = chartRef.current
+    if (!chart) return
+    if (autoScale) {
+      fitToArea(chart, containerRef.current?.clientWidth ?? 720)
+    } else {
+      chart.setOffsetRightDistance(DEFAULT_RIGHT_GAP)
+      // Padding only — a y-axis the user just dragged keeps its range.
+      setPaneGaps(chart, false)
+    }
+  }, [autoScale])
 
   // (3) EMA overlay — attach/detach the dashed line only, no data touch, so
   // toggling it or switching its period keeps the current pan/zoom. `merged` is
@@ -970,6 +1317,33 @@ export function AssetPriceKlineChart({
       )
     }
   }, [showEma, emaPeriod, emaColor, merged])
+
+  // (3b) The average-price line. Rides with the EMA — one asset, EMA on — since
+  // it answers the same question the EMA does: where does today's price sit
+  // against what this position actually cost. Recreated rather than mutated:
+  // the figures are built from `extendData`, and the ink flips with the theme.
+  const avgRef = React.useRef<string | null>(null)
+  const avgPrice = showEma ? (merged?.avgTxnPrice ?? null) : null
+  React.useEffect(() => {
+    const chart = chartRef.current
+    if (!chart) return
+    if (avgRef.current) {
+      chart.removeOverlay(avgRef.current)
+      avgRef.current = null
+    }
+    if (avgPrice != null && avgPrice > 0) {
+      const id = chart.createOverlay(
+        {
+          name: AVG_MARK,
+          points: [{ value: avgPrice }],
+          extendData: { label: `Avg ${fmtUsdPrice(avgPrice)}`, color: emaColor },
+          lock: true,
+        },
+        CANDLE_PANE,
+      )
+      avgRef.current = typeof id === "string" ? id : null
+    }
+  }, [avgPrice, emaColor, viewData])
 
   // Vertical line on the picked bar, falling back to the latest bar ("today")
   // when nothing is picked. Runs after the data push so the overlay's timestamp
@@ -1024,6 +1398,7 @@ export function AssetPriceKlineChart({
       onDateSelect?.({
         timestamp: kd.timestamp,
         end: periodEnd(kd.timestamp, timeframe),
+        latest: bar === viewData[viewData.length - 1],
         holdings: { ...(kd.holdings ?? {}) },
         balances: { ...(kd.balances ?? {}) },
       })
@@ -1069,6 +1444,20 @@ export function AssetPriceKlineChart({
             )}
           >
             Log scale
+          </button>
+          <button
+            type="button"
+            onClick={toggleAutoScale}
+            aria-pressed={autoScale}
+            title="Fit the whole series to the chart area — dragging the chart turns it off"
+            className={cn(
+              "border px-2 py-0.5 text-[11px] transition-colors",
+              autoScale
+                ? "border-primary bg-primary text-primary-foreground"
+                : "border-border text-muted-foreground hover:bg-muted hover:text-foreground",
+            )}
+          >
+            Auto-scale
           </button>
           <div className="flex">
             <Popover open={dateOpen} onOpenChange={setDateOpen}>
@@ -1229,6 +1618,15 @@ export function AssetPriceKlineChart({
                 EMA {emaPeriod}
               </span>
             )}
+            {avgPrice != null && avgPrice > 0 && (
+              <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                <span
+                  className="inline-block h-0 w-3 shrink-0 border-t border-dotted"
+                  style={{ borderColor: emaColor }}
+                />
+                Avg {fmtUsdPrice(avgPrice)}
+              </span>
+            )}
           </div>
           <p className="text-[10px] text-muted-foreground">
             {timeframe === "day" ? "Daily" : timeframe === "week" ? "Weekly" : "Monthly"}{" "}
@@ -1251,6 +1649,11 @@ export function AssetPriceKlineChart({
               ` Dashed line: ${emaPeriod}-period exponential moving average of the ${
                 timeframe === "day" ? "daily" : timeframe === "week" ? "weekly" : "monthly"
               } close.`}
+            {avgPrice != null &&
+              avgPrice > 0 &&
+              ` Dotted line: average price across every ${coinLabel(
+                merged.priced[0],
+              )} transaction, each weighed by its size at that day's close.`}
             {merged.hasHoldings &&
               " Lower pane: USD value of holdings, stacked by asset."}
             {merged.unpriced.length > 0 &&
