@@ -38,9 +38,12 @@ export function AllocationPanel({
     }
   }, [])
 
-  // Picking a day on the price chart only makes sense against the snapshot view,
-  // so a live snapshot pins the tab there without touching state.
-  const activeTab = snapshot ? "snapshot" : tab
+  // Targets are planned against what you hold *now*, so they say nothing about a
+  // day already gone. Picking an older bar on the price chart pins the panel to
+  // Snapshot and strikes the Target tab through; picking the chart's latest bar
+  // — today, as far as the price history reaches — leaves both tabs live.
+  const viewingPast = snapshot != null && !snapshot.latest
+  const activeTab = viewingPast ? "snapshot" : tab
 
   return (
     <Tabs value={activeTab} onValueChange={setTab} className="w-full">
@@ -48,7 +51,11 @@ export function AllocationPanel({
         <TabsTrigger value="snapshot" className="text-xs">
           Snapshot
         </TabsTrigger>
-        <TabsTrigger value="target" className="text-xs">
+        <TabsTrigger
+          value="target"
+          disabled={viewingPast}
+          className="text-xs disabled:line-through"
+        >
           Target
         </TabsTrigger>
       </TabsList>

@@ -338,6 +338,8 @@ export function AllocationTargetChart({ data, quotes }: AllocationTargetChartPro
                   {(r.curShare * 100).toLocaleString("en-US", { maximumFractionDigits: 1 })}%
                 </span>
                 <div className="flex shrink-0 items-center gap-0.5">
+                  {/* The base Input carries a `md:text-xs`, which would win over a
+                      bare `text-[13px]` on every desktop viewport — hence both. */}
                   <Input
                     type="number"
                     min={0}
@@ -346,9 +348,9 @@ export function AllocationTargetChart({ data, quotes }: AllocationTargetChartPro
                     value={r.rawPct === 0 ? "" : String(r.rawPct)}
                     onChange={(e) => setWeight(r.coin, e.target.value)}
                     placeholder="0"
-                    className="h-6 w-12 px-1.5 text-right font-mono text-[11px]"
+                    className="h-7 w-16 px-2 text-right font-mono text-[13px] md:text-[13px]"
                   />
-                  <span className="text-[11px] text-muted-foreground">%</span>
+                  <span className="text-[13px] text-muted-foreground">%</span>
                 </div>
               </div>
 
@@ -430,7 +432,8 @@ export function AllocationTargetChart({ data, quotes }: AllocationTargetChartPro
         <span style={{ color: OVER_COLOR }}>amber = trim</span>,{" "}
         <span style={{ color: UNDER_COLOR }}>blue = add</span>. Rebalance amounts value
         the target against today's {fmtUsd(totalUsd, true)} priced portfolio. Set an asset
-        to 0% to drop it. Saved on this device.
+        to 0% to drop it. Saved with your data and included in the Import Export
+        backup.
         {unpriced.length > 0 && ` No quote for: ${unpriced.map(coinLabel).join(", ")}.`}
       </p>
     </div>

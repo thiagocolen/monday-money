@@ -12,6 +12,12 @@ export interface DateSnapshot {
   timestamp: number
   /** exclusive end of the picked bar's period, epoch ms */
   end: number
+  /**
+   * The bar picked is the most recent one the chart holds — "today", as far as
+   * the price history goes. Decided where the snapshot is made, so readers
+   * don't have to consult a clock mid-render.
+   */
+  latest: boolean
   /** USD value held per coin as of that bar */
   holdings: Record<string, number>
   /** token quantity held per coin as of that bar — same keys as `holdings` */
@@ -51,8 +57,14 @@ export const fmtQty = (v: number) => {
   return v.toLocaleString("en-US", { maximumFractionDigits: digits })
 }
 
+/**
+ * Label for a picked bar. Bar timestamps are UTC period starts, so read them in
+ * UTC — a local-time read shifts the day for anyone west of Greenwich, and the
+ * panel would name a different day than the marker on the chart.
+ */
 export const fmtDate = (ms: number) =>
   new Date(ms).toLocaleDateString("en-US", {
+    timeZone: "UTC",
     year: "numeric",
     month: "short",
     day: "numeric",
