@@ -79,6 +79,19 @@ function ChartContainer({
   )
 }
 
+// Colors here can originate from user-editable category/tag metadata (and,
+// via a restored backup, from a *different* user's data). They get injected
+// into a raw <style> tag below, so anything that isn't a plausible CSS color
+// value is dropped rather than rendered — otherwise a value like
+// `red} body{background:url(...)}` could inject arbitrary CSS.
+const SAFE_CSS_COLOR = /^(#[0-9a-fA-F]{3,8}|rgba?\([\d.\s,%]+\)|hsla?\([\d.\s,%]+\)|var\(--[\w-]+\)|[a-zA-Z]+)$/
+
+function sanitizeCssColor(value: string | undefined): string | null {
+  if (!value) return null
+  const trimmed = value.trim()
+  return SAFE_CSS_COLOR.test(trimmed) ? trimmed : null
+}
+
 const ChartStyle = ({ id, config }: { id: string; config: ChartConfig }) => {
   const colorConfig = Object.entries(config).filter(
     ([, config]) => config.theme ?? config.color
@@ -97,9 +110,10 @@ const ChartStyle = ({ id, config }: { id: string; config: ChartConfig }) => {
 ${prefix} [data-chart=${id}] {
 ${colorConfig
   .map(([key, itemConfig]) => {
-    const color =
+    const rawColor =
       itemConfig.theme?.[theme as keyof typeof itemConfig.theme] ??
       itemConfig.color
+    const color = sanitizeCssColor(rawColor)
     return color ? `  --color-${key}: ${color};` : null
   })
   .join("\n")}
