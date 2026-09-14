@@ -21,6 +21,10 @@ import {
   handleSaveMetadata,
   handleGetAllocationTarget,
   handleSaveAllocationTarget,
+  handleGetWallets,
+  handleSaveWallets,
+  handleGetWalletCache,
+  handleSaveWalletCache,
   handleFullBackup,
   handleRestoreBackup,
   handleResetApp,
@@ -50,10 +54,28 @@ function initializeCore() {
   }
 }
 
-// Origins the renderer legitimately needs for price data (see src/lib/price-history.ts, src/lib/prices.ts).
+// Origins the renderer legitimately needs for price data (see src/lib/price-history.ts, src/lib/prices.ts)
+// and wallet balance/history data (see src/lib/chains/*.ts) — keep both in sync
+// with the rpcUrls/hosts actually used there.
 const ALLOWED_CONNECT_ORIGINS = [
   'https://api.exchange.coinbase.com',
   'https://api.coingecko.com',
+  'https://blockstream.info',
+  'https://eth.blockscout.com',
+  'https://ethereum.publicnode.com',
+  'https://eth.llamarpc.com',
+  'https://bsc-dataseed.binance.org',
+  'https://bsc-rpc.publicnode.com',
+  'https://api.mainnet-beta.solana.com',
+  'https://solana-rpc.publicnode.com',
+  'https://rpc.ankr.com',
+  'https://arb1.arbitrum.io',
+  'https://arbitrum.publicnode.com',
+  'https://arbitrum.blockscout.com',
+  'https://mainnet.base.org',
+  'https://base.publicnode.com',
+  'https://base.blockscout.com',
+  'https://api.trongrid.io',
 ];
 
 function isDev(): boolean {
@@ -206,6 +228,22 @@ ipcMain.handle('get-allocation-target', async () => {
 
 ipcMain.handle('save-allocation-target', async (event, target) => {
   return handleSaveAllocationTarget(target);
+});
+
+ipcMain.handle('get-wallets', async () => {
+  return handleGetWallets();
+});
+
+ipcMain.handle('save-wallets', async (event, wallets) => {
+  return handleSaveWallets(wallets);
+});
+
+ipcMain.handle('get-wallet-cache', async () => {
+  return handleGetWalletCache();
+});
+
+ipcMain.handle('save-wallet-cache', async (event, cache) => {
+  return handleSaveWalletCache(cache);
 });
 
 ipcMain.handle('get-settings', async () => {
