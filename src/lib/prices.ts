@@ -15,6 +15,7 @@ export const COINGECKO_IDS: Record<string, string> = {
   ADA: "cardano",
   DOGE: "dogecoin",
   LINK: "chainlink",
+  TRX: "tron",
   SUI: "sui",
   RUNE: "thorchain",
   ORDI: "ordinals",
