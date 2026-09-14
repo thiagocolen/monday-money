@@ -6,15 +6,19 @@ import { Cell, Label, Pie, PieChart, Tooltip } from "recharts"
 import { ChartContainer } from "@/components/ui/chart"
 import type { ChartConfig } from "@/components/ui/chart"
 import type { BinanceTransaction } from "@/lib/api"
-import { currentCoinBalances } from "@/lib/binance-history"
-import { coinColor, coinLabel } from "@/lib/coins"
+import {
+  buildLiveAllocation,
+  buildSnapshotAllocation,
+  fmtDate,
+  fmtPct,
+  fmtQty,
+  fmtUsd,
+} from "@/lib/allocation"
+import type { AllocSlice, DateSnapshot } from "@/lib/allocation"
+import { coinLabel } from "@/lib/coins"
+import { useCoinColor } from "@/lib/use-coin-colors"
 import { fetchUsdQuotes } from "@/lib/prices"
 import type { UsdQuotes } from "@/lib/prices"
-
-interface DateSnapshot {
-  timestamp: number
-  holdings: Record<string, number>
-}
 
 interface PortfolioPieChartProps {
   /** rows currently visible in the table (already column-filtered) */
@@ -23,82 +27,12 @@ interface PortfolioPieChartProps {
   snapshot?: DateSnapshot | null
   /** reset back to today */
   onClearSnapshot?: () => void
-}
-
-interface Slice {
-  coin: string
-  /** USD value of the holding */
-  usd: number
-  /** underlying token quantity (NaN in snapshot mode) */
-  qty: number
-  share: number
-  color: string
-}
-
-const fmtUsd = (v: number, compact = false) =>
-  v.toLocaleString("en-US", {
-    style: "currency",
-    currency: "USD",
-    notation: compact ? "compact" : "standard",
-    maximumFractionDigits: compact ? 1 : v < 100 ? 2 : 0,
-  })
-const fmtPct = (s: number) =>
-  `${(s * 100).toLocaleString("en-US", { maximumFractionDigits: 1 })}%`
-const fmtQty = (v: number) => {
-  const abs = Math.abs(v)
-  const digits = abs !== 0 && abs < 1 ? 6 : abs < 1000 ? 3 : 2
-  return v.toLocaleString("en-US", { maximumFractionDigits: digits })
-}
-const fmtDate = (ms: number) =>
-  new Date(ms).toLocaleDateString("en-US", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  })
-
-function toSlices(
-  priced: { coin: string; usd: number; qty: number }[],
-): { slices: Slice[]; totalUsd: number } {
-  priced.sort((a, b) => b.usd - a.usd)
-  const totalUsd = priced.reduce((sum, h) => sum + h.usd, 0)
-  if (totalUsd <= 0) return { slices: [], totalUsd: 0 }
-  const slices: Slice[] = priced.map((h) => ({
-    coin: h.coin,
-    usd: h.usd,
-    qty: h.qty,
-    share: h.usd / totalUsd,
-    color: coinColor(h.coin),
-  }))
-  return { slices, totalUsd }
-}
-
-/** Live allocation: current balances valued at CoinGecko spot. */
-function buildLive(
-  data: BinanceTransaction[],
-  price: Record<string, number>,
-): { slices: Slice[]; totalUsd: number; unpriced: string[] } {
-  const balances = currentCoinBalances(data)
-  const priced: { coin: string; usd: number; qty: number }[] = []
-  const unpriced: string[] = []
-  for (const [coin, qty] of Object.entries(balances)) {
-    if (qty <= 0) continue
-    const p = price[coin.toUpperCase()]
-    if (typeof p === "number" && p > 0) priced.push({ coin, usd: qty * p, qty })
-    else unpriced.push(coin)
-  }
-  return { ...toSlices(priced), unpriced: unpriced.sort() }
-}
-
-/** Historical allocation: pre-valued USD holdings from the price chart. */
-function buildSnapshot(holdings: Record<string, number>): {
-  slices: Slice[]
-  totalUsd: number
-  unpriced: string[]
-} {
-  const priced = Object.entries(holdings)
-    .filter(([, usd]) => usd > 0)
-    .map(([coin, usd]) => ({ coin, usd, qty: NaN }))
-  return { ...toSlices(priced), unpriced: [] }
+  /**
+   * Live USD quotes. When provided the component uses these and skips its own
+   * fetch (lets a parent share one fetch across sibling charts). Pass `null`
+   * while the parent's fetch is still in flight. Omit entirely to self-fetch.
+   */
+  quotes?: UsdQuotes | null
 }
 
 function SliceTooltip({
@@ -106,7 +40,7 @@ function SliceTooltip({
   payload,
 }: {
   active?: boolean
-  payload?: Array<{ payload: Slice }>
+  payload?: Array<{ payload: AllocSlice }>
 }) {
   if (!active || !payload?.length) return null
   const s = payload[0].payload
@@ -131,27 +65,30 @@ export function PortfolioPieChart({
   data,
   snapshot,
   onClearSnapshot,
+  quotes: quotesProp,
 }: PortfolioPieChartProps) {
-  const [quotes, setQuotes] = React.useState<UsdQuotes | null>(null)
+  const [fetched, setFetched] = React.useState<UsdQuotes | null>(null)
+  const quotes = quotesProp !== undefined ? quotesProp : fetched
+  const colorOf = useCoinColor()
 
   React.useEffect(() => {
-    if (snapshot) return // snapshot mode carries its own USD values
+    if (snapshot || quotesProp !== undefined) return // snapshot carries USD; prop wins
     let alive = true
     fetchUsdQuotes().then((q) => {
-      if (alive) setQuotes(q)
+      if (alive) setFetched(q)
     })
     return () => {
       alive = false
     }
-  }, [snapshot])
+  }, [snapshot, quotesProp])
 
-  const { slices, totalUsd, unpriced } = React.useMemo(
-    () =>
-      snapshot
-        ? buildSnapshot(snapshot.holdings)
-        : buildLive(data, quotes?.price ?? {}),
-    [snapshot, data, quotes],
-  )
+  // `colorOf` carries the palette: a shuffle gives it a new identity, which
+  // re-slices with the new colours (they're baked into each slice).
+  const { slices, totalUsd, unpriced } = React.useMemo(() => {
+    return snapshot
+      ? buildSnapshotAllocation(snapshot.holdings, snapshot.balances, colorOf)
+      : buildLiveAllocation(data, quotes?.price ?? {}, colorOf)
+  }, [snapshot, data, quotes, colorOf])
 
   const config = React.useMemo<ChartConfig>(
     () =>
@@ -200,7 +137,7 @@ export function PortfolioPieChart({
   return (
     <div className="space-y-2">
       {header}
-      <ChartContainer config={config} className="mx-auto aspect-square h-[220px]">
+      <ChartContainer config={config} className="mx-auto aspect-square h-[260px]">
         <PieChart>
           <Tooltip content={<SliceTooltip />} />
           <Pie
@@ -247,18 +184,19 @@ export function PortfolioPieChart({
         </PieChart>
       </ChartContainer>
 
-      <div className="flex flex-col gap-1">
-        <div className="flex items-center justify-between gap-2 border-b pb-1 text-[11px] font-medium">
-          <span className="text-foreground">
-            Total ({slices.length} asset{slices.length === 1 ? "" : "s"})
-          </span>
-          <span className="font-mono tabular-nums text-foreground">{fmtUsd(totalUsd)}</span>
-        </div>
+      {/* One grid rather than a row of flexboxes so the amount column lines up. */}
+      <div className="grid grid-cols-[minmax(0,1fr)_auto_auto_2.5rem] items-center gap-x-2 gap-y-1 text-[11px]">
+        <span className="col-span-2 border-b pb-1 font-medium text-foreground">
+          Total ({slices.length} asset{slices.length === 1 ? "" : "s"})
+        </span>
+        <span className="border-b pb-1 text-right font-mono font-medium tabular-nums text-foreground">
+          {fmtUsd(totalUsd)}
+        </span>
+        <span className="border-b pb-1 text-right font-medium text-muted-foreground">
+          %
+        </span>
         {slices.map((s) => (
-          <div
-            key={s.coin}
-            className="flex items-center justify-between gap-2 text-[11px]"
-          >
+          <React.Fragment key={s.coin}>
             <span className="flex min-w-0 items-center gap-1.5 text-muted-foreground">
               <span
                 className="inline-block h-2 w-2 shrink-0 rounded-[2px]"
@@ -266,11 +204,19 @@ export function PortfolioPieChart({
               />
               <span className="truncate">{coinLabel(s.coin)}</span>
             </span>
-            <span className="flex shrink-0 gap-2 font-mono tabular-nums">
-              <span className="text-muted-foreground">{fmtUsd(s.usd)}</span>
-              <span className="w-10 text-right text-foreground">{fmtPct(s.share)}</span>
+            <span
+              className="text-right font-mono tabular-nums text-muted-foreground"
+              title={Number.isNaN(s.qty) ? undefined : `${fmtQty(s.qty)} ${s.coin}`}
+            >
+              {Number.isNaN(s.qty) ? "—" : fmtQty(s.qty)}
             </span>
-          </div>
+            <span className="text-right font-mono tabular-nums text-muted-foreground">
+              {fmtUsd(s.usd)}
+            </span>
+            <span className="text-right font-mono tabular-nums text-foreground">
+              {fmtPct(s.share)}
+            </span>
+          </React.Fragment>
         ))}
       </div>
 

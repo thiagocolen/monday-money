@@ -384,6 +384,52 @@ export async function handleSaveMetadata(type: 'tags' | 'categories', data: Meta
   return { success: true };
 }
 
+/** canonical UPPER-CASE ticker -> target weight in percent (0..100) */
+type AllocationTargetMap = Record<string, number>;
+
+/**
+ * Normalises an untrusted allocation-target payload the same way the client
+ * does (see src/lib/allocation-target.ts): upper-case tickers, positive weights
+ * only, capped at 100 and rounded to 2 decimals.
+ */
+function sanitizeAllocationTarget(input: unknown): AllocationTargetMap {
+  const out: AllocationTargetMap = {};
+  if (!input || typeof input !== 'object') return out;
+  for (const [k, v] of Object.entries(input as Record<string, unknown>)) {
+    const n = Number(v);
+    const key = String(k).trim().toUpperCase();
+    if (key && Number.isFinite(n) && n > 0) {
+      out[key] = Math.min(100, Math.round(n * 100) / 100);
+    }
+  }
+  return out;
+}
+
+export async function handleGetAllocationTarget(): Promise<AllocationTargetMap> {
+  const { dataDir } = getPaths();
+  const filePath = path.join(dataDir, 'allocation-target.json');
+  if (fs.existsSync(filePath)) {
+    try {
+      return sanitizeAllocationTarget(JSON.parse(fs.readFileSync(filePath, 'utf8')));
+    } catch (e) {
+      console.error('Error parsing allocation-target.json', e);
+    }
+  }
+  return {};
+}
+
+export async function handleSaveAllocationTarget(target: unknown): Promise<{ success: boolean }> {
+  const { dataDir } = getPaths();
+  if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
+  const filePath = path.join(dataDir, 'allocation-target.json');
+  fs.writeFileSync(
+    filePath,
+    JSON.stringify(sanitizeAllocationTarget(target), null, 2),
+    'utf8',
+  );
+  return { success: true };
+}
+
 export async function handleFullBackup(): Promise<{ success: boolean; fileName?: string; error?: string }> {
   try {
     const settings = getSettings();

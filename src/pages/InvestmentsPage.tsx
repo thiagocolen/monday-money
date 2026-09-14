@@ -20,8 +20,8 @@ import { parseFlexibleDate, formatTimestamp } from '@/lib/date'
 import type { DateRangeFilterValue } from '@/components/date-range-filter'
 import { FiatFlowChart } from '@/components/fiat-flow-chart'
 import { AssetPriceKlineChart } from '@/components/asset-price-kline-chart'
-import type { DateSnapshot } from '@/components/asset-price-kline-chart'
-import { PortfolioPieChart } from '@/components/portfolio-pie-chart'
+import type { DateSnapshot } from '@/lib/allocation'
+import { AllocationPanel } from '@/components/allocation-panel'
 import { canonicalCoin, coinLabel, formatCoinAmount, renamedCoinNote } from '@/lib/coins'
 
 /** Inclusive epoch-ms range filter over a flexibly-formatted timestamp column. */
@@ -176,18 +176,8 @@ export function InvestmentsPage() {
     {
       accessorKey: 'Change',
       header: 'Change',
-      footer: ({ table }) => {
-        const total = table.getFilteredRowModel().rows.reduce((sum, row) => {
-          const val = parseFloat(row.getValue('Change'))
-          return sum + (isNaN(val) ? 0 : val)
-        }, 0)
-        const rounded = Number(total.toFixed(8))
-        return (
-          <span className={rounded < 0 ? 'text-destructive' : 'text-emerald-600'}>
-            {rounded > 0 ? `+${formatCoinAmount(rounded)}` : formatCoinAmount(rounded)}
-          </span>
-        )
-      },
+      // No column total: the rows mix coins, so summing their Change adds
+      // bitcoin to dollars to LINK and lands on a number that means nothing.
       cell: ({ row }) => {
         const value = parseFloat(row.getValue('Change'))
         return <span className={`font-mono font-medium ${value < 0 ? "text-destructive" : "text-emerald-600"}`}>
@@ -315,7 +305,7 @@ export function InvestmentsPage() {
         
         <TabsContent value="history" className="border-none p-0 outline-none">
           <div className="space-y-4">
-            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_300px]">
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_380px]">
               <div className="rounded-md border p-4">
                 <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
                   Historical USD price
@@ -330,7 +320,7 @@ export function InvestmentsPage() {
                 <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
                   Allocation
                 </p>
-                <PortfolioPieChart
+                <AllocationPanel
                   data={historySynced ? historyChartRows : filteredHistory}
                   snapshot={allocSnapshot}
                   onClearSnapshot={() => setAllocSnapshot(null)}
