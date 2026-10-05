@@ -54,7 +54,37 @@ function canonicalCoin(val: string): string {
   return COIN_RENAMES[c.toUpperCase()] ?? c;
 }
 
+/**
+ * Mercado Pago "settlement report" layout: one header row of upper-case column
+ * names (SETTLEMENT_DATE;TRANSACTION_TYPE;DESCRIPTION;REAL_AMOUNT;...), ISO
+ * timestamps and dot-decimal amounts. Used by `settlement_v2-*.csv` exports and,
+ * since late 2026, by the account statement export (`account_statement-*.csv`).
+ */
+function isSettlementReport(content: string): boolean {
+  const header = content.replace(/^\uFEFF/, '').split(/\r?\n/, 1)[0];
+  const cols = header.split(';').map(c => c.trim());
+  return cols.includes('SETTLEMENT_DATE') && cols.includes('REAL_AMOUNT');
+}
+
+function parseSettlementReport(content: string, owner: string): { destFile: string; rows: any[] } {
+  const cleanContent = content.replace(/^\uFEFF/, '').trim();
+  const parsed = Papa.parse<any>(cleanContent, { header: true, delimiter: ';', skipEmptyLines: true }).data;
+  const rows = parsed.filter(item => item.TRANSACTION_DATE && item.REAL_AMOUNT).map(item => {
+    const formattedDate = item.TRANSACTION_DATE.slice(0, 10);
+    const description = item.PAYMENT_METHOD_TYPE || item.TRANSACTION_TYPE;
+    return { date: formattedDate, description, amount: normalizeAmount(item.REAL_AMOUNT), owner };
+  });
+  return { destFile: 'monthly-transactions.csv', rows };
+}
+
 export const PARSERS: FileParser[] = [
+  {
+    // Newer account statement exports share the legacy file name but use the
+    // settlement report layout, so detect them by header before the legacy parser.
+    name: 'MercadoPagoAccountStatementV2',
+    match: (f, content) => f.startsWith('account_statement-') && isSettlementReport(content),
+    parse: (_f, content, owner) => parseSettlementReport(content, owner)
+  },
   {
     name: 'MercadoPago',
     match: (f) => f.startsWith('account_statement-'),
@@ -74,16 +104,7 @@ export const PARSERS: FileParser[] = [
   {
     name: 'MercadoPagoSettlementV2',
     match: (f) => f.toLowerCase().startsWith('settlement_v2-'),
-    parse: (_f, content, owner) => {
-      const cleanContent = content.replace(/^﻿/, '').trim();
-      const parsed = Papa.parse<any>(cleanContent, { header: true, delimiter: ';', skipEmptyLines: true }).data;
-      const rows = parsed.filter(item => item.TRANSACTION_DATE && item.REAL_AMOUNT).map(item => {
-        const formattedDate = item.TRANSACTION_DATE.slice(0, 10);
-        const description = item.PAYMENT_METHOD_TYPE || item.TRANSACTION_TYPE;
-        return { date: formattedDate, description, amount: normalizeAmount(item.REAL_AMOUNT), owner };
-      });
-      return { destFile: 'monthly-transactions.csv', rows };
-    }
+    parse: (_f, content, owner) => parseSettlementReport(content, owner)
   },
   {
     name: 'NubankAccount',
