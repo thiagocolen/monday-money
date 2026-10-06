@@ -58,6 +58,16 @@ export default defineConfig(({ mode }) => {
       !isWeb && electron({
         main: {
           entry: "electron/main.ts",
+          vite: {
+            build: {
+              rolldownOptions: {
+                // pdf.js loads its worker as `./pdf.worker.mjs` next to its own
+                // module; bundled into dist-electron that file doesn't exist,
+                // so load it from node_modules instead.
+                external: [/^pdfjs-dist(\/|$)/],
+              },
+            },
+          },
         },
         preload: {
           input: "electron/preload.ts",
