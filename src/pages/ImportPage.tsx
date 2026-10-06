@@ -230,7 +230,7 @@ export function ImportPage() {
         <CardContent className="text-xs space-y-3 text-muted-foreground">
           <div className="flex items-start gap-2">
             <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 mt-0.5" />
-            <p>Place your CSV files in subfolders named after the transaction <strong>owner</strong> (e.g., <code>.../MyFolder/John-Doe/statement.csv</code>).</p>
+            <p>Place your CSV (or Mercado Pago PDF) statement files in subfolders named after the transaction <strong>owner</strong> (e.g., <code>.../MyFolder/John-Doe/statement.csv</code>).</p>
           </div>
           <div className="flex items-start gap-2">
             <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 mt-0.5" />

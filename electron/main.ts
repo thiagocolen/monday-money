@@ -41,7 +41,7 @@ import fs from 'fs';
 
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
 
-function initializeCore() {
+async function initializeCore() {
   const coreDir = getCoreDir();
   const mainLedgerPath = path.join(coreDir, 'data', 'monthly-transactions.csv');
   
@@ -49,7 +49,7 @@ function initializeCore() {
   if (!fs.existsSync(mainLedgerPath)) {
     console.log('Initializing fresh data directory...');
     createSeedTransaction();
-    dataImportRegistration();
+    await dataImportRegistration();
     integrityCheck();
   }
 }
@@ -135,8 +135,8 @@ function lockDownNavigation(win: BrowserWindow) {
   });
 }
 
-function createWindow() {
-  initializeCore();
+async function createWindow() {
+  await initializeCore();
   applyContentSecurityPolicy();
 
   const win = new BrowserWindow({

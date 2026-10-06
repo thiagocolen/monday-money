@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { clearLedger } from './clear-ledger.js';
 import { createSeedTransaction } from './create-seed-transaction.js';
-import { dataImportRegistration, PARSERS } from './data-import-registration.js';
+import { dataImportRegistration, PARSERS, isStatementFile, readStatementContent } from './data-import-registration.js';
 import { integrityCheck } from './integrity-check.js';
 import { 
   getSha256, 
@@ -106,7 +106,7 @@ export async function handleImportFile(owner: string, fileName: string, fileCont
     // Run pipeline
     clearLedger();
     createSeedTransaction();
-    dataImportRegistration();
+    await dataImportRegistration();
     integrityCheck();
 
     return { success: true };
@@ -128,7 +128,7 @@ export async function handleDeleteImport(owner: string, fileName: string): Promi
       // Reprocess
       clearLedger();
       createSeedTransaction();
-      dataImportRegistration();
+      await dataImportRegistration();
       integrityCheck();
       
       return { success: true, logs: 'Reprocessing completed.' };
@@ -148,11 +148,16 @@ export async function handleGetImportHistory(): Promise<any[]> {
     
     for (const owner of owners) {
       const ownerPath = path.join(rawStatementFilesDir, owner);
-      const files = fs.readdirSync(ownerPath).filter(f => f.endsWith('.csv'));
+      const files = fs.readdirSync(ownerPath).filter(isStatementFile);
       for (const file of files) {
         const filePath = path.join(ownerPath, file);
         const stats = fs.statSync(filePath);
-        const content = fs.readFileSync(filePath, 'utf-8');
+        let content = '';
+        try {
+          content = await readStatementContent(file, fs.readFileSync(filePath));
+        } catch (e) {
+          console.error(`Error reading file ${file} for history:`, e);
+        }
         
         const parser = PARSERS.find(p => p.match(file, content));
         let totalRows = 0;
@@ -559,7 +564,7 @@ export async function handleScanFolder(): Promise<{ success: boolean; error?: st
         fs.mkdirSync(targetOwnerPath, { recursive: true });
       }
 
-      const files = fs.readdirSync(sourceOwnerPath).filter(f => f.endsWith('.csv'));
+      const files = fs.readdirSync(sourceOwnerPath).filter(isStatementFile);
       for (const file of files) {
         const sourceFilePath = path.join(sourceOwnerPath, file);
         const targetFilePath = path.join(targetOwnerPath, file);
@@ -571,7 +576,7 @@ export async function handleScanFolder(): Promise<{ success: boolean; error?: st
 
     // Run pipeline: re-initialize since we cleared data
     createSeedTransaction();
-    dataImportRegistration();
+    await dataImportRegistration();
     integrityCheck();
 
     return { success: true };
