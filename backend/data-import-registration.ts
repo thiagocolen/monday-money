@@ -3,11 +3,29 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import Papa from 'papaparse';
 import { getSha256, getCoreDir } from './utils.js';
+import { extractPdfText } from './pdf-text.js';
+
+export interface ParseResult {
+  destFile: string;
+  rows: any[];
+  /** Statement period (`YYYY-MM-DD`, inclusive) when the file declares one. */
+  period?: { start: string; end: string };
+}
 
 export interface FileParser {
   name: string;
   match: (fileName: string, content: string) => boolean;
-  parse: (fileName: string, content: string, ownerName: string) => { destFile: string; rows: any[] };
+  parse: (fileName: string, content: string, ownerName: string) => ParseResult;
+}
+
+/** Raw statement files the importer reads. PDFs are turned into text first. */
+export const isStatementFile = (fileName: string): boolean => /\.(csv|pdf)$/i.test(fileName);
+
+const isPdfFile = (fileName: string): boolean => /\.pdf$/i.test(fileName);
+
+/** Text the parsers see: the file itself for CSVs, the extracted text for PDFs. */
+export async function readStatementContent(fileName: string, raw: Buffer): Promise<string> {
+  return isPdfFile(fileName) ? extractPdfText(raw) : raw.toString('utf8');
 }
 
 function normalizeAmount(val: string): string {
@@ -54,7 +72,129 @@ function canonicalCoin(val: string): string {
   return COIN_RENAMES[c.toUpperCase()] ?? c;
 }
 
+/**
+ * Mercado Pago "settlement report" layout: one header row of upper-case column
+ * names (SETTLEMENT_DATE;TRANSACTION_TYPE;DESCRIPTION;REAL_AMOUNT;...), ISO
+ * timestamps and dot-decimal amounts. Used by `settlement_v2-*.csv` exports and,
+ * since late 2026, by the account statement export (`account_statement-*.csv`).
+ */
+function isSettlementReport(content: string): boolean {
+  const header = content.replace(/^\uFEFF/, '').split(/\r?\n/, 1)[0];
+  const cols = header.split(';').map(c => c.trim());
+  return cols.includes('SETTLEMENT_DATE') && cols.includes('REAL_AMOUNT');
+}
+
+function parseSettlementReport(content: string, owner: string): { destFile: string; rows: any[] } {
+  const cleanContent = content.replace(/^\uFEFF/, '').trim();
+  const parsed = Papa.parse<any>(cleanContent, { header: true, delimiter: ';', skipEmptyLines: true }).data;
+  const rows = parsed.filter(item => item.TRANSACTION_DATE && item.REAL_AMOUNT).map(item => {
+    const formattedDate = item.TRANSACTION_DATE.slice(0, 10);
+    const description = item.PAYMENT_METHOD_TYPE || item.TRANSACTION_TYPE;
+    return { date: formattedDate, description, amount: normalizeAmount(item.REAL_AMOUNT), owner };
+  });
+  return { destFile: 'monthly-transactions.csv', rows };
+}
+
+/**
+ * Mercado Pago account statement PDF ("Extrato de conta"). Same fields as the
+ * legacy `account_statement` CSV, but file names follow no pattern, so it is
+ * detected by content.
+ */
+function isMercadoPagoPdfStatement(content: string): boolean {
+  return content.includes('EXTRATO DE CONTA')
+    && content.includes('DETALHE DOS MOVIMENTOS')
+    && content.includes('Mercado Pago');
+}
+
+const BRL = String.raw`R\$\s?(-?[\d.]+,\d{2})`;
+const toCents = (val: string): number => Math.round(parseFloat(normalizeAmount(val)) * 100);
+const dmyToIso = (d: string, m: string, y: string): string => `${y}-${m}-${d}`;
+
+/**
+ * pdf.js line breaks don't follow the visual rows (long descriptions wrap, rows
+ * get merged), so the text is flattened to one token stream and rows are matched
+ * as `DD-MM-YYYY <description> <operation id> R$ <value> R$ <balance>`. Page
+ * noise that can land between those tokens (page numbers, repeated table
+ * header, "Saldo final", footer) is removed first. The rows must reconcile with
+ * the statement summary, otherwise nothing is imported.
+ */
+function parseMercadoPagoPdfStatement(content: string, owner: string): ParseResult {
+  const empty: ParseResult = { destFile: 'monthly-transactions.csv', rows: [] };
+  const text = content
+    .split(/\r?\n/)
+    .map(l => l.trim())
+    .filter(l => l && !/^\d+\/\d+$/.test(l))
+    .join(' ')
+    .replace(/\s+/g, ' ');
+
+  const summary = (label: string): number | null => {
+    const m = text.match(new RegExp(`${label}:? ${BRL}`));
+    return m ? toCents(m[1]) : null;
+  };
+  const opening = summary('Saldo inicial');
+  const credits = summary('Entradas');
+  const debits = summary('Saidas');
+  const closing = summary('Saldo final');
+  const p = text.match(/De (\d{2})-(\d{2})-(\d{4}) al (\d{2})-(\d{2})-(\d{4})/);
+  const period = p ? { start: dmyToIso(p[1], p[2], p[3]), end: dmyToIso(p[4], p[5], p[6]) } : undefined;
+
+  const marker = 'DETALHE DOS MOVIMENTOS';
+  const body = text.slice(text.indexOf(marker) + marker.length)
+    .replace(/Data de gera\S* .*?mercadopago\.com\.br/g, ' ')
+    .replace(/Data Descri\S* ID da opera\S* Valor Saldo/g, ' ')
+    .replace(new RegExp(`Saldo final: ${BRL}`, 'g'), ' ')
+    .replace(/\s+/g, ' ');
+
+  const rowRe = new RegExp(String.raw`(\d{2})-(\d{2})-(\d{4}) (.+?) (\d{6,}) ${BRL} ${BRL}`, 'g');
+  const parsed = [...body.matchAll(rowRe)].map(m => ({
+    date: dmyToIso(m[1], m[2], m[3]),
+    description: m[4].trim(),
+    value: toCents(m[6]),
+    balance: toCents(m[7]),
+  }));
+
+  if (opening === null || credits === null || debits === null || closing === null) {
+    console.warn('Mercado Pago PDF: statement summary not found. Skipping.');
+    return { ...empty, period };
+  }
+  let balance = opening;
+  let inSum = 0;
+  let outSum = 0;
+  for (const row of parsed) {
+    balance += row.value;
+    if (row.value > 0) inSum += row.value; else outSum += row.value;
+    if (balance !== row.balance) {
+      console.warn(`Mercado Pago PDF: running balance mismatch at ${row.date} "${row.description}". Skipping.`);
+      return { ...empty, period };
+    }
+  }
+  if (inSum !== credits || outSum !== debits || balance !== closing) {
+    console.warn('Mercado Pago PDF: rows do not reconcile with the statement totals. Skipping.');
+    return { ...empty, period };
+  }
+
+  const rows = parsed.map(row => ({
+    date: row.date,
+    description: row.description,
+    amount: (row.value / 100).toFixed(2),
+    owner,
+  }));
+  return { destFile: 'monthly-transactions.csv', rows, period };
+}
+
 export const PARSERS: FileParser[] = [
+  {
+    name: 'MercadoPagoAccountPdf',
+    match: (f, content) => isPdfFile(f) && isMercadoPagoPdfStatement(content),
+    parse: (_f, content, owner) => parseMercadoPagoPdfStatement(content, owner)
+  },
+  {
+    // Newer account statement exports share the legacy file name but use the
+    // settlement report layout, so detect them by header before the legacy parser.
+    name: 'MercadoPagoAccountStatementV2',
+    match: (f, content) => f.startsWith('account_statement-') && isSettlementReport(content),
+    parse: (_f, content, owner) => parseSettlementReport(content, owner)
+  },
   {
     name: 'MercadoPago',
     match: (f) => f.startsWith('account_statement-'),
@@ -74,16 +214,7 @@ export const PARSERS: FileParser[] = [
   {
     name: 'MercadoPagoSettlementV2',
     match: (f) => f.toLowerCase().startsWith('settlement_v2-'),
-    parse: (_f, content, owner) => {
-      const cleanContent = content.replace(/^﻿/, '').trim();
-      const parsed = Papa.parse<any>(cleanContent, { header: true, delimiter: ';', skipEmptyLines: true }).data;
-      const rows = parsed.filter(item => item.TRANSACTION_DATE && item.REAL_AMOUNT).map(item => {
-        const formattedDate = item.TRANSACTION_DATE.slice(0, 10);
-        const description = item.PAYMENT_METHOD_TYPE || item.TRANSACTION_TYPE;
-        return { date: formattedDate, description, amount: normalizeAmount(item.REAL_AMOUNT), owner };
-      });
-      return { destFile: 'monthly-transactions.csv', rows };
-    }
+    parse: (_f, content, owner) => parseSettlementReport(content, owner)
   },
   {
     name: 'NubankAccount',
@@ -262,7 +393,7 @@ export const PARSERS: FileParser[] = [
   }
 ];
 
-export function dataImportRegistration() {
+export async function dataImportRegistration(): Promise<void> {
   const coreDir = getCoreDir();
   const dataDir = path.join(coreDir, 'data');
   const sourceBaseDir = path.join(coreDir, 'protected', 'raw-statement-files');
@@ -429,12 +560,24 @@ export function dataImportRegistration() {
 
   for (const ownerName of ownerDirs) {
     const ownerDirPath = path.join(sourceBaseDir, ownerName);
-    const files = fs.readdirSync(ownerDirPath).filter(f => f.endsWith('.csv')).sort();
+    // CSVs first: a Mercado Pago CSV export wins over a PDF of the same period,
+    // and the PDF overlap check below needs the CSV dates collected first.
+    const files = fs.readdirSync(ownerDirPath).filter(isStatementFile)
+      .sort((a, b) => Number(isPdfFile(a)) - Number(isPdfFile(b)) || (a < b ? -1 : a > b ? 1 : 0));
+    // Transaction dates seen in this owner's Mercado Pago CSV exports.
+    const mercadoPagoCsvDates: string[] = [];
 
     for (const file of files) {
       const fullPath = path.join(ownerDirPath, file);
-      const rawContent = fs.readFileSync(fullPath, 'utf8');
-      const firstHash = getSha256(rawContent);
+      const rawBuffer = fs.readFileSync(fullPath);
+      const firstHash = getSha256(rawBuffer);
+      let rawContent: string;
+      try {
+        rawContent = await readStatementContent(file, rawBuffer);
+      } catch (e) {
+        console.warn(`Could not read ${file}: ${e}. Skipping.`);
+        continue;
+      }
 
       const parser = PARSERS.find(p => p.match(file, rawContent));
       if (!parser) {
@@ -442,7 +585,20 @@ export function dataImportRegistration() {
         continue;
       }
 
-      const { destFile, rows } = parser.parse(file, rawContent, ownerName);
+      const { destFile, rows, period } = parser.parse(file, rawContent, ownerName);
+      if (parser.name.startsWith('MercadoPago') && !isPdfFile(file)) {
+        for (const row of rows) mercadoPagoCsvDates.push(row.date);
+      }
+
+      // Rows from a PDF and a CSV of the same period never share a row-hash
+      // (different description/row split), so the row dedupe can't catch the
+      // overlap. Keep the CSV and skip the PDF.
+      if (parser.name === 'MercadoPagoAccountPdf' && period
+        && mercadoPagoCsvDates.some(d => d >= period.start && d <= period.end)) {
+        console.warn(`${file} covers ${period.start}..${period.end}, already covered by a Mercado Pago CSV export. Skipping.`);
+        continue;
+      }
+
       if (testFileAlreadyImported(destFile, firstHash)) {
         console.log(`File ${file} already imported. Skipping.`);
         continue;
@@ -523,4 +679,4 @@ export function dataImportRegistration() {
   }
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) dataImportRegistration();
+if (process.argv[1] === fileURLToPath(import.meta.url)) void dataImportRegistration();

@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/chart"
 import type { ChartConfig } from "@/components/ui/chart"
 import { Loader2 } from "lucide-react"
+import { formatBRL } from "@/lib/utils"
 
 interface YearlyTransactionChartProps {
   data: Transaction[]
@@ -28,12 +29,7 @@ interface YearlyTransactionChartProps {
   categoriesMeta: { name: string, color: string }[]
 }
 
-const formatCurrency = (value: number) => {
-  return new Intl.NumberFormat("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-  }).format(value)
-}
+const formatCurrency = formatBRL
 
 export function YearlyTransactionChart({ data, yearOffset, loading = false, categoriesMeta }: YearlyTransactionChartProps) {
   const chartData = React.useMemo(() => {

@@ -1,4 +1,5 @@
 import Papa from 'papaparse';
+import type { WalletEntry, WalletCache } from './chains/types';
 
 declare global {
   interface Window {
@@ -424,6 +425,75 @@ export async function saveAllocationTargetRemote(target: Record<string, number>)
     return result.success;
   } catch (error) {
     console.error('Error saving allocation target:', error);
+    return false;
+  }
+}
+
+/**
+ * Wallet address list + derived balance/history cache, persisted server-side
+ * in `core/data/wallets.json` / `core/data/wallets-cache.json` so they travel
+ * with the full backup, same as allocation targets.
+ */
+export async function fetchWallets(): Promise<WalletEntry[]> {
+  try {
+    if (window.electron) {
+      return await invoke('get-wallets');
+    }
+    const response = await fetch('/api/wallets');
+    return await response.json();
+  } catch (error) {
+    console.error('Error fetching wallets:', error);
+    return [];
+  }
+}
+
+export async function saveWallets(wallets: WalletEntry[]): Promise<boolean> {
+  try {
+    if (window.electron) {
+      const result = await invoke<{ success: boolean }>('save-wallets', wallets);
+      return result.success;
+    }
+    const response = await fetch('/api/wallets', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(wallets),
+    });
+    const result = await response.json();
+    return result.success;
+  } catch (error) {
+    console.error('Error saving wallets:', error);
+    return false;
+  }
+}
+
+export async function fetchWalletCache(): Promise<WalletCache> {
+  try {
+    if (window.electron) {
+      return await invoke('get-wallet-cache');
+    }
+    const response = await fetch('/api/wallet-cache');
+    return await response.json();
+  } catch (error) {
+    console.error('Error fetching wallet cache:', error);
+    return {};
+  }
+}
+
+export async function saveWalletCache(cache: WalletCache): Promise<boolean> {
+  try {
+    if (window.electron) {
+      const result = await invoke<{ success: boolean }>('save-wallet-cache', cache);
+      return result.success;
+    }
+    const response = await fetch('/api/wallet-cache', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(cache),
+    });
+    const result = await response.json();
+    return result.success;
+  } catch (error) {
+    console.error('Error saving wallet cache:', error);
     return false;
   }
 }

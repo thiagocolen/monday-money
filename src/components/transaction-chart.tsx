@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/chart"
 import type { ChartConfig } from "@/components/ui/chart"
 import { Loader2, Maximize2, Minimize2 } from "lucide-react"
+import { formatBRL } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 
 interface TransactionChartProps {
@@ -42,12 +43,7 @@ const COLORS = [
   "#00b4d8",
 ]
 
-const formatCurrency = (value: number) => {
-  return new Intl.NumberFormat("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-  }).format(value)
-}
+const formatCurrency = formatBRL
 
 export function TransactionChart({ data, filterOffset, loading = false, categoriesMeta }: TransactionChartProps) {
   const [isMinimized, setIsMinimized] = React.useState(() => {

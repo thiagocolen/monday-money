@@ -3,6 +3,7 @@ import { ThemeProvider } from '@/components/theme-provider'
 import { Layout } from './components/Layout'
 import { TransactionsPage } from './pages/TransactionsPage'
 import { InvestmentsPage } from './pages/InvestmentsPage'
+import { WalletsPage } from './pages/WalletsPage'
 import { ImportPage } from './pages/ImportPage'
 import { Toaster } from 'sonner'
 import { TooltipProvider } from './components/ui/tooltip'
@@ -26,6 +27,10 @@ const router = createMemoryRouter([
       {
         path: 'investments',
         element: <InvestmentsPage />,
+      },
+      {
+        path: 'wallets',
+        element: <WalletsPage />,
       },
       {
         path: 'import',

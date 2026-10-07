@@ -163,7 +163,7 @@ export function StartupDialog({ open, onConfigured }: StartupDialogProps) {
               </Button>
             </div>
             <p className="text-[11px] text-muted-foreground bg-muted/50 p-2 rounded border border-dashed">
-              <strong>Note:</strong> This folder should contain subfolders (owners) with your .csv statement files.
+              <strong>Note:</strong> This folder should contain subfolders (owners) with your .csv statement files (Mercado Pago account statements can also be .pdf).
             </p>
           </div>
         </div>

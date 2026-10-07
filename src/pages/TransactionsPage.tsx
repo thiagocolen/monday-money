@@ -9,7 +9,7 @@ import {
 import type { Transaction } from '../lib/api'
 import { columns } from '../components/columns'
 import { DataTable } from '../components/data-table'
-import { cn } from "@/lib/utils"
+import { cn, formatBRL } from "@/lib/utils"
 import { TransactionChart } from '../components/transaction-chart'
 import { YearlyTransactionChart } from '../components/yearly-transaction-chart'
 import { Button } from '@/components/ui/button'
@@ -59,10 +59,53 @@ const PRESET_COLORS = [
   { name: 'Rose', color: '#f43f5e' },
 ];
 
+const getTransactionRowId = (row: Transaction) => row.id
+
+const SEARCH_DEBOUNCE_MS = 400
+
+// Keeps the in-progress text in local state so typing only re-renders this
+// input; the page (filter, charts, full table) re-renders once per commit.
+// `value` only seeds the draft: callers remount it (via `key`) to clear it
+// from outside, so a slow commit can never overwrite newer typing.
+function FilterSearchInput({ value, onCommit }: { value: string; onCommit: (value: string) => void }) {
+  const [draft, setDraft] = useState(value)
+
+  useEffect(() => {
+    if (draft === value) return
+    const timer = setTimeout(() => onCommit(draft), SEARCH_DEBOUNCE_MS)
+    return () => clearTimeout(timer)
+  }, [draft, value, onCommit])
+
+  return (
+    <Input
+      placeholder="Search..."
+      value={draft}
+      onChange={(e) => setDraft(e.target.value)}
+      className="max-w-[200px] h-8 text-xs font-mono"
+    />
+  )
+}
+
+type FilterLayer = {
+  id: string;
+  logic: 'AND' | 'OR';
+  search: string;
+  ownerFilter: Record<string, 'include' | 'exclude'>;
+  categoryFilter: Record<string, 'include' | 'exclude'>;
+  tagFilter: Record<string, 'include' | 'exclude'>;
+}
+
+const createFilterLayer = (): FilterLayer => ({
+  id: crypto.randomUUID(),
+  logic: 'AND',
+  search: "",
+  ownerFilter: {},
+  categoryFilter: {},
+  tagFilter: {},
+})
 
 export function TransactionsPage() {
   const [isPending, startTransition] = useTransition()
-  const [isVisualPending, setIsVisualPending] = useState(false)
   const [data, setData] = useState<Transaction[]>([])
   const [loading, setLoading] = useState(true)
   const [viewMode, setViewMode] = useState<'monthly' | 'yearly'>('monthly')
@@ -88,46 +131,11 @@ export function TransactionsPage() {
   const [isPeriodHovered, setIsPeriodHovered] = useState(false)
 
   // Filter states
-  const [filterLayers, setFilterLayers] = useState<{
-    id: string;
-    logic: 'AND' | 'OR';
-    localSearch: string;
-    globalSearch: string;
-    ownerFilter: Record<string, 'include' | 'exclude'>;
-    categoryFilter: Record<string, 'include' | 'exclude'>;
-    tagFilter: Record<string, 'include' | 'exclude'>;
-  }[]>([{
-    id: crypto.randomUUID(),
-    logic: 'AND',
-    localSearch: "",
-    globalSearch: "",
-    ownerFilter: {},
-    categoryFilter: {},
-    tagFilter: {},
-  }])
+  const [filterLayers, setFilterLayers] = useState<FilterLayer[]>(() => [createFilterLayer()])
   const [dayFilter, setDayFilter] = useState<string | null>(null)
-
-  // Debounce search input for each layer
-  useEffect(() => {
-    const timers = filterLayers.map((layer, index) => {
-      if (layer.localSearch === layer.globalSearch) return null
-
-      return setTimeout(() => {
-        setIsVisualPending(true)
-        requestAnimationFrame(() => {
-          startTransition(() => {
-            setFilterLayers(prev => {
-              const next = [...prev]
-              next[index] = { ...next[index], globalSearch: layer.localSearch }
-              return next
-            })
-          })
-        })
-      }, 400)
-    })
-
-    return () => timers.forEach(t => t && clearTimeout(t))
-  }, [filterLayers])
+  // Bumped when search text is cleared from outside the input (Escape) so the
+  // inputs remount with the cleared value; resets that replace layers change ids instead.
+  const [searchResetCount, setSearchResetCount] = useState(0)
 
   const loadData = useCallback(async (showLoading = true) => {
     if (showLoading) setLoading(true)
@@ -151,11 +159,6 @@ export function TransactionsPage() {
     loadData()
     loadMetadata()
   }, [loadData, loadMetadata])
-
-  // Sync isVisualPending with isPending
-  useEffect(() => {
-    if (!isPending) setIsVisualPending(false)
-  }, [isPending])
 
   // 1. First, filter by period (month or year)
   const periodData = useMemo(() => {
@@ -209,28 +212,75 @@ export function TransactionsPage() {
     return Array.from(set).sort()
   }, [data, metaTags])
 
+  // Lowercased text each search term is matched against, built once per period
+  // instead of per keystroke and term (currency formatting is the costly part).
+  // Fields are newline-joined so a term can't match across two fields.
+  const searchIndex = useMemo(() => {
+    const index = new Map<Transaction, string>()
+    periodData.forEach(item => {
+      index.set(item, [
+        item.description,
+        item.category || "Uncategorized",
+        item.tags || "",
+        item.owner || "No owner",
+        item.date,
+        item.amount.toString(),
+        formatBRL(item.amount),
+      ].join("\n").toLowerCase())
+    })
+    return index
+  }, [periodData])
+
   // 3. Apply the multi-layer filters
   const filteredData = useMemo(() => {
-    // Hide system reserved rows first
-    const baseData = periodData.filter(item => {
+    const splitFilter = (filter: Record<string, 'include' | 'exclude'>) => {
+      const keys = Object.keys(filter)
+      return {
+        active: keys.length > 0,
+        includes: keys.filter(k => filter[k] === 'include'),
+        excludes: keys.filter(k => filter[k] === 'exclude'),
+      }
+    }
+
+    // Parse each layer once, not once per transaction
+    const layers = filterLayers.map(layer => ({
+      logic: layer.logic,
+      searchTerms: layer.search.toLowerCase().split(/\s+/).filter(Boolean).map(term => ({
+        term,
+        numericMatch: term.match(/^([<>]=?)(-?\d+(?:\.\d+)?)$/),
+      })),
+      owner: splitFilter(layer.ownerFilter),
+      category: splitFilter(layer.categoryFilter),
+      tag: splitFilter(layer.tagFilter),
+    }))
+
+    const applyFilter = (val: string, filter: ReturnType<typeof splitFilter>) => {
+      if (!filter.active) return true
+      if (filter.includes.length > 0 && !filter.includes.includes(val)) return false
+      if (filter.excludes.includes(val)) return false
+      return true
+    }
+
+    const applyTagFilter = (tagsStr: string, filter: ReturnType<typeof splitFilter>) => {
+      if (!filter.active) return true
+      const currentTags = tagsStr.split(',').map(t => t.trim())
+      if (filter.includes.length > 0 && !filter.includes.some(t => currentTags.includes(t))) return false
+      if (filter.excludes.some(t => currentTags.includes(t))) return false
+      return true
+    }
+
+    return periodData.filter((item) => {
+      // Hide system reserved rows first
       if (item.category === 'chain-transaction') return false;
       if (item.owner === 'seed-transaction') return false;
       if (dayFilter && item.date !== dayFilter) return false;
-      return true;
-    });
 
-    return baseData.filter((item) => {
+      const haystack = searchIndex.get(item) ?? ""
       let result = true; // For the first layer, it's effectively AND with true
 
-      filterLayers.forEach((layer, index) => {
-        const searchTerms = layer.globalSearch.toLowerCase().split(/\s+/).filter(Boolean);
-
+      layers.forEach((layer, index) => {
         // Check if item matches this layer's criteria
-        const matchesSearch = searchTerms.every(term => {
-          const amountStr = item.amount.toString();
-          const formattedAmount = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(item.amount).toLowerCase();
-
-          const numericMatch = term.match(/^([<>]=?)(-?\d+(?:\.\d+)?)$/);
+        const matchesSearch = layer.searchTerms.every(({ term, numericMatch }) => {
           if (numericMatch) {
             const [, operator, valueStr] = numericMatch;
             const value = parseFloat(valueStr);
@@ -239,42 +289,12 @@ export function TransactionsPage() {
             if (operator === ">=") return item.amount >= value;
             if (operator === "<=") return item.amount <= value;
           }
-
-          return (
-            item.description.toLowerCase().includes(term) ||
-            (item.category || "Uncategorized").toLowerCase().includes(term) ||
-            (item.tags || "").toLowerCase().includes(term) ||
-            (item.owner || "No owner").toLowerCase().includes(term) ||
-            item.date.includes(term) ||
-            amountStr.includes(term) ||
-            formattedAmount.includes(term)
-          );
+          return haystack.includes(term);
         });
 
-        const applyFilter = (val: string, filter: Record<string, 'include' | 'exclude'>) => {
-          const keys = Object.keys(filter)
-          if (keys.length === 0) return true
-          const includes = keys.filter(k => filter[k] === 'include')
-          const excludes = keys.filter(k => filter[k] === 'exclude')
-          if (includes.length > 0 && !includes.includes(val)) return false
-          if (excludes.includes(val)) return false
-          return true
-        }
-
-        const applyTagFilter = (tagsStr: string, filter: Record<string, 'include' | 'exclude'>) => {
-          const keys = Object.keys(filter)
-          if (keys.length === 0) return true
-          const currentTags = tagsStr.split(',').map(t => t.trim())
-          const includes = keys.filter(k => filter[k] === 'include')
-          const excludes = keys.filter(k => filter[k] === 'exclude')
-          if (includes.length > 0 && !includes.some(t => currentTags.includes(t))) return false
-          if (excludes.some(t => currentTags.includes(t))) return false
-          return true
-        }
-
-        const matchOwner = applyFilter(item.owner || "No owner", layer.ownerFilter)
-        const matchCat = applyFilter(item.category || "Uncategorized", layer.categoryFilter)
-        const matchTag = applyTagFilter(item.tags || "", layer.tagFilter)
+        const matchOwner = applyFilter(item.owner || "No owner", layer.owner)
+        const matchCat = applyFilter(item.category || "Uncategorized", layer.category)
+        const matchTag = applyTagFilter(item.tags || "", layer.tag)
 
         const layerMatch = matchesSearch && matchOwner && matchCat && matchTag
 
@@ -291,7 +311,7 @@ export function TransactionsPage() {
 
       return result;
     })
-  }, [periodData, filterLayers, dayFilter])
+  }, [periodData, searchIndex, filterLayers, dayFilter])
 
   const selectedRows = useMemo(() => {
     return filteredData.filter(row => rowSelection[row.id])
@@ -457,33 +477,14 @@ export function TransactionsPage() {
   }
 
   const resetFilters = useCallback(() => {
-    setIsVisualPending(true)
-    requestAnimationFrame(() => {
-      startTransition(() => {
-        setFilterLayers([{
-          id: crypto.randomUUID(),
-          logic: 'AND',
-          localSearch: "",
-          globalSearch: "",
-          ownerFilter: {},
-          categoryFilter: {},
-          tagFilter: {},
-        }])
-        setDayFilter(null)
-      })
+    startTransition(() => {
+      setFilterLayers([createFilterLayer()])
+      setDayFilter(null)
     })
   }, [])
 
   const addFilterLayer = () => {
-    setFilterLayers(prev => [...prev, {
-      id: crypto.randomUUID(),
-      logic: 'AND',
-      localSearch: "",
-      globalSearch: "",
-      ownerFilter: {},
-      categoryFilter: {},
-      tagFilter: {},
-    }])
+    setFilterLayers(prev => [...prev, createFilterLayer()])
   }
 
   const removeFilterLayer = (id: string) => {
@@ -494,8 +495,12 @@ export function TransactionsPage() {
     setFilterLayers(prev => prev.filter(l => l.id !== id))
   }
 
-  const updateLayer = (id: string, update: Partial<(typeof filterLayers)[0]>) => {
+  const updateLayer = (id: string, update: Partial<FilterLayer>) => {
     setFilterLayers(prev => prev.map(l => l.id === id ? { ...l, ...update } : l))
+  }
+
+  const commitLayerSearch = (id: string, search: string) => {
+    startTransition(() => updateLayer(id, { search }))
   }
 
   // Keyboard shortcuts
@@ -514,8 +519,9 @@ export function TransactionsPage() {
           setIsBulkEditDialogOpen(false)
         } else if (Object.keys(rowSelection).length > 0) {
           setRowSelection({})
-        } else if (filterLayers.some(l => l.localSearch !== "")) {
-          setFilterLayers(prev => prev.map(l => ({ ...l, localSearch: "", globalSearch: "" })))
+        } else if (filterLayers.some(l => l.search !== "")) {
+          setFilterLayers(prev => prev.map(l => ({ ...l, search: "" })))
+          setSearchResetCount(c => c + 1)
         } else if (filterLayers.some(l => Object.keys(l.categoryFilter).length > 0)) {
           setFilterLayers(prev => prev.map(l => ({ ...l, categoryFilter: {} })))
         } else if (filterLayers.some(l => Object.keys(l.tagFilter).length > 0)) {
@@ -555,35 +561,21 @@ export function TransactionsPage() {
   }, [filteredData, selectedRows.length, resetFilters, isBulkEditDialogOpen, rowSelection, filterLayers, dayFilter, undoStack, redoStack])
 
   const handlePeriodChange = (offsetUpdate: number | ((prev: number) => number)) => {
-    setIsVisualPending(true)
-    requestAnimationFrame(() => {
-      startTransition(() => {
-        if (viewMode === 'monthly') {
-          if (typeof offsetUpdate === 'function') {
-            setFilterOffset(offsetUpdate)
-          } else {
-            setFilterOffset(offsetUpdate)
-          }
-        } else {
-          if (typeof offsetUpdate === 'function') {
-            setYearOffset(offsetUpdate)
-          } else {
-            setYearOffset(offsetUpdate)
-          }
-        }
-        setDayFilter(null)
-      })
+    startTransition(() => {
+      if (viewMode === 'monthly') {
+        setFilterOffset(offsetUpdate)
+      } else {
+        setYearOffset(offsetUpdate)
+      }
+      setDayFilter(null)
     })
   }
 
   const handleToggleViewMode = (mode: 'monthly' | 'yearly') => {
     if (mode === viewMode) return
-    setIsVisualPending(true)
-    requestAnimationFrame(() => {
-      startTransition(() => {
-        setViewMode(mode)
-        setDayFilter(null)
-      })
+    startTransition(() => {
+      setViewMode(mode)
+      setDayFilter(null)
     })
   }
 
@@ -681,7 +673,9 @@ export function TransactionsPage() {
         />
       )}
 
-      <div className="sticky top-14 z-30 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 py-4 -mx-4 px-4 border-b mb-4 shadow-sm flex flex-col gap-2">
+      {/* Solid background on purpose: a backdrop blur over the long table makes
+          every repaint here (caret blink, focus ring) re-blur what is behind it. */}
+      <div className="sticky top-14 z-30 bg-background py-4 -mx-4 px-4 border-b mb-4 shadow-sm flex flex-col gap-2">
         {filterLayers.map((layer, index) => (
           <div key={layer.id} className="flex flex-wrap items-center gap-2">
             <div className="flex items-center gap-1">
@@ -719,11 +713,10 @@ export function TransactionsPage() {
               )}
             </div>
 
-            <Input
-              placeholder="Search..."
-              value={layer.localSearch}
-              onChange={(e) => updateLayer(layer.id, { localSearch: e.target.value })}
-              className="max-w-[200px] h-8 text-xs font-mono"
+            <FilterSearchInput
+              key={searchResetCount}
+              value={layer.search}
+              onCommit={(search) => commitLayerSearch(layer.id, search)}
             />
             
             <DataTableFacetedFilter
@@ -747,7 +740,7 @@ export function TransactionsPage() {
               onSelect={(v) => updateLayer(layer.id, { ownerFilter: v })}
             />
 
-            {index === 0 && (filterLayers.length > 1 || layer.globalSearch || Object.keys(layer.ownerFilter).length > 0 || Object.keys(layer.categoryFilter).length > 0 || Object.keys(layer.tagFilter).length > 0) && (
+            {index === 0 && (filterLayers.length > 1 || layer.search || Object.keys(layer.ownerFilter).length > 0 || Object.keys(layer.categoryFilter).length > 0 || Object.keys(layer.tagFilter).length > 0) && (
               <Button
                 variant="ghost"
                 size="sm"
@@ -807,8 +800,8 @@ export function TransactionsPage() {
       </div>
 
       <div className="relative">
-        {(isPending || isSaving || isVisualPending) && (
-          <div className="absolute inset-0 z-50 flex flex-col items-center justify-start pt-32 bg-background/60 backdrop-blur-[1px] animate-in fade-in duration-200 rounded-lg">
+        {(isPending || isSaving) && (
+          <div className="absolute inset-0 z-50 flex flex-col items-center justify-start pt-32 bg-background/60 animate-in fade-in duration-200 rounded-lg">
             <div className="flex flex-col items-center p-6 bg-background/90 rounded-xl shadow-xl border border-indigo-100 dark:border-indigo-900 scale-90">
               <Loader2 className="h-8 w-8 animate-spin text-indigo-600 mb-3" />
               <p className="text-xs font-bold uppercase tracking-[0.2em] text-indigo-900 dark:text-indigo-400">Processing</p>
@@ -820,7 +813,7 @@ export function TransactionsPage() {
           data={filteredData} 
           rowSelection={rowSelection}
           onRowSelectionChange={setRowSelection}
-          getRowId={(row) => row.id}
+          getRowId={getTransactionRowId}
           paginated={false}
           stickyHeader
           headerOffset={121}
