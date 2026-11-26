@@ -31,7 +31,8 @@ import type { BinanceTransaction } from "@/lib/api"
 import type { DateSnapshot } from "@/lib/allocation"
 import { coinColor, coinLabel, renamedCoinNote, shuffleCoinColors } from "@/lib/coins"
 import { useCoinColor, useCoinPalette } from "@/lib/use-coin-colors"
-import { parseFlexibleDate } from "@/lib/date"
+import { useStableValue } from "@/lib/use-stable-value"
+import { parseFlexibleTime } from "@/lib/date"
 import { fetchPriceCandles } from "@/lib/price-candles"
 import type { CandleHistory } from "@/lib/price-candles"
 import { cn } from "@/lib/utils"
@@ -574,6 +575,13 @@ registerOverlay({
 })
 
 /** Distinct coins in the filtered rows and the earliest instant each appears. */
+/** Cheap content key for a row set — same rows in the same order, same key. */
+function rowsSignature(rows: BinanceTransaction[]): string {
+  let sig = String(rows.length)
+  for (const r of rows) sig += "|" + (r.id || r["row-hash"] || `${r.Time}${r.Coin}${r.Change}`)
+  return sig
+}
+
 function coinsFromRows(data: BinanceTransaction[]): {
   coins: string[]
   earliest: Record<string, number>
@@ -582,9 +590,9 @@ function coinsFromRows(data: BinanceTransaction[]): {
   for (const row of data) {
     const coin = String(row.Coin ?? "").trim()
     if (!coin) continue
-    const d = parseFlexibleDate(row.Time)
-    if (!d) continue
-    earliest[coin] = Math.min(earliest[coin] ?? Infinity, d.getTime())
+    const t = parseFlexibleTime(row.Time)
+    if (t == null) continue
+    earliest[coin] = Math.min(earliest[coin] ?? Infinity, t)
   }
   return { coins: Object.keys(earliest).sort(), earliest }
 }
@@ -622,16 +630,17 @@ function buildMerged(
   txns: BinanceTransaction[],
 ): Merged {
   const priced = coins.filter((c) => (histories.get(c)?.candles.length ?? 0) > 0)
-  const unpriced = coins.filter((c) => !priced.includes(c))
+  const pricedSet = new Set(priced)
+  const unpriced = coins.filter((c) => !pricedSet.has(c))
 
   // Transactions for priced coins, snapped to a UTC day.
   const parsedTxns = txns
     .map((t) => {
-      const d = parseFlexibleDate(t.Time)
+      const ms = parseFlexibleTime(t.Time)
       const coin = String(t.Coin ?? "").trim()
       const change = Number(t.Change)
-      return d && priced.includes(coin) && Number.isFinite(change) && change !== 0
-        ? { day: Math.floor(d.getTime() / DAY_MS) * DAY_MS, coin, change }
+      return ms != null && pricedSet.has(coin) && Number.isFinite(change) && change !== 0
+        ? { day: Math.floor(ms / DAY_MS) * DAY_MS, coin, change }
         : null
     })
     .filter((x): x is { day: number; coin: string; change: number } => x != null)
@@ -953,10 +962,14 @@ const fromLocalDay = (d: Date): number =>
   Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())
 
 export function AssetPriceKlineChart({
-  data,
+  data: incoming,
   selectedTimestamp,
   onDateSelect,
 }: AssetPriceKlineChartProps) {
+  // Parents hand over a freshly filtered array on every search keystroke /
+  // table filter change; keep the old identity while the rows are the same so
+  // the merge + `applyNewData` (which resets pan/zoom) only run on real changes.
+  const data = useStableValue(incoming, rowsSignature(incoming))
   const { coins } = React.useMemo(() => coinsFromRows(data), [data])
   const isDark = useIsDark()
   const palette = useCoinPalette()
@@ -1025,10 +1038,10 @@ export function AssetPriceKlineChart({
   const plotKey = plotCoins.join(",")
 
   // Transactions for the plotted coins — drives the holdings bars.
-  const txns = React.useMemo(
-    () => data.filter((r) => plotCoins.includes(String(r.Coin ?? "").trim())),
-    [data, plotCoins],
-  )
+  const txns = React.useMemo(() => {
+    const plotted = new Set(plotCoins)
+    return data.filter((r) => plotted.has(String(r.Coin ?? "").trim()))
+  }, [data, plotCoins])
 
   // Fetch every plotted coin's price history; keyed so a stale response for an
   // old filter can't land on the current one.
@@ -1037,12 +1050,15 @@ export function AssetPriceKlineChart({
     map: Map<string, CandleHistory>
   } | null>(null)
   React.useEffect(() => {
-    if (plotCoins.length === 0) return
+    // Keyed on the joined coin list alone, so a new-but-equal `plotCoins` array
+    // never re-reads every coin's cached history.
+    const wanted = plotKey ? plotKey.split(",") : []
+    if (wanted.length === 0) return
     let alive = true
     // Pull each asset's full listed history (capped at ~12y inside the fetch),
     // not just back to the first transaction — the price context before you
     // held the asset is worth showing.
-    mapLimit(plotCoins, 4, async (coin) => {
+    mapLimit(wanted, 4, async (coin) => {
       return [coin, await fetchPriceCandles(coin, 0)] as const
     }).then((entries) => {
       if (alive) setHistories({ key: plotKey, map: new Map(entries) })
@@ -1050,7 +1066,7 @@ export function AssetPriceKlineChart({
     return () => {
       alive = false
     }
-  }, [plotKey, plotCoins])
+  }, [plotKey])
 
   const merged = React.useMemo(
     () =>
@@ -1173,16 +1189,24 @@ export function AssetPriceKlineChart({
 
     // A resize invalidates both the even split and the fit — redo them once the
     // chart has taken its new size.
+    // Coalesced to one relayout per frame — a window/panel drag fires this
+    // many times a frame.
+    let resizeFrame = 0
     const ro = new ResizeObserver(() => {
-      const c = chartRef.current
-      if (!c) return
-      c.resize()
-      splitPanesEvenly(c)
-      if (autoScaleRef.current) fitToArea(c, el.clientWidth)
+      if (resizeFrame) return
+      resizeFrame = requestAnimationFrame(() => {
+        resizeFrame = 0
+        const c = chartRef.current
+        if (!c) return
+        c.resize()
+        splitPanesEvenly(c)
+        if (autoScaleRef.current) fitToArea(c, el.clientWidth)
+      })
     })
     ro.observe(el)
     return () => {
       ro.disconnect()
+      cancelAnimationFrame(resizeFrame)
       el.removeEventListener("pointerdown", onPointerDown)
       el.removeEventListener("pointermove", onPointerMove)
       el.removeEventListener("pointerup", onPointerUp)

@@ -6,7 +6,7 @@ import { format, parseISO } from "date-fns"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Badge } from "@/components/ui/badge"
 import { Tag } from "lucide-react"
-import { getAlphaColor } from "@/lib/utils"
+import { formatBRL, getAlphaColor } from "@/lib/utils"
 
 export const columns: ColumnDef<Transaction>[] = [
   {
@@ -62,10 +62,7 @@ export const columns: ColumnDef<Transaction>[] = [
     header: () => <div className="text-right w-full block">Amount</div>,
     cell: ({ row }) => {
       const amount = parseFloat(row.getValue("amount"))
-      const formatted = new Intl.NumberFormat("pt-BR", {
-        style: "currency",
-        currency: "BRL",
-      }).format(amount)
+      const formatted = formatBRL(amount)
 
       return <div className={`text-right font-mono text-xs font-medium ${amount < 0 ? "text-destructive" : "text-emerald-600"}`}>
         {formatted}

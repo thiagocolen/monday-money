@@ -15,6 +15,7 @@ export const COINGECKO_IDS: Record<string, string> = {
   ADA: "cardano",
   DOGE: "dogecoin",
   LINK: "chainlink",
+  TRX: "tron",
   SUI: "sui",
   RUNE: "thorchain",
   ORDI: "ordinals",
@@ -67,7 +68,17 @@ function writeCache(price: Record<string, number>, fetchedAt: number) {
  * localStorage cache; on a network failure returns the last good snapshot
  * flagged `stale` (or an empty map if there is none).
  */
-export async function fetchUsdQuotes(): Promise<UsdQuotes> {
+let inFlight: Promise<UsdQuotes> | null = null
+
+export function fetchUsdQuotes(): Promise<UsdQuotes> {
+  // Components mounting together (allocation panel, wallets) share one request.
+  inFlight ??= loadUsdQuotes().finally(() => {
+    inFlight = null
+  })
+  return inFlight
+}
+
+async function loadUsdQuotes(): Promise<UsdQuotes> {
   const cached = readCache()
   if (cached && Date.now() - cached.fetchedAt < TTL_MS) {
     return { price: cached.price, fetchedAt: cached.fetchedAt, stale: false }

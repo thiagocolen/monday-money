@@ -30,17 +30,44 @@ export function parseFlexibleDate(value: unknown): Date | null {
   return isNaN(date.getTime()) ? null : date
 }
 
+const timeCache = new Map<string, number | null>()
+const TIME_CACHE_MAX = 50_000
+
+/**
+ * `parseFlexibleDate(value)?.getTime() ?? null`, memoised per input string.
+ * Tables, filters and charts re-parse the same few thousand timestamps on every
+ * pass; this turns each repeat into a map lookup.
+ */
+export function parseFlexibleTime(value: unknown): number | null {
+  if (value == null) return null
+  const key = String(value)
+  const hit = timeCache.get(key)
+  if (hit !== undefined) return hit
+  const t = parseFlexibleDate(key)?.getTime() ?? null
+  if (timeCache.size >= TIME_CACHE_MAX) timeCache.clear()
+  timeCache.set(key, t)
+  return t
+}
+
 const pad2 = (n: number) => String(n).padStart(2, '0')
+
+const formatCache = new Map<string, string>()
 
 /**
  * Render any of the loose Binance timestamp variants in one canonical
  * `YYYY-MM-DD HH:MM:SS` form. Falls back to the trimmed input if unparseable.
  */
 export function formatTimestamp(value: unknown): string {
+  // Memoised per input — table cells re-render the same timestamps a lot.
+  const key = String(value ?? '')
+  const hit = formatCache.get(key)
+  if (hit !== undefined) return hit
   const d = parseFlexibleDate(value)
-  if (!d) return String(value ?? '').trim()
-  return (
-    `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ` +
-    `${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`
-  )
+  const out = d
+    ? `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ` +
+      `${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`
+    : key.trim()
+  if (formatCache.size >= TIME_CACHE_MAX) formatCache.clear()
+  formatCache.set(key, out)
+  return out
 }

@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo } from 'react'
+import { useEffect, useState, useCallback, useMemo, useDeferredValue } from 'react'
 import { 
   fetchBinanceTransactions, 
   fetchBinanceDepositWithdraw, 
@@ -16,7 +16,7 @@ import { Input } from '@/components/ui/input'
 import { RotateCcw, Trash2 } from 'lucide-react'
 import type { ColumnDef, Row } from '@tanstack/react-table'
 import { toast } from 'sonner'
-import { parseFlexibleDate, formatTimestamp } from '@/lib/date'
+import { parseFlexibleTime, formatTimestamp } from '@/lib/date'
 import type { DateRangeFilterValue } from '@/components/date-range-filter'
 import { FiatFlowChart } from '@/components/fiat-flow-chart'
 import { AssetPriceKlineChart } from '@/components/asset-price-kline-chart'
@@ -27,9 +27,8 @@ import { canonicalCoin, coinLabel, formatCoinAmount, renamedCoinNote } from '@/l
 /** Inclusive epoch-ms range filter over a flexibly-formatted timestamp column. */
 function dateRangeFilterFn<T>(row: Row<T>, columnId: string, value: DateRangeFilterValue | undefined): boolean {
   if (!value || (value.from == null && value.to == null)) return true
-  const date = parseFlexibleDate(row.getValue(columnId))
-  if (!date) return false
-  const t = date.getTime()
+  const t = parseFlexibleTime(row.getValue(columnId))
+  if (t == null) return false
   if (value.from != null && t < value.from) return false
   if (value.to != null && t > value.to) return false
   return true
@@ -39,6 +38,22 @@ function dateRangeFilterFn<T>(row: Row<T>, columnId: string, value: DateRangeFil
 function multiSelectFilterFn<T>(row: Row<T>, columnId: string, value: string[] | undefined): boolean {
   if (!value || value.length === 0) return true
   return value.includes(String(row.getValue(columnId) ?? ''))
+}
+
+const brl = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
+
+/** One lowercase haystack per row; fields joined by NUL so a term can't match across two fields. */
+function searchIndex(rows: object[]): string[] {
+  return rows.map(row =>
+    Object.values(row).map(v => String(v).toLowerCase()).join('\u0000'),
+  )
+}
+
+/** Rows whose fields contain every whitespace-separated term (each term within a single field). */
+function searchRows<T>(rows: T[], index: string[], search: string): T[] {
+  const terms = search.toLowerCase().split(/\s+/).filter(Boolean)
+  if (terms.length === 0) return rows
+  return rows.filter((_, i) => terms.every(term => index[i].includes(term)))
 }
 
 export function InvestmentsPage() {
@@ -87,22 +102,28 @@ export function InvestmentsPage() {
     loadAllData()
   }, [loadAllData])
 
-  const filterData = useCallback((data: any[]) => {
-    if (!globalSearch) return data;
-    const searchTerms = globalSearch.toLowerCase().split(/\s+/).filter(Boolean);
-    
-    return data.filter(item => {
-      return searchTerms.every(term => {
-        return Object.values(item).some(val => 
-          String(val).toLowerCase().includes(term)
-        );
-      });
-    });
-  }, [globalSearch]);
+  // The input stays responsive; the filtering + table/chart re-render runs at
+  // lower priority and is skipped for keystrokes that are superseded.
+  const deferredSearch = useDeferredValue(globalSearch);
+  const [tab, setTab] = useState("history");
 
-  const filteredHistory = useMemo(() => filterData(historyData), [historyData, filterData]);
-  const filteredCrypto = useMemo(() => filterData(cryptoData), [cryptoData, filterData]);
-  const filteredFiat = useMemo(() => filterData(fiatData), [fiatData, filterData]);
+  const historyIndex = useMemo(() => searchIndex(historyData), [historyData]);
+  const cryptoIndex = useMemo(() => searchIndex(cryptoData), [cryptoData]);
+  const fiatIndex = useMemo(() => searchIndex(fiatData), [fiatData]);
+
+  // Only the visible tab is mounted, so only its dataset is searched.
+  const filteredHistory = useMemo(
+    () => (tab === "history" ? searchRows(historyData, historyIndex, deferredSearch) : historyData),
+    [tab, historyData, historyIndex, deferredSearch],
+  );
+  const filteredCrypto = useMemo(
+    () => (tab === "crypto" ? searchRows(cryptoData, cryptoIndex, deferredSearch) : cryptoData),
+    [tab, cryptoData, cryptoIndex, deferredSearch],
+  );
+  const filteredFiat = useMemo(
+    () => (tab === "fiat" ? searchRows(fiatData, fiatIndex, deferredSearch) : fiatData),
+    [tab, fiatData, fiatIndex, deferredSearch],
+  );
 
   const historyCoinNote = useMemo(
     () => renamedCoinNote(historyData.map(d => d.Coin)),
@@ -128,7 +149,7 @@ export function InvestmentsPage() {
   const isHistoryRowSelectedDay = useCallback(
     (row: BinanceTransaction) => {
       if (!allocSnapshot) return false;
-      const t = parseFlexibleDate(row.Time)?.getTime();
+      const t = parseFlexibleTime(row.Time);
       return t != null && t >= allocSnapshot.timestamp && t < allocSnapshot.end;
     },
     [allocSnapshot],
@@ -234,11 +255,11 @@ export function InvestmentsPage() {
           const val = parseFloat(row.getValue('Amount'))
           return sum + (isNaN(val) ? 0 : val)
         }, 0)
-        return total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+        return brl.format(total)
       },
       cell: ({ row }) => {
         const val = parseFloat(row.getValue('Amount'))
-        return <span className="font-mono font-bold">{val.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
+        return <span className="font-mono font-bold">{brl.format(val)}</span>
       }
     },
     {
@@ -296,7 +317,7 @@ export function InvestmentsPage() {
         </div>
       </div>
 
-      <Tabs defaultValue="history" className="w-full">
+      <Tabs value={tab} onValueChange={setTab} className="w-full">
         <TabsList className="mb-4 bg-muted/50 p-1 border">
           <TabsTrigger value="history" className="text-xs">Transaction History</TabsTrigger>
           <TabsTrigger value="crypto" className="text-xs">Crypto Flow</TabsTrigger>

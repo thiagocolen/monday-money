@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/chart"
 import type { ChartConfig } from "@/components/ui/chart"
 import { Loader2 } from "lucide-react"
+import { formatBRL } from "@/lib/utils"
 
 interface YearlyTransactionChartProps {
   data: Transaction[]
@@ -28,12 +29,7 @@ interface YearlyTransactionChartProps {
   categoriesMeta: { name: string, color: string }[]
 }
 
-const formatCurrency = (value: number) => {
-  return new Intl.NumberFormat("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-  }).format(value)
-}
+const formatCurrency = formatBRL
 
 export function YearlyTransactionChart({ data, yearOffset, loading = false, categoriesMeta }: YearlyTransactionChartProps) {
   const chartData = React.useMemo(() => {
@@ -54,31 +50,35 @@ export function YearlyTransactionChart({ data, yearOffset, loading = false, cate
       total: 0
     }))
 
-    const result = monthsMap.map(m => {
-      const monthData: any = { month: m.month }
-      const monthTransactions = yearTransactions.filter(t => getEffectiveMonth(t) === m.monthKey)
-      
-      // Get all unique categories to ensure they exist in the object
+    // One pass over the year: bucket by month, then by category.
+    const metaNames = new Set(categoriesMeta.map(c => c.name))
+    const byMonth = new Map<string, { meta: Map<string, number>; other: Map<string, number> }>()
+    for (const m of monthsMap) byMonth.set(m.monthKey, { meta: new Map(), other: new Map() })
+    for (const t of yearTransactions) {
+      const bucket = byMonth.get(getEffectiveMonth(t))
+      if (!bucket) continue
+      const abs = Math.abs(t.amount)
+      if (metaNames.has(t.category)) {
+        bucket.meta.set(t.category, (bucket.meta.get(t.category) ?? 0) + abs)
+      } else {
+        // Categories not in meta are still charted, empty ones as "Uncategorized".
+        const catName = t.category || "Uncategorized"
+        bucket.other.set(catName, (bucket.other.get(catName) ?? 0) + abs)
+      }
+    }
+
+    return monthsMap.map(m => {
+      const bucket = byMonth.get(m.monthKey)!
+      const monthData: Record<string, string | number> = { month: m.month }
+      // Every meta category gets a key (zero if unused), rounded to cents.
       categoriesMeta.forEach(cat => {
-        const amount = monthTransactions
-          .filter(t => t.category === cat.name)
-          .reduce((sum, t) => sum + Math.abs(t.amount), 0)
-        
-        monthData[cat.name] = parseFloat(amount.toFixed(2))
+        monthData[cat.name] = parseFloat((bucket.meta.get(cat.name) ?? 0).toFixed(2))
       })
-
-      // Also handle categories not in meta
-      monthTransactions.forEach(t => {
-        if (!categoriesMeta.find(c => c.name === t.category)) {
-          const catName = t.category || "Uncategorized"
-          monthData[catName] = (monthData[catName] || 0) + Math.abs(t.amount)
-        }
+      bucket.other.forEach((amount, catName) => {
+        monthData[catName] = ((monthData[catName] as number) || 0) + amount
       })
-
       return monthData
     })
-
-    return result
   }, [data, yearOffset, categoriesMeta])
 
   const chartConfig = React.useMemo(() => {

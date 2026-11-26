@@ -38,6 +38,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const navItems = [
     { name: "Transaction Account", path: "/" },
     { name: "Investments Account", path: "/investments" },
+    { name: "Wallets", path: "/wallets" },
     { name: "Import Export", path: "/import" },
   ];
 

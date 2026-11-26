@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react"
-import { fetchImportHistory, fetchRawCsvFolderPath, setRawCsvFolderPath, scanFolder, selectDirectory, fetchSettings, setExportPath, fullBackup, resetApplication } from "../lib/api"
-import type { ImportHistory } from "../lib/api"
+import { fetchImportHistory, fetchTransactions, fetchRawCsvFolderPath, setRawCsvFolderPath, scanFolder, selectDirectory, fetchSettings, setExportPath, fullBackup, resetApplication } from "../lib/api"
+import type { ImportHistory, Transaction } from "../lib/api"
+import { TransactionTimeline } from "@/components/transaction-timeline"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -27,6 +28,7 @@ type SortOrder = 'asc' | 'desc';
 
 export function ImportPage() {
   const [history, setHistory] = useState<ImportHistory[]>([])
+  const [transactions, setTransactions] = useState<Transaction[]>([])
   const [rawFolderPath, setRawFolderPath] = useState<string>("")
   const [isScanning, setIsScanning] = useState(false)
   const [isLogsModalOpen, setIsLogsModalOpen] = useState(false)
@@ -46,12 +48,15 @@ export function ImportPage() {
   const loadData = useCallback(async () => {
     setIsLoading(true)
     try {
-      const [historyData, path, settings] = await Promise.all([
+      const [historyData, path, settings, transactionData] = await Promise.all([
         fetchImportHistory(),
         fetchRawCsvFolderPath(),
-        fetchSettings()
+        fetchSettings(),
+        // The timeline is optional; don't fail the whole page if the ledger can't be read
+        fetchTransactions().catch(() => [] as Transaction[])
       ])
       setHistory(historyData)
+      setTransactions(transactionData)
       setRawFolderPath(path)
       if (settings.exportPath) {
         setExportPathVal(settings.exportPath)
@@ -230,7 +235,7 @@ export function ImportPage() {
         <CardContent className="text-xs space-y-3 text-muted-foreground">
           <div className="flex items-start gap-2">
             <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 mt-0.5" />
-            <p>Place your CSV files in subfolders named after the transaction <strong>owner</strong> (e.g., <code>.../MyFolder/John-Doe/statement.csv</code>).</p>
+            <p>Place your CSV (or Mercado Pago PDF) statement files in subfolders named after the transaction <strong>owner</strong> (e.g., <code>.../MyFolder/John-Doe/statement.csv</code>).</p>
           </div>
           <div className="flex items-start gap-2">
             <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 mt-0.5" />
@@ -425,7 +430,10 @@ export function ImportPage() {
         </Card>
       </div>
 
-      {/* Row 4: Import History */}
+      {/* Row 4: Timeline */}
+      <TransactionTimeline transactions={transactions} loading={isLoading} />
+
+      {/* Row 5: Import History */}
       <Card>
         <CardHeader className="flex flex-col md:flex-row md:items-center justify-between space-y-4 md:space-y-0 pb-6">
           <div className="space-y-1">

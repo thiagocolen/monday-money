@@ -18,6 +18,10 @@ import {
   handleSaveMetadata,
   handleGetAllocationTarget,
   handleSaveAllocationTarget,
+  handleGetWallets,
+  handleSaveWallets,
+  handleGetWalletCache,
+  handleSaveWalletCache,
   handleFullBackup,
   handleGetBackupInfo,
   handleRestoreBackup,
@@ -40,7 +44,7 @@ export default defineConfig(({ mode }) => {
       __APP_VERSION__: JSON.stringify(pkg.version),
     },
     optimizeDeps: {
-      include: ["@phosphor-icons/react"],
+      include: ["@phosphor-icons/react", "viem"],
     },
     server: {
       watch: {
@@ -54,6 +58,16 @@ export default defineConfig(({ mode }) => {
       !isWeb && electron({
         main: {
           entry: "electron/main.ts",
+          vite: {
+            build: {
+              rolldownOptions: {
+                // pdf.js loads its worker as `./pdf.worker.mjs` next to its own
+                // module; bundled into dist-electron that file doesn't exist,
+                // so load it from node_modules instead.
+                external: [/^pdfjs-dist(\/|$)/],
+              },
+            },
+          },
         },
         preload: {
           input: "electron/preload.ts",
@@ -220,6 +234,58 @@ export default defineConfig(({ mode }) => {
                 try {
                   const target = JSON.parse(body)
                   const result = await handleSaveAllocationTarget(target)
+                  res.statusCode = 200
+                  res.setHeader("Content-Type", "application/json")
+                  res.end(JSON.stringify(result))
+                } catch (e: any) {
+                  res.statusCode = 400
+                  res.end(JSON.stringify({ success: false, error: e.message }))
+                }
+              })
+              return
+            }
+
+            if (req.url === "/api/wallets" && req.method === "GET") {
+              const wallets = await handleGetWallets()
+              res.statusCode = 200
+              res.setHeader("Content-Type", "application/json")
+              res.end(JSON.stringify(wallets))
+              return
+            }
+
+            if (req.url === "/api/wallets" && req.method === "POST") {
+              let body = ""
+              req.on("data", (chunk: Buffer) => { body += chunk.toString() })
+              req.on("end", async () => {
+                try {
+                  const wallets = JSON.parse(body)
+                  const result = await handleSaveWallets(wallets)
+                  res.statusCode = 200
+                  res.setHeader("Content-Type", "application/json")
+                  res.end(JSON.stringify(result))
+                } catch (e: any) {
+                  res.statusCode = 400
+                  res.end(JSON.stringify({ success: false, error: e.message }))
+                }
+              })
+              return
+            }
+
+            if (req.url === "/api/wallet-cache" && req.method === "GET") {
+              const cache = await handleGetWalletCache()
+              res.statusCode = 200
+              res.setHeader("Content-Type", "application/json")
+              res.end(JSON.stringify(cache))
+              return
+            }
+
+            if (req.url === "/api/wallet-cache" && req.method === "POST") {
+              let body = ""
+              req.on("data", (chunk: Buffer) => { body += chunk.toString() })
+              req.on("end", async () => {
+                try {
+                  const cache = JSON.parse(body)
+                  const result = await handleSaveWalletCache(cache)
                   res.statusCode = 200
                   res.setHeader("Content-Type", "application/json")
                   res.end(JSON.stringify(result))
