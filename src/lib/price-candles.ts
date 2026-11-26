@@ -69,12 +69,25 @@ interface CacheShape {
  */
 const inFlight = new Map<string, Promise<CandleHistory>>()
 
+/**
+ * Parsed copies of the localStorage entries. A coin's cache holds up to ~12
+ * years of daily candles, and re-parsing that JSON on every chart rebuild was a
+ * visible main-thread stall. Entries are treated as immutable.
+ */
+const memCache = new Map<string, CacheShape>()
+
 function readCache(ticker: string): CacheShape | null {
+  const key = cacheKey(ticker)
+  const hit = memCache.get(key)
+  if (hit) return hit
   try {
-    const raw = localStorage.getItem(cacheKey(ticker))
+    const raw = localStorage.getItem(key)
     if (!raw) return null
     const p = JSON.parse(raw)
-    if (p && Array.isArray(p.candles) && typeof p.fetchedAt === "number") return p
+    if (p && Array.isArray(p.candles) && typeof p.fetchedAt === "number") {
+      memCache.set(key, p)
+      return p
+    }
   } catch {
     /* ignore */
   }
@@ -82,6 +95,7 @@ function readCache(ticker: string): CacheShape | null {
 }
 
 function writeCache(ticker: string, v: CacheShape) {
+  memCache.set(cacheKey(ticker), v)
   try {
     localStorage.setItem(cacheKey(ticker), JSON.stringify(v))
   } catch {
