@@ -2,9 +2,6 @@ import { createMemoryRouter, RouterProvider, Outlet } from 'react-router-dom'
 import { ThemeProvider } from '@/components/theme-provider'
 import { Layout } from './components/Layout'
 import { TransactionsPage } from './pages/TransactionsPage'
-import { InvestmentsPage } from './pages/InvestmentsPage'
-import { WalletsPage } from './pages/WalletsPage'
-import { ImportPage } from './pages/ImportPage'
 import { Toaster } from 'sonner'
 import { TooltipProvider } from './components/ui/tooltip'
 import { useEffect, useState } from 'react'
@@ -24,17 +21,19 @@ const router = createMemoryRouter([
         index: true,
         element: <TransactionsPage />,
       },
+      // The other pages (and their heavy deps: klinecharts, viem, chain icons)
+      // load on first visit instead of in the startup bundle.
       {
         path: 'investments',
-        element: <InvestmentsPage />,
+        lazy: async () => ({ Component: (await import('./pages/InvestmentsPage')).InvestmentsPage }),
       },
       {
         path: 'wallets',
-        element: <WalletsPage />,
+        lazy: async () => ({ Component: (await import('./pages/WalletsPage')).WalletsPage }),
       },
       {
         path: 'import',
-        element: <ImportPage />,
+        lazy: async () => ({ Component: (await import('./pages/ImportPage')).ImportPage }),
       },
     ],
   },

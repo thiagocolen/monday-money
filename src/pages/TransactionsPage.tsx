@@ -317,6 +317,19 @@ export function TransactionsPage() {
     return filteredData.filter(row => rowSelection[row.id])
   }, [filteredData, rowSelection])
 
+  // tag → number of selected rows carrying it. Built once per selection so the
+  // bulk-edit list doesn't re-split every selected row's tags for every tag.
+  const selectedTagCounts = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const row of selectedRows) {
+      if (!row.tags) continue
+      for (const tag of new Set(row.tags.split(',').map(t => t.trim()))) {
+        counts.set(tag, (counts.get(tag) ?? 0) + 1)
+      }
+    }
+    return counts
+  }, [selectedRows])
+
   // Data for charts: selection prioritized over filtered data
   const chartData = useMemo(() => {
     return selectedRows.length > 0 ? selectedRows : filteredData
@@ -355,6 +368,25 @@ export function TransactionsPage() {
     }
   }
 
+  /**
+   * Mirror a successful metadata save in local state instead of re-downloading
+   * and re-parsing the whole ledger. Metadata is keyed by row hash on disk, so
+   * every row sharing a hash takes the update — same result as a reload.
+   * Fields left `undefined` were not part of the save and stay as they are.
+   */
+  const applyMetadataLocally = (updates: { transactionHash: string; category?: string; tags?: string }[]) => {
+    const byHash = new Map(updates.map(u => [u.transactionHash, u]))
+    setData(prev => prev.map(t => {
+      const u = byHash.get(t.rowHash)
+      if (!u) return t
+      return {
+        ...t,
+        category: u.category !== undefined ? u.category : t.category,
+        tags: u.tags !== undefined ? u.tags : t.tags,
+      }
+    }))
+  }
+
   const handleBulkApply = async (type: 'tags' | 'categories', value: string, action: 'add' | 'remove' | 'set') => {
     if (selectedRows.length === 0) return
     setIsSaving(true)
@@ -387,7 +419,7 @@ export function TransactionsPage() {
       setUndoStack(prev => [...prev, updates])
       setRedoStack([])
       toast.success(`Updated ${selectedRows.length} transactions`)
-      loadData(false)
+      applyMetadataLocally(updates)
     } else {
       toast.error("Failed to update transactions")
     }
@@ -414,7 +446,7 @@ export function TransactionsPage() {
       setUndoStack(newUndoStack);
       setRedoStack(prev => [...prev, reverseUpdates]);
       toast.success(`Undid changes on ${lastUpdate.length} transactions`);
-      loadData(false);
+      applyMetadataLocally(reverseUpdates);
     } else {
       toast.error("Failed to undo changes");
     }
@@ -441,7 +473,7 @@ export function TransactionsPage() {
       setRedoStack(newRedoStack);
       setUndoStack(prev => [...prev, redoUpdates]);
       toast.success(`Redid changes on ${lastRedo.length} transactions`);
-      loadData(false);
+      applyMetadataLocally(redoUpdates);
     } else {
       toast.error("Failed to redo changes");
     }
@@ -953,11 +985,12 @@ export function TransactionsPage() {
                 {(bulkActiveTab === 'categories' ? metaCategories : metaTags)
                   .filter(item => item.name.toLowerCase().includes(bulkSearch.toLowerCase()))
                   .map(item => {
-                    const isFullySelected = bulkActiveTab === 'categories' 
+                    const tagRowCount = selectedTagCounts.get(item.name) ?? 0
+                    const isFullySelected = bulkActiveTab === 'categories'
                       ? selectedRows.length === 1 && selectedRows[0].category === item.name
-                      : selectedRows.every(r => r.tags?.split(',').map(t => t.trim()).includes(item.name));
-                    
-                    const isPartiallySelected = bulkActiveTab === 'tags' && !isFullySelected && selectedRows.some(r => r.tags?.split(',').map(t => t.trim()).includes(item.name));
+                      : tagRowCount === selectedRows.length;
+
+                    const isPartiallySelected = bulkActiveTab === 'tags' && !isFullySelected && tagRowCount > 0;
 
                     return (
                       <div 

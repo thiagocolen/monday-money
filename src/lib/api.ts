@@ -9,11 +9,20 @@ declare global {
   }
 }
 
+const READ_CHANNEL = /^(get|select)-/;
+
 async function invoke<T>(channel: string, ...args: any[]): Promise<T> {
   if (window.electron) {
+    if (!READ_CHANNEL.test(channel)) invalidateTransactionsCache();
     return window.electron.invoke(channel, ...args);
   }
   return null as any;
+}
+
+/** `fetch` for the dev-server API; any non-GET request may change the ledger. */
+function apiFetch(input: string, init?: RequestInit): Promise<Response> {
+  if (init?.method && init.method.toUpperCase() !== 'GET') invalidateTransactionsCache();
+  return fetch(input, init);
 }
 
 export interface Transaction {
@@ -27,10 +36,21 @@ export interface Transaction {
   rowHash: string;
 }
 
+const MONTH_TAG = /^\d{4}-\d{2}$/;
+const effectiveMonthCache = new WeakMap<Transaction, { date: string; tags: string; month: string }>();
+
 export function getEffectiveMonth(t: Transaction): string {
-  if (!t.tags) return t.date.substring(0, 7);
-  const monthTag = t.tags.split(',').map(tag => tag.trim()).find(tag => /^\d{4}-\d{2}$/.test(tag));
-  return monthTag || t.date.substring(0, 7);
+  // Called for every row on each period switch and per month by the yearly
+  // chart; cache per row object, keyed on the two fields it reads.
+  const hit = effectiveMonthCache.get(t);
+  if (hit && hit.date === t.date && hit.tags === t.tags) return hit.month;
+  let month = t.date.substring(0, 7);
+  if (t.tags) {
+    const monthTag = t.tags.split(',').map(tag => tag.trim()).find(tag => MONTH_TAG.test(tag));
+    if (monthTag) month = monthTag;
+  }
+  effectiveMonthCache.set(t, { date: t.date, tags: t.tags, month });
+  return month;
 }
 
 export interface BinanceTransaction {
@@ -86,7 +106,31 @@ interface RawCategory {
   tags: string;
 }
 
+/**
+ * The parsed ledger, shared across pages so navigating between them doesn't
+ * re-download and re-parse both CSVs. Any write (IPC channel that isn't a
+ * `get-`/`select-` read, or a non-GET request) drops it — see `invoke`/`apiFetch`.
+ */
+let ledgerCache: Promise<Transaction[]> | null = null;
+
+export function invalidateTransactionsCache() {
+  ledgerCache = null;
+}
+
 export async function fetchTransactions(): Promise<Transaction[]> {
+  if (!ledgerCache) {
+    const pending = loadTransactions();
+    ledgerCache = pending;
+    // A failed load must not stick.
+    pending.catch(() => {
+      if (ledgerCache === pending) ledgerCache = null;
+    });
+  }
+  // Callers get their own array; the row objects are shared and treated as immutable.
+  return (await ledgerCache).slice();
+}
+
+async function loadTransactions(): Promise<Transaction[]> {
   try {
     const timestamp = new Date().getTime();
     let csvData: string;
@@ -94,7 +138,7 @@ export async function fetchTransactions(): Promise<Transaction[]> {
     if (window.electron) {
       csvData = await invoke<string>('get-csv-data', 'monthly-transactions.csv');
     } else {
-      const response = await fetch(`/api/data/monthly-transactions.csv?t=${timestamp}`);
+      const response = await apiFetch(`/api/data/monthly-transactions.csv?t=${timestamp}`);
       if (!response.ok) throw new Error(`Failed to fetch transactions: ${response.statusText}`);
       csvData = await response.text();
     }
@@ -107,7 +151,7 @@ export async function fetchTransactions(): Promise<Transaction[]> {
           catCsv = await invoke<string>('get-csv-data', 'monthly-transactions-category.csv');
         } catch (e) { /* ignore if not found */ }
       } else {
-        const catResponse = await fetch(`/api/data/monthly-transactions-category.csv?t=${timestamp}`);
+        const catResponse = await apiFetch(`/api/data/monthly-transactions-category.csv?t=${timestamp}`);
         if (catResponse.ok) catCsv = await catResponse.text();
       }
 
@@ -147,14 +191,16 @@ export async function fetchTransactions(): Promise<Transaction[]> {
             };
           });
           
-          transactions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-          
+          // Parse each date once rather than twice per comparison.
+          const keyed = transactions.map(t => ({ t, time: new Date(t.date).getTime() }));
+          keyed.sort((a, b) => b.time - a.time);
+
           // Assign unique IDs after sorting to ensure stability
-          const transactionsWithId = transactions.map((t, index) => ({
-            ...t,
-            id: `${t.rowHash}-${index}`
-          }));
-          
+          const transactionsWithId = keyed.map(({ t }, index) => {
+            t.id = `${t.rowHash}-${index}`;
+            return t;
+          });
+
           resolve(transactionsWithId);
         },
         error: (error: Error) => reject(error)
@@ -187,7 +233,7 @@ async function fetchCsvData<T>(url: string): Promise<T[]> {
       const fileName = url.split('/').pop()?.split('?')[0] || '';
       csvData = await invoke<string>('get-csv-data', fileName);
     } else {
-      const response = await fetch(`${url}?t=${timestamp}`);
+      const response = await apiFetch(`${url}?t=${timestamp}`);
       if (!response.ok) throw new Error(`Failed to fetch ${url}: ${response.statusText}`);
       csvData = await response.text();
     }
@@ -219,7 +265,7 @@ export async function saveTransactionMetadata(transactionHash: string, category:
       const result = await invoke<{ success: boolean }>('save-category', { transactionHash, category, tags });
       return result.success;
     }
-    const response = await fetch('/api/save-category', {
+    const response = await apiFetch('/api/save-category', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ transactionHash, category, tags }),
@@ -237,7 +283,7 @@ export async function saveCategory(transactionHash: string, category: string): P
       const result = await invoke<{ success: boolean }>('save-category', { transactionHash, category });
       return result.success;
     }
-    const response = await fetch('/api/save-category', {
+    const response = await apiFetch('/api/save-category', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ transactionHash, category }),
@@ -255,7 +301,7 @@ export async function saveTags(transactionHash: string, tags: string): Promise<b
       const result = await invoke<{ success: boolean }>('save-category', { transactionHash, tags });
       return result.success;
     }
-    const response = await fetch('/api/save-category', {
+    const response = await apiFetch('/api/save-category', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ transactionHash, tags }),
@@ -273,7 +319,7 @@ export async function saveBulkCategories(updates: { transactionHash: string, cat
       const result = await invoke<{ success: boolean }>('bulk-save-metadata', updates);
       return result.success;
     }
-    const response = await fetch('/api/bulk-save-metadata', {
+    const response = await apiFetch('/api/bulk-save-metadata', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updates),
@@ -292,7 +338,7 @@ export async function bulkSaveMetadata(updates: { transactionHash: string, categ
       const result = await invoke<{ success: boolean }>('bulk-save-metadata', updates);
       return result.success;
     }
-    const response = await fetch('/api/bulk-save-metadata', {
+    const response = await apiFetch('/api/bulk-save-metadata', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updates),
@@ -319,7 +365,7 @@ export async function fetchOwners(): Promise<string[]> {
     if (window.electron) {
       return await invoke('get-owners');
     }
-    const response = await fetch('/api/owners');
+    const response = await apiFetch('/api/owners');
     if (!response.ok) throw new Error('Failed to fetch owners');
     return await response.json();
   } catch (error) {
@@ -333,7 +379,7 @@ export async function importFile(owner: string, fileName: string, fileContent: s
     if (window.electron) {
       return await invoke('import-file', { owner, fileName, fileContent });
     }
-    const response = await fetch('/api/import-file', {
+    const response = await apiFetch('/api/import-file', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ owner, fileName, fileContent }),
@@ -350,7 +396,7 @@ export async function fetchImportHistory(): Promise<ImportHistory[]> {
     if (window.electron) {
       return await invoke('get-import-history');
     }
-    const response = await fetch('/api/import-history');
+    const response = await apiFetch('/api/import-history');
     if (!response.ok) throw new Error('Failed to fetch import history');
     return await response.json();
   } catch (error) {
@@ -366,7 +412,7 @@ export async function fetchMetadata(): Promise<{ tags: any[], categories: any[] 
     if (window.electron) {
       return await invoke('get-metadata');
     }
-    const response = await fetch('/api/metadata');
+    const response = await apiFetch('/api/metadata');
     return await response.json();
   } catch (error) {
     console.error('Error fetching metadata:', error);
@@ -380,7 +426,7 @@ export async function saveMetadataConfig(type: 'tags' | 'categories', data: any[
       const result = await invoke<{ success: boolean }>('save-metadata', { type, data });
       return result.success;
     }
-    const response = await fetch('/api/metadata', {
+    const response = await apiFetch('/api/metadata', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ type, data }),
@@ -402,7 +448,7 @@ export async function fetchAllocationTarget(): Promise<Record<string, number>> {
     if (window.electron) {
       return await invoke('get-allocation-target');
     }
-    const response = await fetch('/api/allocation-target');
+    const response = await apiFetch('/api/allocation-target');
     return await response.json();
   } catch (error) {
     console.error('Error fetching allocation target:', error);
@@ -416,7 +462,7 @@ export async function saveAllocationTargetRemote(target: Record<string, number>)
       const result = await invoke<{ success: boolean }>('save-allocation-target', target);
       return result.success;
     }
-    const response = await fetch('/api/allocation-target', {
+    const response = await apiFetch('/api/allocation-target', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(target),
@@ -439,7 +485,7 @@ export async function fetchWallets(): Promise<WalletEntry[]> {
     if (window.electron) {
       return await invoke('get-wallets');
     }
-    const response = await fetch('/api/wallets');
+    const response = await apiFetch('/api/wallets');
     return await response.json();
   } catch (error) {
     console.error('Error fetching wallets:', error);
@@ -453,7 +499,7 @@ export async function saveWallets(wallets: WalletEntry[]): Promise<boolean> {
       const result = await invoke<{ success: boolean }>('save-wallets', wallets);
       return result.success;
     }
-    const response = await fetch('/api/wallets', {
+    const response = await apiFetch('/api/wallets', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(wallets),
@@ -471,7 +517,7 @@ export async function fetchWalletCache(): Promise<WalletCache> {
     if (window.electron) {
       return await invoke('get-wallet-cache');
     }
-    const response = await fetch('/api/wallet-cache');
+    const response = await apiFetch('/api/wallet-cache');
     return await response.json();
   } catch (error) {
     console.error('Error fetching wallet cache:', error);
@@ -485,7 +531,7 @@ export async function saveWalletCache(cache: WalletCache): Promise<boolean> {
       const result = await invoke<{ success: boolean }>('save-wallet-cache', cache);
       return result.success;
     }
-    const response = await fetch('/api/wallet-cache', {
+    const response = await apiFetch('/api/wallet-cache', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(cache),
@@ -503,7 +549,7 @@ export async function fullBackup(): Promise<{ success: boolean; fileName?: strin
     if (window.electron) {
       return await invoke('full-backup');
     }
-    const response = await fetch('/api/full-backup', {
+    const response = await apiFetch('/api/full-backup', {
       method: 'POST',
     });
     return await response.json();
@@ -518,7 +564,7 @@ export async function restoreBackup(zipPath: string): Promise<{ success: boolean
     if (window.electron) {
       return await invoke('restore-backup', zipPath);
     }
-    const response = await fetch('/api/restore-backup', {
+    const response = await apiFetch('/api/restore-backup', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ zipPath }),
@@ -535,7 +581,7 @@ export async function resetApplication(): Promise<{ success: boolean; error?: st
     if (window.electron) {
       return await invoke('reset-app');
     }
-    const response = await fetch('/api/reset-app', {
+    const response = await apiFetch('/api/reset-app', {
       method: 'POST',
     });
     return await response.json();
@@ -564,7 +610,7 @@ export async function fetchBackupInfo(): Promise<{ count: number; latestDate: st
     if (window.electron) {
       return await invoke('get-backup-info');
     }
-    const response = await fetch('/api/backup-info');
+    const response = await apiFetch('/api/backup-info');
     if (!response.ok) throw new Error(`Failed to fetch backup info: ${response.statusText}`);
     return await response.json();
   } catch (error) {
@@ -578,7 +624,7 @@ export async function fetchSettings(): Promise<{ exportPath?: string, rawCsvFold
     if (window.electron) {
       return await invoke('get-settings');
     }
-    const response = await fetch('/api/settings');
+    const response = await apiFetch('/api/settings');
     if (!response.ok) throw new Error(`Failed to fetch settings: ${response.statusText}`);
     return await response.json();
   } catch (error) {
@@ -605,7 +651,7 @@ export async function setExportPath(path: string): Promise<{ success: boolean, e
     if (window.electron) {
       return await invoke('set-export-path', path);
     }
-    const response = await fetch('/api/settings', {
+    const response = await apiFetch('/api/settings', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ exportPath: path }),

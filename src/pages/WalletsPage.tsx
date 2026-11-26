@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo } from 'react'
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import { fetchWallets, saveWallets, fetchWalletCache, saveWalletCache } from '@/lib/api'
 import type { WalletEntry, WalletCache, NormalizedTransaction } from '@/lib/chains/types'
 import { CHAIN_LABELS } from '@/lib/chains/types'
@@ -66,6 +66,32 @@ export function WalletsPage() {
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [detailsTx, setDetailsTx] = useState<NormalizedTransaction | null>(null)
 
+  // The wallet cache carries full transaction histories, so each save is a big
+  // IPC + disk write. Balance and history updates land in bursts — coalesce
+  // them into one write per burst; anything pending is flushed on unmount.
+  const pendingSave = useRef<{ timer: number; cache: WalletCache } | null>(null)
+  const queueCacheSave = useCallback((next: WalletCache) => {
+    if (pendingSave.current) clearTimeout(pendingSave.current.timer)
+    const timer = window.setTimeout(() => {
+      pendingSave.current = null
+      saveWalletCache(next)
+    }, 500)
+    pendingSave.current = { timer, cache: next }
+  }, [])
+  const saveCacheNow = useCallback((next: WalletCache) => {
+    if (pendingSave.current) clearTimeout(pendingSave.current.timer)
+    pendingSave.current = null
+    return saveWalletCache(next)
+  }, [])
+  useEffect(() => () => {
+    const pending = pendingSave.current
+    if (pending) {
+      clearTimeout(pending.timer)
+      pendingSave.current = null
+      saveWalletCache(pending.cache)
+    }
+  }, [])
+
   useEffect(() => {
     let cancelled = false
 
@@ -90,14 +116,14 @@ export function WalletsPage() {
         working = await refreshManyWalletHistories(staleHistory, working)
         if (!cancelled) setCache((prev) => ({ ...prev, ...working }))
       }
-      if (!cancelled) await saveWalletCache(working)
+      if (!cancelled) await saveCacheNow(working)
     }
 
     load()
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [saveCacheNow])
 
   const handleAddWallet = useCallback(
     async (wallet: WalletEntry) => {
@@ -110,20 +136,20 @@ export function WalletsPage() {
           // for this wallet's (possibly slow) full history just to see it.
           setCache((prev) => {
             const merged = { ...prev, ...balanceCache }
-            saveWalletCache(merged)
+            queueCacheSave(merged)
             return merged
           })
         })
         setCache((prev) => {
           const merged = { ...prev, [wallet.id]: entry }
-          saveWalletCache(merged)
+          queueCacheSave(merged)
           return merged
         })
       } catch {
         toast.error('Added the wallet, but the initial data fetch failed — try Refresh.')
       }
     },
-    [wallets, cache],
+    [wallets, cache, queueCacheSave],
   )
 
   const handleRemoveWallet = useCallback(
@@ -134,12 +160,12 @@ export function WalletsPage() {
       setCache((prev) => {
         const rest = { ...prev }
         delete rest[id]
-        saveWalletCache(rest)
+        queueCacheSave(rest)
         return rest
       })
       setExpandedId((prev) => (prev === id ? null : prev))
     },
-    [wallets],
+    [wallets, queueCacheSave],
   )
 
   const handleRefreshWallet = useCallback(
@@ -149,13 +175,13 @@ export function WalletsPage() {
         const entry = await refreshSingleWallet(wallet, cache, (balanceCache) => {
           setCache((prev) => {
             const merged = { ...prev, ...balanceCache }
-            saveWalletCache(merged)
+            queueCacheSave(merged)
             return merged
           })
         })
         setCache((prev) => {
           const merged = { ...prev, [wallet.id]: entry }
-          saveWalletCache(merged)
+          queueCacheSave(merged)
           return merged
         })
       } catch {
@@ -164,7 +190,7 @@ export function WalletsPage() {
         setRefreshingWalletId(null)
       }
     },
-    [cache],
+    [cache, queueCacheSave],
   )
 
   const handleRefreshAll = useCallback(async () => {
@@ -172,16 +198,16 @@ export function WalletsPage() {
     try {
       const updated = await refreshAllWallets(wallets, cache, (balanceCache) => {
         setCache(balanceCache)
-        saveWalletCache(balanceCache)
+        queueCacheSave(balanceCache)
       })
       setCache(updated)
-      await saveWalletCache(updated)
+      await saveCacheNow(updated)
     } catch {
       toast.error('Failed to refresh wallets')
     } finally {
       setRefreshingAll(false)
     }
-  }, [wallets, cache])
+  }, [wallets, cache, queueCacheSave, saveCacheNow])
 
   const filteredWallets = useMemo(() => {
     if (!search.trim()) return wallets

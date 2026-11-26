@@ -4,9 +4,11 @@ import * as React from "react"
 import type {
   ColumnDef,
   ColumnFiltersState,
+  Row,
   SortingState,
   VisibilityState,
 } from "@tanstack/react-table"
+import { useWindowVirtualizer } from "@tanstack/react-virtual"
 import {
   flexRender,
   getCoreRowModel,
@@ -62,6 +64,72 @@ interface DataTableProps<TData, TValue> {
    * survives closing and reopening the app.
    */
   persistFiltersKey?: string
+}
+
+/** Unpaginated tables longer than this only mount the rows near the viewport. */
+const VIRTUALIZE_MIN_ROWS = 150
+const ESTIMATED_ROW_PX = 37
+
+/**
+ * Window-scrolled virtual body: renders the visible slice plus overscan, with
+ * spacer rows above/below so the table keeps its full scroll height and its
+ * native layout (column widths, sticky header) stays intact.
+ */
+function VirtualRows<TData>({
+  rows,
+  colSpan,
+  renderRow,
+}: {
+  rows: Row<TData>[]
+  colSpan: number
+  renderRow: (row: Row<TData>, measureRef: React.Ref<HTMLTableRowElement>, index: number) => React.ReactNode
+}) {
+  "use no memo" // the virtualizer is a mutable instance; compiler memoisation would freeze its output
+  const anchorRef = React.useRef<HTMLTableRowElement>(null)
+  const [scrollMargin, setScrollMargin] = React.useState(0)
+
+  // Distance from the document top to the first row. Content above the table
+  // (charts that load async, filter bars) can move it, so track body resizes.
+  React.useLayoutEffect(() => {
+    const measure = () => {
+      // The tbody holds only these rows, so its top is where row 0 starts.
+      const body = anchorRef.current?.parentElement
+      if (body) setScrollMargin(Math.round(body.getBoundingClientRect().top + window.scrollY))
+    }
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(document.body)
+    return () => ro.disconnect()
+  }, [])
+
+  const virtualizer = useWindowVirtualizer({
+    count: rows.length,
+    estimateSize: () => ESTIMATED_ROW_PX,
+    overscan: 12,
+    scrollMargin,
+    getItemKey: (i) => rows[i].id,
+  })
+
+  const items = virtualizer.getVirtualItems()
+  const top = items.length ? items[0].start - scrollMargin : 0
+  const bottom = items.length
+    ? virtualizer.getTotalSize() - (items[items.length - 1].end - scrollMargin)
+    : 0
+
+  return (
+    <>
+      {/* Only present once scrolled, so "first row" locators still hit real data. */}
+      {top > 0 && (
+        <tr aria-hidden style={{ height: top }}>
+          <td colSpan={colSpan} style={{ padding: 0, border: 0 }} />
+        </tr>
+      )}
+      {items.map((item) => renderRow(rows[item.index], virtualizer.measureElement, item.index))}
+      <tr ref={anchorRef} aria-hidden style={{ height: Math.max(0, bottom) }}>
+        <td colSpan={colSpan} style={{ padding: 0, border: 0 }} />
+      </tr>
+    </>
+  )
 }
 
 function loadPersistedFilters(key: string | undefined): ColumnFiltersState {
@@ -147,12 +215,59 @@ export function DataTable<TData, TValue>({
     }
   }, [rowSelection, table, onSelectionChange])
 
+  const rows = table.getRowModel().rows
+  const renderRow = (row: Row<TData>, measureRef?: React.Ref<HTMLTableRowElement>, index?: number) => {
+    const highlighted = isRowHighlighted?.(row.original) ?? false
+    return (
+      <TableRow
+        key={row.id}
+        ref={measureRef}
+        data-index={index}
+        data-state={row.getIsSelected() && "selected"}
+        data-highlighted={highlighted || undefined}
+        onClick={() => onRowClick?.(row.original)}
+        className={cn(
+          "transition-colors",
+          onRowClick && "cursor-pointer",
+          highlighted
+            ? "bg-primary/10 hover:bg-primary/15"
+            : "hover:bg-muted/30",
+        )}
+      >
+        {row.getVisibleCells().map((cell) => (
+          <TableCell
+            key={cell.id}
+            className={cn("px-2 py-2 text-xs", (cell.column.columnDef.meta as any)?.className)}
+          >
+            {flexRender(cell.column.columnDef.cell, cell.getContext())}
+          </TableCell>
+        ))}
+      </TableRow>
+    )
+  }
+
   const hasFilters = columnFilters.length > 0
   const hasFooter = table.getAllLeafColumns().some((c) => c.columnDef.footer != null)
 
   const filteredRows = table.getFilteredRowModel().rows
+  // Report only when the set of rows actually changes. A rebuilt row model with
+  // the same rows would otherwise hand the parent a new array, re-rendering the
+  // whole page and rebuilding any chart fed from it.
+  const reportedRef = React.useRef<{ cb: unknown; rows: TData[] } | null>(null)
   React.useEffect(() => {
-    onFilteredRowsChange?.(filteredRows.map((row) => row.original))
+    if (!onFilteredRowsChange) return
+    const prev = reportedRef.current
+    if (
+      prev &&
+      prev.cb === onFilteredRowsChange &&
+      prev.rows.length === filteredRows.length &&
+      filteredRows.every((row, i) => row.original === prev.rows[i])
+    ) {
+      return
+    }
+    const rows = filteredRows.map((row) => row.original)
+    reportedRef.current = { cb: onFilteredRowsChange, rows }
+    onFilteredRowsChange(rows)
   }, [filteredRows, onFilteredRowsChange])
 
   return (
@@ -260,34 +375,16 @@ export function DataTable<TData, TValue>({
                   Loading...
                 </TableCell>
               </TableRow>
-            ) : table.getRowModel().rows?.length ? (
-              table.getRowModel().rows.map((row) => {
-                const highlighted = isRowHighlighted?.(row.original) ?? false
-                return (
-                <TableRow
-                  key={row.id}
-                  data-state={row.getIsSelected() && "selected"}
-                  data-highlighted={highlighted || undefined}
-                  onClick={() => onRowClick?.(row.original)}
-                  className={cn(
-                    "transition-colors",
-                    onRowClick && "cursor-pointer",
-                    highlighted
-                      ? "bg-primary/10 hover:bg-primary/15"
-                      : "hover:bg-muted/30",
-                  )}
-                >
-                  {row.getVisibleCells().map((cell) => (
-                    <TableCell 
-                      key={cell.id} 
-                      className={cn("px-2 py-2 text-xs", (cell.column.columnDef.meta as any)?.className)}
-                    >
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                    </TableCell>
-                  ))}
-                </TableRow>
-                )
-              })
+            ) : rows.length ? (
+              !paginated && rows.length > VIRTUALIZE_MIN_ROWS ? (
+                <VirtualRows
+                  rows={rows}
+                  colSpan={columns.length}
+                  renderRow={renderRow}
+                />
+              ) : (
+                rows.map((row) => renderRow(row))
+              )
             ) : (
               <TableRow>
                 <TableCell colSpan={columns.length} className="h-24 text-center">
